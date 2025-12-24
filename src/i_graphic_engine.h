@@ -43,7 +43,7 @@ public:
     virtual void clear(const Color& color = Color(0,0,0)) = 0;
     virtual void create_window(std::string title, int width, int height) = 0;
     virtual void display() = 0;
-    virtual bool is_open() const = 0;
+    [[nodiscard]] virtual bool is_open() const = 0;
     virtual void refresh() = 0;
 
     // --------------------------

@@ -17,7 +17,7 @@ public:
     void think() override;
     void act() override;
     bool try_move(std::shared_ptr<IWorld> world, Position p) override;
-    Position get_position() const  override;
+    [[nodiscard]] Position get_position() const  override;
     bool is_alive() override;
     bool try_spawn(std::shared_ptr<IWorld> world, Position p) override;
     void update(std::shared_ptr<IWorld> world) override;
