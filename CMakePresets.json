@@ -1,0 +1,44 @@
+
+
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "Application Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-debug",
+      "toolchainFile": "${sourceDir}/cmake/Toolchain-x86.cmake",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+         "CMAKE_BUILD_TYPE": "Debug",
+         "CMAKE_C_FLAGS_DEBUG": "-O0 -g3 -ggdb -DDEBUG",
+         "CMAKE_CXX_FLAGS_DEBUG": "-O0 -g3 -ggdb -DDEBUG"
+      }
+    },
+    {
+      "name": "Application Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-release",
+      "toolchainFile": "${sourceDir}/cmake/Toolchain-x86.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "Build Debug",
+      "configurePreset": "Application Debug"
+      
+    },
+     {
+      "name": "Build Release",
+      "configurePreset": "Application Release",
+      "jobs": 8,
+      "targets": [
+        "all"
+      ]
+    }
+  ]
+}
+ 

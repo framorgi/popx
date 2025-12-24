@@ -1,25 +1,26 @@
 cmake_minimum_required(VERSION 3.10.0)
-
 project(popx VERSION 1.0)
+ 
 
-file(GLOB SOURCES_CPP_FILES "src/*.cpp")
-file(GLOB SOURCES_CONFIG_CPP_FILES "src/config/*.cpp")
-
-
-set(CMAKE_CXX_STANDARD 17)
-
-
-find_package(SFML 2.5 COMPONENTS graphics window system REQUIRED)
+# Don't allow in-source builds
+if (CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+    message(FATAL_ERROR "In-source builds are not allowed. Please create a separate build directory and run CMake from there.")
+endif()
 
 
+#################################################################
+# Include CMake settings
+#############################################################
 
-# Add executable
-add_executable(${PROJECT_NAME}  ${SOURCES_CPP_FILES} )
+include( cmake/Settings.cmake)
+include( cmake/Options.cmake)
+include( cmake/Toolchain-x86.cmake) 
+include( cmake/ThirdPartyLibs.cmake)
 
-target_link_libraries( ${PROJECT_NAME} 
-                        PUBLIC  sfml-graphics 
-                        sfml-window 
-                        sfml-system
-                        )
+#Add subdirectories
+add_subdirectory(src)
+if (UTESTS_ENABLED)
+    add_subdirectory(utests)
+endif()
 
-              
+ 
