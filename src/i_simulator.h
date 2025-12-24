@@ -4,9 +4,9 @@
 
 
 
-class i_simulator {
+class ISimulator {
 public:
-    virtual ~i_simulator() = default;
+    virtual ~ISimulator() = default;
 
     virtual void init() = 0;
     virtual void update() = 0;

@@ -1,17 +1,17 @@
 #include "pops_manager.h"
 
-pops_manager::pops_manager(std::shared_ptr<i_world> world,std::shared_ptr<i_logger> logger) : world_(world), logger_(logger)
+PopsManager::PopsManager(std::shared_ptr<IWorld> world,std::shared_ptr<ILogger> logger) : world_(world), logger_(logger)
 {
 }
 
-bool pops_manager::spawn_population()
+bool PopsManager::spawn_population()
 {
     // Example: Spawn a new pop agent and add it to the population
-    std::shared_ptr<random_utility> random_util = std::make_shared<random_utility>();
-
-    std::shared_ptr<pop> new_pop = std::make_shared<pop>();
+    std::shared_ptr<RandomUtility> random_util = std::make_shared<RandomUtility>();
+    
+    std::shared_ptr<Pop> new_pop = std::make_shared<Pop>();
     pops_.push_back(new_pop);
-    std::shared_ptr<pop> new_pop2 = std::make_shared<pop>();
+    std::shared_ptr<Pop> new_pop2 = std::make_shared<Pop>();
     pops_.push_back(new_pop2);
     for (auto& pop : pops_)
     {
@@ -39,7 +39,7 @@ bool pops_manager::spawn_population()
     return true;
 }
 
-void pops_manager::update_cycle()
+void PopsManager::update_cycle()
 {
     for (auto& pop : pops_) 
     {

@@ -2,9 +2,9 @@
 #pragma once
 #include "i_random.h"
 #include <random>
-class random_utility : public i_random {
+class RandomUtility : public IRandom {
 public:
-    random_utility();
+    RandomUtility();
 
     int rnd_int(int min, int max) override;
     double rnd_double(double min, double max) override;

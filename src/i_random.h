@@ -1,8 +1,8 @@
 #pragma once
-class i_random {
+class IRandom {
 public:
 
-    virtual ~i_random() = default;
+    virtual ~IRandom() = default;
 
     virtual int rnd_int(int min, int max) = 0;
     virtual double rnd_double(double min, double max) = 0;

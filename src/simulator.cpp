@@ -1,32 +1,33 @@
 #include "simulator.h"
+#include "i_world.h"
 
-simulator::simulator( std::shared_ptr<grid_world> world, std::shared_ptr<pops_manager> agents_manager, std::shared_ptr<i_logger> logger ) : world_(world), agents_manager_(agents_manager), logger_(logger) 
+Simulator::Simulator( std::shared_ptr<GridWorld> world, std::shared_ptr<PopsManager> agents_manager, std::shared_ptr<ILogger> logger ) : world_(world), agents_manager_(agents_manager), logger_(logger) 
 {
 }
-void simulator::init() 
+void Simulator::init() 
 {
 
     agents_manager_->spawn_population();
     world_->init();
 
 }
-void simulator::update()
+void Simulator::update()
 
 {
    
 }
 
-std::shared_ptr<i_world> simulator::get_world() const {
+std::shared_ptr<IWorld> Simulator::get_world() const {
     return world_;
 }
 
-bool simulator::update_environment()
+bool Simulator::update_environment()
 {
 
     return world_->update_cycle();
 }
 
-bool simulator::update_agents()
+bool Simulator::update_agents()
 {
     agents_manager_->update_cycle();
     return true;

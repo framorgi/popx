@@ -4,18 +4,18 @@
 #include "renderer.h"
 #include  "console_logger.h"
 
-class popx_app : public i_app
+class PopXApp : public IApp
 {
 public:
-    popx_app( std::shared_ptr<simulator> sim, std::shared_ptr<renderer> renderer,std::shared_ptr<console_logger> logger );
+    PopXApp( std::shared_ptr<Simulator> sim, std::shared_ptr<Renderer> renderer,std::shared_ptr<ConsoleLogger> logger );
     void init() override;
     void run() override;
     void stop() override;
 
 private:
-    std::shared_ptr<simulator> sim_;
-    std::shared_ptr<renderer> renderer_;
-    std::shared_ptr<console_logger> logger_;
+    std::shared_ptr<Simulator> sim_;
+    std::shared_ptr<Renderer> renderer_;
+    std::shared_ptr<ConsoleLogger> logger_;
     bool running_token_;
 
 

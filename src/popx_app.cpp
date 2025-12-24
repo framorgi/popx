@@ -1,10 +1,12 @@
 #include "popx_app.h"
 
-popx_app::popx_app(std::shared_ptr<simulator> sim, std::shared_ptr<renderer> renderer, std::shared_ptr<console_logger> logger)
-    : sim_(sim), renderer_(renderer), running_token_(false), logger_(logger)
+#include <utility>
+
+PopXApp::PopXApp(std::shared_ptr<Simulator> sim, std::shared_ptr<Renderer> renderer, std::shared_ptr<ConsoleLogger> logger)
+    : sim_(std::move(sim)), renderer_(std::move(renderer)), running_token_(false), logger_(std::move(logger))
 {
 }
-void popx_app::init()
+void PopXApp::init()
 {
     logger_->info("POPx -- Initializing application");
 
@@ -12,7 +14,7 @@ void popx_app::init()
     sim_->init();
     renderer_->init();
 }
-void popx_app::run()
+void PopXApp::run()
 {   logger_->debug("Starting app loop  ");
     running_token_ = true;
     while (running_token_) //TODO: while windows is open
@@ -28,6 +30,6 @@ void popx_app::run()
     }
 
 } 
-void popx_app::stop()
+void PopXApp::stop()
 {
 }

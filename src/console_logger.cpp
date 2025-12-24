@@ -1,31 +1,31 @@
 #include "console_logger.h"
 
-console_logger::console_logger() = default;
+ConsoleLogger::ConsoleLogger() = default;
 
-void console_logger::log(LogLevel level, const std::string& message) {
-    if (level < minLevel_) return;
+void ConsoleLogger::log(LogLevel level, const std::string& message) {
+    if (level < min_level_) return;
 
     std::lock_guard<std::mutex> lock(mutex_);
 
-    std::string color = colorForLevel(level);
+    std::string color = color_for_level(level);
     std::string reset = "\033[0m";
 
     std::cout 
         << timestamp() 
-        << " [" << color << levelToString(level) << reset << "] "
+        << " [" << color << level_to_string(level) << reset << "] "
         << message << std::endl;
 }
 
-void console_logger::debug(const std::string& message) { log(LogLevel::Debug, message); }
-void console_logger::info(const std::string& message) { log(LogLevel::Info, message); }
-void console_logger::warning(const std::string& message) { log(LogLevel::Warning, message); }
-void console_logger::error(const std::string& message) { log(LogLevel::Error, message); }
+void ConsoleLogger::debug(const std::string& message) { log(LogLevel::Debug, message); }
+void ConsoleLogger::info(const std::string& message) { log(LogLevel::Info, message); }
+void ConsoleLogger::warning(const std::string& message) { log(LogLevel::Warning, message); }
+void ConsoleLogger::error(const std::string& message) { log(LogLevel::Error, message); }
 
-void console_logger::set_level(LogLevel level) {
-    minLevel_ = level;
+void ConsoleLogger::set_level(LogLevel level) {
+    min_level_ = level;
 }
 
-std::string console_logger::timestamp() {
+std::string ConsoleLogger::timestamp() {
     using namespace std::chrono;
     auto now = system_clock::now();
     auto in_time_t = system_clock::to_time_t(now);
@@ -34,7 +34,7 @@ std::string console_logger::timestamp() {
     return ss.str();
 }
 
-std::string console_logger::levelToString(LogLevel level) {
+std::string ConsoleLogger::level_to_string(LogLevel level) {
     switch (level) {
         case LogLevel::Debug: return "DEBUG";
         case LogLevel::Info: return "INFO";
@@ -44,7 +44,7 @@ std::string console_logger::levelToString(LogLevel level) {
     }
 }
 
-std::string console_logger::colorForLevel(LogLevel level) {
+std::string ConsoleLogger::color_for_level(LogLevel level) {
     switch (level) {
         case LogLevel::Debug:   return "\033[36m";  // Cyan
         case LogLevel::Info:    return "\033[32m";  // Green

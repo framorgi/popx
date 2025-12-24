@@ -1,66 +1,61 @@
 #include "pop.h"
 
-pop::pop(/* args */)
+Pop::Pop(/* args */)
 {
     alive_ = true;
     pos_.x = 0;
     pos_.y = 0;
 
 }
-void pop::init()
+void Pop::init()
 {
 }
 
-void pop::die()
+void Pop::die()
 {
 }
 
-bool pop::try_spawn(std::shared_ptr<i_world> world, Position p)
-
+bool Pop::try_spawn(std::shared_ptr<IWorld> world, Position p)
 {
      pos_ = p;
-    if (world->add_entity(std::make_shared<pop>(*this))) {
-       
-        return true;
-    }
-    return false;
+    return world->add_entity(std::make_shared<Pop>(*this));
 }
 
-void pop::update(std::shared_ptr<i_world> world)
+void Pop::update(std::shared_ptr<IWorld> world)
 {
 }
 
-void pop::despawn(std::shared_ptr<i_world> world)
+void Pop::despawn(std::shared_ptr<IWorld> world)
 {
     alive_ = false;
-    world->remove_entity(std::make_shared<pop>(*this));
+    world->remove_entity(std::make_shared<Pop>(*this));
 }
 
-void pop::sense(std::shared_ptr<i_world> world)
+void Pop::sense(std::shared_ptr<IWorld> world)
 {
 }
 
-void pop::think()
+void Pop::think()
 {
 }
 
 
-void pop::act()
+void Pop::act()
 {
 
 }
 
-bool pop::try_move(std::shared_ptr<i_world> world, Position p)
+bool Pop::try_move(std::shared_ptr<IWorld> world, Position p)
 {
     return false;
 }
 
-Position pop::get_position() const
+Position Pop::get_position() const
 {
     return pos_;
 }
 
-bool pop::is_alive()
+bool Pop::is_alive()
 {
     return alive_;
 }

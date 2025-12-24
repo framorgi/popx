@@ -6,19 +6,18 @@
 #include "pop.h"
 #include <vector>
 #include "random_utility.h"
-class pops_manager : public i_agents_manager 
+class PopsManager : public IAgentsManager 
 {
 
 public:
-    pops_manager(std::shared_ptr<i_world> world,std::shared_ptr<i_logger> logger );
-
+    PopsManager(std::shared_ptr<IWorld> world,std::shared_ptr<ILogger> logger );
     /// @brief Create and register a new agent
     bool spawn_population() override;
 
     /// @brief Remove an agent
     void update_cycle() override;
 private:
-    std::vector<std::shared_ptr<pop>> pops_;
-    std::shared_ptr<i_world> world_;
-    std::shared_ptr<i_logger> logger_;
+    std::vector<std::shared_ptr<Pop>> pops_;
+    std::shared_ptr<IWorld> world_;
+    std::shared_ptr<ILogger> logger_;
 };

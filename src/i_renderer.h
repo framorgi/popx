@@ -1,10 +1,10 @@
 #pragma once
 #include <memory> 
 
-class i_renderer
+class IRenderer
 {
 public:
-    virtual ~i_renderer() = default;
+    virtual ~IRenderer() = default;
 
     virtual void init()=0;
     virtual void draw(  )=0;

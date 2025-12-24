@@ -1,30 +1,30 @@
 #include "sfml_graphic_engine.h"
 
-    sfml_graphic_engine::sfml_graphic_engine(/* args */)
+    SfmlGraphicEngine::SfmlGraphicEngine(/* args */)
     {
        
     }
-    void sfml_graphic_engine::create_window(std::string title, int width, int height)
+    void SfmlGraphicEngine::create_window(std::string title, int width, int height)
     {
          window_.create(sf::VideoMode(width, height), title);
     }
  
     
-    void sfml_graphic_engine::clear(const Color& color )
+    void SfmlGraphicEngine::clear(const Color& color )
     {
         window_.clear(sf::Color(color.r, color.g, color.b, color.a));
     }
 
-    void sfml_graphic_engine::display()
+    void SfmlGraphicEngine::display()
     {
         window_.display();
         sf::sleep(sf::milliseconds(1));
     }   
-    bool sfml_graphic_engine::is_open() const
+    bool SfmlGraphicEngine::is_open() const
     {
         return window_.isOpen();
     }
-    void sfml_graphic_engine::refresh()
+    void SfmlGraphicEngine::refresh()
     {
         sf::Event event;
         while (window_.pollEvent(event)) {
@@ -32,31 +32,31 @@
                 window_.close();
         }
     }
-    void sfml_graphic_engine::draw_circle(const Circle& circle, const Color& color)
+    void SfmlGraphicEngine::draw_circle(const Circle& circle, const Color& color)
     {
         sf::CircleShape shape(circle.radius);
         shape.setPosition(circle.center.x - circle.radius, circle.center.y - circle.radius);
         shape.setFillColor(sf::Color(color.r, color.g, color.b, color.a));
         window_.draw(shape);
     }
-    void sfml_graphic_engine::draw_rectangle(const Rect& rect, const Color& color)
+    void SfmlGraphicEngine::draw_rectangle(const Rect& rect, const Color& color)
     {
         sf::RectangleShape shape(sf::Vector2f(rect.size.x, rect.size.y));
         shape.setPosition(rect.pos.x,  rect.pos.y);
         shape.setFillColor(sf::Color(color.r, color.g, color.b, color.a));
         window_.draw(shape);
     }
-    void sfml_graphic_engine::draw_line(const Vec2& from, const Vec2& to, const Color& color, float thickness)
+    void SfmlGraphicEngine::draw_line(const Vec2& from, const Vec2& to, const Color& color, float thickness)
     {
     }
 
-    void sfml_graphic_engine::draw_point(const Vec2& point, const Color& color)
+    void SfmlGraphicEngine::draw_point(const Vec2& point, const Color& color)
     {
         sf::Vertex vertex(sf::Vector2f(point.x, point.y), sf::Color(color.r, color.g, color.b, color.a));
         window_.draw(&vertex, 1, sf::Points);
     }
 
-    void sfml_graphic_engine::draw_polygon(const std::vector<Vec2>& vertices, const Color& color)
+    void SfmlGraphicEngine::draw_polygon(const std::vector<Vec2>& vertices, const Color& color)
     {
         sf::ConvexShape shape;
         shape.setPointCount(vertices.size());
@@ -67,7 +67,7 @@
         window_.draw(shape);
     }
 
-    void sfml_graphic_engine::draw_text(const std::string& text, const Vec2& pos, int size,
+    void SfmlGraphicEngine::draw_text(const std::string& text, const Vec2& pos, int size,
                       const Color& color, const std::string& fontName)
     {
         static sf::Font font;

@@ -1,16 +1,17 @@
 #pragma once
 
 #include "i_agent.h"
+#include "i_slice.h"
 
-class slice
+class Slice : ISlice
 {
 public:
-    slice(std::shared_ptr<i_agent> occupant_ = nullptr) : occupant_(occupant_) {}
+    Slice(std::shared_ptr<IAgent> occupant_ = nullptr) : occupant_(occupant_) {}
 
-    ~slice() = default;
-    void set_occupant(std::shared_ptr<i_agent> occupant_) { occupant_ = occupant_; }
-    std::shared_ptr<i_agent> get_occupant() const { return occupant_; }
+    ~Slice() = default;
+    void set_occupant(std::shared_ptr<IAgent> occupant_) { occupant_ = occupant_; }
+    [[nodiscard]] std::shared_ptr<IAgent> get_occupant() const { return occupant_; }
 
 private:
-    std::shared_ptr<i_agent> occupant_;
+    std::shared_ptr<IAgent> occupant_;
 };

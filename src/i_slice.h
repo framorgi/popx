@@ -1,10 +1,10 @@
 #pragma once
 
-class i_slice
+class ISlice
 {
 private:
     /* data */
 public: 
-    ~i_slice()=default;
+    ~ISlice()=default;
  
 };

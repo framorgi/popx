@@ -1,5 +1,6 @@
 
 
+#include "pops_manager.h"
 #include "popx_app.h"
 #include "grid_world.h"
 #include "sfml_graphic_engine.h"
@@ -36,7 +37,7 @@
 
    std::shared_ptr<pop> p = std::make_shared<pop>();
     p->init();
-    std::shared_ptr<grid_world> world = std::make_shared<grid_world>(windowSize/cellSize, windowSize/cellSize);
+    std::shared_ptr<GridWorld> world = std::make_shared<GridWorld>(windowSize/cellSize, windowSize/cellSize);
 
     world->init();
     Position startPos = {75,39};
@@ -100,13 +101,13 @@
 int  main ()
 {
 
-    std::shared_ptr<console_logger> app_logger = std::make_shared<console_logger>();
-    std::shared_ptr<grid_world> app_grid_world = std::make_shared<grid_world>(100, 100, app_logger);
-    std::shared_ptr<pops_manager> app_agents_manager = std::make_shared<pops_manager>(app_grid_world, app_logger);
-    std::shared_ptr<simulator> app_sim = std::make_shared<simulator>(app_grid_world, app_agents_manager, app_logger);
-    std::shared_ptr<sfml_graphic_engine> app_gfx = std::make_shared<sfml_graphic_engine>();
-    std::shared_ptr<renderer> app_renderer = std::make_shared<renderer>(app_gfx, app_grid_world);
-    popx_app app(app_sim, app_renderer, app_logger);
+    std::shared_ptr<ConsoleLogger> app_logger = std::make_shared<ConsoleLogger>();
+    std::shared_ptr<GridWorld> app_gridworld = std::make_shared<GridWorld>(100, 100, app_logger);
+    std::shared_ptr<PopsManager> app_agents_manager = std::make_shared<PopsManager>(app_gridworld, app_logger);
+    std::shared_ptr<Simulator> app_sim = std::make_shared<Simulator>(app_gridworld, app_agents_manager, app_logger);
+    std::shared_ptr<SfmlGraphicEngine> app_gfx = std::make_shared<SfmlGraphicEngine>();
+    std::shared_ptr<Renderer> app_renderer = std::make_shared<Renderer>(app_gfx, app_gridworld);
+    PopXApp app(app_sim, app_renderer, app_logger);
     app.init();
     app.run();
 

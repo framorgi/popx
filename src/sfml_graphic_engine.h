@@ -2,9 +2,9 @@
 #include "i_graphic_engine.h"
 #include <SFML/Graphics.hpp>
 
-class sfml_graphic_engine : public i_graphic_engine {
+class SfmlGraphicEngine : public IGraphicEngine {
 public:
-    sfml_graphic_engine( );
+    SfmlGraphicEngine( );
 
     // --------------------------
     // Gestione finestra / frame

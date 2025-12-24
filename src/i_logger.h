@@ -8,9 +8,9 @@ enum class LogLevel {
     Error
 };
 
-class i_logger {
+class ILogger {
 public:
-    virtual ~i_logger() = default;
+    virtual ~ILogger() = default;
 
     virtual void log(LogLevel level, const std::string& message) = 0;
 

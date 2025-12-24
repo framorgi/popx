@@ -3,13 +3,13 @@
 #include <memory>
 #include "i_world.h"
 #include "i_entity.h"
-class i_agent : public i_entity
+class IAgent : public IEntity
 {
 private:
     /* data */
 public:
    
-    ~i_agent() = default;
+    ~IAgent() = default;
 
 
     /// @brief Initialize the agent
@@ -19,7 +19,7 @@ public:
     virtual void die()=0;
 
     /// @brief Make the agent sense its environment
-    virtual void sense(std::shared_ptr<i_world> world)=0;
+    virtual void sense(std::shared_ptr<IWorld> world)=0;
 
     /// @brief Make the agent think
     virtual void think()=0;

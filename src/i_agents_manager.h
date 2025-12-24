@@ -2,10 +2,11 @@
 #include "common.h"
 #include "i_agent.h"
 
-class i_agents_manager 
+class IAgentsManager 
 {
 public:
-    virtual ~i_agents_manager() = default;
+    virtual ~IAgentsManager() = default;
+    //TODO: rethink al agent manager actions and logic here
 
     /// @brief Create and register a new agent
     virtual bool spawn_population() = 0;

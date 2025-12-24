@@ -5,9 +5,9 @@
 #include <chrono>
 #include <iomanip>
 
-class console_logger : public i_logger {
+class ConsoleLogger : public ILogger {
 public:
-    console_logger();
+    ConsoleLogger();
     void log(LogLevel level, const std::string& message) override;
 
     void debug(const std::string& message) override;
@@ -19,9 +19,9 @@ public:
 
 private:
     std::mutex mutex_;
-    LogLevel minLevel_{LogLevel::Debug};
+    LogLevel min_level_{LogLevel::Debug};
 
     std::string timestamp();
-    std::string levelToString(LogLevel level);
-    std::string colorForLevel(LogLevel level);
+    std::string level_to_string(LogLevel level);
+    std::string color_for_level(LogLevel level);
 };

@@ -3,10 +3,10 @@
 #include <string>
 #include <vector>
 
-class i_graphic_engine {
+class IGraphicEngine {
 
 public:
-    virtual ~i_graphic_engine() = default;
+    virtual ~IGraphicEngine() = default;
     // --------------------------
     // Tipi di supporto integrati
     // --------------------------
