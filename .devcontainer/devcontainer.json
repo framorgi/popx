@@ -1,0 +1,120 @@
+// .devcontainer/devcontainer.json
+{
+  // 1) Give your container a name (optional, but helpful):
+  "name": "POPX",
+
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  // 2) Point at your compose file. Since compose.yaml is one level above .devcontainer/,
+  //    we use "../compose.yaml". If it were named docker-compose.yml, just write that name.
+//   "dockerComposeFile": [
+//     "../compose.yaml"
+//   ],
+
+
+  // 3) Tell VS Code which service in compose.yaml is the “main” development container:
+  //    In this example, our service is called "app".
+ // "service": "dis",
+
+
+  // 4) Where is your code inside the container?
+  //    This should match the volume mount you declared in compose.yaml (i.e. `.:/workspace`).
+  //    VS Code will `chdir` into this folder.
+  "workspaceFolder": "/pop_proj",
+
+"mounts": [
+    "source=${localWorkspaceFolder},target=/pop_proj,type=bind"
+  ],
+  // 5) (Optional) If you want VS Code to rebuild or recreate the container automatically
+  //    when devcontainer.json changes, keep this enabled (default is "never" if omitted).
+  // "updateContentCommand": "docker-compose -f ../compose.yaml build dis",
+
+
+"customizations": {
+    "vscode": {
+      // A) List of extensions to install inside the container:
+      "extensions": [
+        "llvm-vs-code-extensions.vscode-clangd",
+        "mhutchie.git-graph",
+        "ms-vscode.cmake-tools",
+        "ms-vscode.cpptools",
+        "ms-vscode.cpptools-extension-pack",
+        "ms-vscode.cpptools-themes",
+        "ms-vscode.hexeditor",
+        "ritwickdey.liveserver",
+        "cschlosser.doxdocgen",
+        "matepek.vscode-catch2-test-adapter",
+        "vadimcn.vscode-lldb",
+        "gruntfuggly.todo-tree" 
+
+      ],
+
+
+      // B) Any VS Code settings you want applied inside the container:
+      //    These merge with (or override) whatever’s in .vscode/settings.json.
+      "settings": {
+        "editor.tabSize": 4,
+        "editor.rulers": [95],
+        // --- MS C++ tools
+        // MS C++ tools clang-tidy support is buggy, let's use Clangd extension
+        "C_Cpp.codeAnalysis.clangTidy.enabled": false,
+        "C_Cpp.intelliSenseEngine": "disabled",
+        "C_Cpp.loggingLevel": "Debug",
+        "cmake.enableTesting": false,
+        // --- LiveServer
+        "liveServer.settings.donotShowInfoMsg": true,
+        // --- Clangd
+        "clangd.arguments": [
+            "--compile-commands-dir=${workspaceFolder}/build-asan"
+        ],
+        // --- TestMate
+       // "testMate.cpp.test.executables": "{build-asan}/**/*{test,Test,TEST}*",
+       
+       // --- Better Comments
+        "better-comments.highlightPlainText": false,
+        "better-comments.multilineComments": false,
+     
+        // --- Doxygen
+        "doxdocgen.c.commentPrefix": "/// ",
+        "doxdocgen.c.firstLine": "//--------------------------------------------------------------------------",
+        "doxdocgen.c.lastLine": "//--------------------------------------------------------------------------",
+        "doxdocgen.c.triggerSequence": "///",
+        "doxdocgen.generic.commandSuggestion": true,
+        "doxdocgen.generic.order": [
+          "brief",
+          "empty",
+          "param",
+          "empty",
+          "return"
+        ],
+        "doxdocgen.file.fileOrder": [
+          "file",
+          "empty",
+          "date",
+          "empty",
+          "custom",
+          "empty",
+          "copyright"
+        ],
+        "doxdocgen.file.customTag": ["Implemented requirements: "],
+        "doxdocgen.generic.briefTemplate": "@brief{indent:12}",
+        "doxdocgen.generic.paramTemplate": "@param{indent:12}{param}{indent:30}",
+        "doxdocgen.generic.returnTemplate": "@return{indent:12}",
+        
+        // --- Git
+        "git.enableSmartCommit": false,
+        "git.showActionButton": {
+          "commit": true,
+          "publish": true,
+          "sync": true
+        },
+        "git.showInlineOpenFileAction": true
+      }
+    }
+  }
+}
+
+
+
