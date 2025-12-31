@@ -15,9 +15,10 @@ void Renderer::draw() {
 
     Position center{50, 50};
 
-    IGraphicEngine::Circle circle(
-        {IGraphicEngine::Vec2{static_cast<float>(center.x), static_cast<float>(center.y)}, 20.f});
-    gfx_->draw_circle(circle, IGraphicEngine::Color(255, 0, 0));
+    // IGraphicEngine::Circle circle(
+    //     {IGraphicEngine::Vec2{static_cast<float>(center.x), static_cast<float>(center.y)}, 10.f});
+    // gfx_->draw_circle(circle, IGraphicEngine::Color(255, 150, 0));
+    draw_world();
 
     gfx_->display();
 }

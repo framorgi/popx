@@ -16,7 +16,7 @@ void Simulator::init() {
 void Simulator::update() {
     agents_manager_->update_cycle();
     // TODO: Implement simulation tick (call update_agents() and update_environment())
-    std::this_thread::sleep_for(std::chrono::milliseconds(800)); // Simulate work with a sleep  
+    std::this_thread::sleep_for(std::chrono::milliseconds(300)); // Simulate work with a sleep  
 }
 
 std::shared_ptr<IWorld> Simulator::get_world() const {
