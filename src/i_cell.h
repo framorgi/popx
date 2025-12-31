@@ -1,8 +1,8 @@
 #pragma once
 
-class ISlice {
+class ICell {
   private:
     /* data */
   public:
-    ~ISlice() = default;
+    ~ICell() = default;
 };

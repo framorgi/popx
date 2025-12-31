@@ -16,7 +16,7 @@ class PopXApp : public IApp {
     /// @param    logger Shared pointer to the Logger instance
     ///--------------------------------------------------------------------------
 
-    PopXApp(std::shared_ptr<Simulator> sim, std::shared_ptr<Renderer> renderer, std::shared_ptr<ConsoleLogger> logger);
+    PopXApp(std::shared_ptr<ISimulator> sim, std::shared_ptr<IRenderer> renderer, std::shared_ptr<ILogger> logger);
     ///--------------------------------------------------------------------------
     /// @brief    Initializes the application
     ///--------------------------------------------------------------------------
@@ -34,16 +34,15 @@ class PopXApp : public IApp {
     ///--------------------------------------------------------------------------
     /// @brief    Shared pointer to the Simulator instance
     ///--------------------------------------------------------------------------
-    std::shared_ptr<Simulator> sim_;
+    std::shared_ptr<ISimulator> sim_;
     ///--------------------------------------------------------------------------
     /// @brief    Shared pointer to the Renderer instance
     ///--------------------------------------------------------------------------
-    std::shared_ptr<Renderer> renderer_;
+    std::shared_ptr<IRenderer> renderer_;
     ///--------------------------------------------------------------------------
     /// @brief    Shared pointer to the Logger instance
     ///--------------------------------------------------------------------------
-    std::shared_ptr<ConsoleLogger> logger_;
-
+    std::shared_ptr<ILogger> logger_;
     ///--------------------------------------------------------------------------
     /// @brief    Token to control the running state of the application
     ///--------------------------------------------------------------------------

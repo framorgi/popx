@@ -1,9 +1,7 @@
 #include "pop.h"
 
-Pop::Pop(std::weak_ptr<IWorld> world) : world_(world) {
+Pop::Pop(std::weak_ptr<IWorld> world) : world_(std::move(world)), pos_{0, 0} {
     alive_ = true;
-    pos_.x = 0;
-    pos_.y = 0;
 }
 void Pop::init() {
     // TODO: Implement initialization logic for Pop (set initial stats, behaviors, etc.)

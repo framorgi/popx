@@ -3,7 +3,7 @@
 GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger) : width_(w), height_(h), logger_(logger) {
     slices_.resize(width_ * height_);
     for (auto& slice : slices_) {
-        slice = std::make_shared<Slice>();
+        slice = std::make_shared<Cell>();
     }
     logger_->debug("Grid world created with size " + std::to_string(width_) + "x" + std::to_string(height_));
 }

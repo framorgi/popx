@@ -51,7 +51,7 @@ class GridWorld : public IWorld {
         return height_;
     }
 
-    std::vector<std::shared_ptr<Slice>> get_slices() const {
+    std::vector<std::shared_ptr<Cell>> get_slices() const {
         return slices_;
     }
 
@@ -61,6 +61,6 @@ class GridWorld : public IWorld {
     int index(int x, int y) const;
 
     int width_, height_;
-    std::vector<std::shared_ptr<Slice>> slices_;
+    std::vector<std::shared_ptr<Cell>> slices_;
     std::shared_ptr<ILogger> logger_;
 };

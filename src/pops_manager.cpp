@@ -1,7 +1,9 @@
 #include "pops_manager.h"
 
+#include <utility>
+
 PopsManager::PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger)
-    : world_(world), logger_(logger) {}
+    : world_(std::move(world)), logger_(std::move(logger)) {}
 
 bool PopsManager::spawn_population() {
     // Example: Spawn a new pop agent and add it to the population
