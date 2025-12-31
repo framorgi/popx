@@ -18,6 +18,7 @@ void PopXApp::run() {
     {
         sim_->update();
 
+      
         renderer_->draw();
     }
 }

@@ -1,8 +1,10 @@
 #pragma once
 #include "grid_world.h"
+#include "i_agents_manager.h"
 #include "i_logger.h"
 #include "i_simulator.h"
-#include "pops_manager.h"
+#include "i_world.h"
+#include "i_agents_manager.h"
 
 #include <memory>
 
@@ -18,7 +20,7 @@ class Simulator : public ISimulator {
     /// @param    logger Shared pointer to the Logger instance
     ///--------------------------------------------------------------------------
     // TODO: check if we need to pass the implemented objects or the interfaces
-    Simulator(std::shared_ptr<GridWorld> world, std::shared_ptr<PopsManager> agents_manager,
+    Simulator(std::shared_ptr<IWorld> world, std::shared_ptr<IAgentsManager> agents_manager,
               std::shared_ptr<ILogger> logger);
 
     ///--------------------------------------------------------------------------
@@ -38,8 +40,8 @@ class Simulator : public ISimulator {
     bool update_agents();
     bool update_environment();
 
-    std::shared_ptr<GridWorld> world_;
-    std::shared_ptr<PopsManager> agents_manager_;
+    std::shared_ptr<IWorld> world_;
+    std::shared_ptr<IAgentsManager> agents_manager_;
     std::shared_ptr<ILogger> logger_;
     // statistic handler
 };

@@ -9,10 +9,10 @@ bool PopsManager::spawn_population() {
     // Example: Spawn a new pop agent and add it to the population
     std::shared_ptr<RandomUtility> random_util = std::make_shared<RandomUtility>();
 
-    std::shared_ptr<Pop> new_pop = std::make_shared<Pop>(world_);
+    std::shared_ptr<Pop> new_pop = std::make_shared<Pop>(world_, logger_);
     pops_.push_back(new_pop);
-    std::shared_ptr<Pop> new_pop2 = std::make_shared<Pop>(world_);
-    pops_.push_back(new_pop2);
+   
+    
     for (auto& pop : pops_) {
         if (pop->is_alive()) {
             int w = random_util->rnd_int(0, world_->get_width());
@@ -40,6 +40,12 @@ void PopsManager::update_cycle() {
     for (auto& pop : pops_) {
         if (pop->is_alive()) {
             // TODO: Implement update logic for alive agents (sense, think, act cycle)
+            Position p= pop->get_position();
+            p.x+=1;
+            logger_->debug("Moving agent from (" + std::to_string(pop->get_position().x) + ", " +
+                           std::to_string(pop->get_position().y) + ") to (" + std::to_string(p.x) + ", " +
+                           std::to_string(p.y) + ").");
+            pop->try_move(p);
         } else {
             // TODO: Handle dead agents (remove from vector, cleanup resources)
         }

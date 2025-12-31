@@ -1,7 +1,7 @@
 #include "renderer.h"
 
 Renderer::Renderer(std::shared_ptr<SfmlGraphicEngine> gfx, std::shared_ptr<GridWorld> world)
-    : gfx_(gfx), world_(world) {}
+    : gfx_(gfx), world_(std::move(world)) {}
 
 void Renderer::init() {
     // TODO: Complete initialization (load resources, setup camera, configure rendering settings)
@@ -39,6 +39,7 @@ void Renderer::draw_world() {
 
 void Renderer::draw_entity(IEntity* entity) {
     // TODO: Improve entity rendering (different colors/shapes per type, animations, health bars)
+
     Position pos = entity->get_position();
     IGraphicEngine::Circle circle({IGraphicEngine::Vec2{static_cast<float>(pos.x), static_cast<float>(pos.y)}, 5.f});
     gfx_->draw_circle(circle, IGraphicEngine::Color(0, 255, 0));

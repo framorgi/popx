@@ -1,6 +1,6 @@
 #include "pop.h"
 
-Pop::Pop(std::weak_ptr<IWorld> world) : world_(std::move(world)), pos_{0, 0} {
+Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger) : world_(std::move(world)), logger_(std::move(logger)), pos_{0, 0} {
     alive_ = true;
 }
 void Pop::init() {
@@ -49,10 +49,19 @@ bool Pop::try_move(Position p) {
     // TODO: Implement movement logic (validate move, update position, notify world)
     auto world = world_.lock();
     if (!world) {
+        logger_->error("Failed to move: World no longer exists.");
         return false; // World no longer exists
     }
     // Add actual movement logic here
-    return false;
+    logger_->debug("Attempting to move to position (" + std::to_string(p.x) + ", " + std::to_string(p.y) + ").");
+      if(world->move_entity(shared_from_this(), p)) {
+        pos_ = p;
+        logger_->info("Moved to position (" + std::to_string(p.x) + ", " + std::to_string(p.y) + ").");
+        return true;
+      }
+        logger_->warning("Move to position (" + std::to_string(p.x) + ", " + std::to_string(p.y) + ") failed.");
+        return false;
+  
 }
 
 Position Pop::get_position() const {

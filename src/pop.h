@@ -1,12 +1,13 @@
 #pragma once
 #include "i_agent.h"
 #include "i_world.h"
+#include "i_logger.h"
 
 class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
   private:
     /* data */
   public:
-    Pop(std::weak_ptr<IWorld> world);
+    Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger  );
 
     void init() override;
     void die() override;
@@ -24,4 +25,5 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     Position pos_;
     bool alive_ = false;
     std::weak_ptr<IWorld> world_; // Observes the world without owning it
+    std::shared_ptr<ILogger> logger_;
 };

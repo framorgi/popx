@@ -12,23 +12,41 @@ GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger) : width_(w),
 void GridWorld::init() {
     // TODO: Reconsider this implementation - setting to nullptr wastes constructor allocation
     for (auto& cell : cells_) {
-        cell = nullptr;
+        //cell = nullptr;
     }
 }
 
 bool GridWorld::is_free(Position p) const {
     if (!in_bounds(p.x, p.y)) {
+        logger_->warning("Position (" + std::to_string(p.x) + "," + std::to_string(p.y) + ") is out of bounds.");
         return false;
     }
+    
     auto weak_occupant = cells_[index(p.x, p.y)]->get_occupant();
-    return weak_occupant.expired(); // Free if weak_ptr has expired or is empty
+    auto locked = weak_occupant.lock();
+    
+    // Debug: check use_count and owner_before
+    bool has_owner = weak_occupant.owner_before(std::weak_ptr<IEntity>{}) || std::weak_ptr<IEntity>{}.owner_before(weak_occupant);
+    long use_count = locked ? locked.use_count() : 0;
+    
+    bool is_free = (locked == nullptr);
+    
+    logger_->debug("Position (" + std::to_string(p.x) + "," + std::to_string(p.y) + 
+                   ") has_owner=" + std::to_string(has_owner) + 
+                   " use_count=" + std::to_string(use_count) +
+                   " -> " + (is_free ? "FREE" : "OCCUPIED"));
+    
+    return is_free;
 }
 
 bool GridWorld::move_entity(std::shared_ptr<IEntity> entity, Position new_pos) {
     if (!is_free(new_pos)) {
+        logger_->warning("Failed to move entity to occupied position (" + std::to_string(new_pos.x) + "," +
+                         std::to_string(new_pos.y) + ")");
         return false;
     }
 
+    logger_->debug("Moving entity to position (" + std::to_string(new_pos.x) + "," + std::to_string(new_pos.y) + ")");
     Position old_pos = entity->get_position();
     cells_[index(old_pos.x, old_pos.y)]->set_occupant(std::weak_ptr<IEntity>());
     cells_[index(new_pos.x, new_pos.y)]->set_occupant(entity);
@@ -57,9 +75,11 @@ bool GridWorld::add_entity(std::shared_ptr<IEntity> e) {
     logger_->debug("Adding entity to grid world at position (" + std::to_string(pos.x) + "," + std::to_string(pos.y) +
                    ")");
     if (!is_free(pos)) {
+        logger_->warning("Cannot add entity - position already occupied!");
         return false;
     }
     cells_[index(pos.x, pos.y)]->set_occupant(e);
+    logger_->info("Entity successfully added to position (" + std::to_string(pos.x) + "," + std::to_string(pos.y) + ")");
     return true;
 }
 
