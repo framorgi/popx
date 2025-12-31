@@ -1,16 +1,17 @@
 #include "grid_world.h"
+#include "cell.h"
 
 GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger) : width_(w), height_(h), logger_(logger) {
-    slices_.resize(width_ * height_);
-    for (auto& slice : slices_) {
-        slice = std::make_shared<Cell>();
+    cells_.resize(width_ * height_);
+    for (auto& cell : cells_) {
+        cell = std::make_shared<Cell>();
     }
     logger_->debug("Grid world created with size " + std::to_string(width_) + "x" + std::to_string(height_));
 }
 
 void GridWorld::init() {
     // TODO: Reconsider this implementation - setting to nullptr wastes constructor allocation
-    for (auto& cell : slices_) {
+    for (auto& cell : cells_) {
         cell = nullptr;
     }
 }
@@ -19,7 +20,7 @@ bool GridWorld::is_free(Position p) const {
     if (!in_bounds(p.x, p.y)) {
         return false;
     }
-    auto weak_occupant = slices_[index(p.x, p.y)]->get_occupant();
+    auto weak_occupant = cells_[index(p.x, p.y)]->get_occupant();
     return weak_occupant.expired(); // Free if weak_ptr has expired or is empty
 }
 
@@ -29,8 +30,8 @@ bool GridWorld::move_entity(std::shared_ptr<IEntity> entity, Position new_pos) {
     }
 
     Position old_pos = entity->get_position();
-    slices_[index(old_pos.x, old_pos.y)]->set_occupant(std::weak_ptr<IEntity>());
-    slices_[index(new_pos.x, new_pos.y)]->set_occupant(entity);
+    cells_[index(old_pos.x, old_pos.y)]->set_occupant(std::weak_ptr<IEntity>());
+    cells_[index(new_pos.x, new_pos.y)]->set_occupant(entity);
 
     return true;
 }
@@ -41,14 +42,14 @@ bool GridWorld::remove_entity(std::shared_ptr<IEntity> e) {
         return false;
     }
 
-    auto weak_occupant = slices_[index(pos.x, pos.y)]->get_occupant();
+    auto weak_occupant = cells_[index(pos.x, pos.y)]->get_occupant();
     auto locked_occupant = weak_occupant.lock();
 
     if (!locked_occupant || locked_occupant.get() != e.get()) {
         return false;
     }
 
-    slices_[index(pos.x, pos.y)]->set_occupant(std::weak_ptr<IEntity>());
+    cells_[index(pos.x, pos.y)]->set_occupant(std::weak_ptr<IEntity>());
     return true;
 }
 bool GridWorld::add_entity(std::shared_ptr<IEntity> e) {
@@ -58,7 +59,7 @@ bool GridWorld::add_entity(std::shared_ptr<IEntity> e) {
     if (!is_free(pos)) {
         return false;
     }
-    slices_[index(pos.x, pos.y)]->set_occupant(e);
+    cells_[index(pos.x, pos.y)]->set_occupant(e);
     return true;
 }
 

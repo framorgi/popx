@@ -2,7 +2,7 @@
 #include "i_entity.h"
 #include "i_logger.h"
 #include "i_world.h"
-#include "slice.h"
+#include "i_cell.h"
 
 #include <memory>
 #include <vector>
@@ -51,8 +51,8 @@ class GridWorld : public IWorld {
         return height_;
     }
 
-    std::vector<std::shared_ptr<Cell>> get_slices() const {
-        return slices_;
+    std::vector<std::shared_ptr<ICell>> get_slices() const {
+        return cells_;
     }
 
   private:
@@ -61,6 +61,6 @@ class GridWorld : public IWorld {
     int index(int x, int y) const;
 
     int width_, height_;
-    std::vector<std::shared_ptr<Cell>> slices_;
+    std::vector<std::shared_ptr<ICell>> cells_;
     std::shared_ptr<ILogger> logger_;
 };

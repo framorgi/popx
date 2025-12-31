@@ -1,19 +1,19 @@
 #pragma once
 
 #include "i_entity.h"
-#include "i_slice.h"
+#include "i_cell.h"
 
 #include <memory>
 
-class Cell : ICell {
+class Cell : public ICell {
   public:
     Cell(std::weak_ptr<IEntity> occupant = {}) : occupant_(std::move(occupant)) {}
 
     ~Cell() = default;
-    void set_occupant(std::weak_ptr<IEntity> occupant) {
+    void set_occupant(std::weak_ptr<IEntity> occupant) override{
         occupant_ = std::move(occupant);
     }
-    [[nodiscard]] std::weak_ptr<IEntity> get_occupant() const {
+    [[nodiscard]] std::weak_ptr<IEntity> get_occupant() const override{
         return occupant_;
     }
 
