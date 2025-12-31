@@ -1,24 +1,23 @@
-#pragma once 
-#include <memory>
+#pragma once
 #include "common.h"
 
+#include <memory>
 
 ///--------------------------------------------------------------------------
-/// @brief    Interface that defines the simulator functionalities and logics 
+/// @brief    Interface that defines the simulator functionalities and logics
 ///           Simulator is decoupled from rendering objects
 ///--------------------------------------------------------------------------
 
 class ISimulator {
-public:
+  public:
     virtual ~ISimulator() = default;
 
-///--------------------------------------------------------------------------
-/// @brief    Initializes the simulator
-///--------------------------------------------------------------------------
+    ///--------------------------------------------------------------------------
+    /// @brief    Initializes the simulator
+    ///--------------------------------------------------------------------------
     virtual void init() = 0;
-///--------------------------------------------------------------------------
-/// @brief    Updates the simulator state
-///--------------------------------------------------------------------------
+    ///--------------------------------------------------------------------------
+    /// @brief    Updates the simulator state
+    ///--------------------------------------------------------------------------
     virtual void update() = 0;
- 
 };

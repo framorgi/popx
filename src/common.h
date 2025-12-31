@@ -1,7 +1,7 @@
 
 #pragma once
 
-using Position = struct{
+using Position = struct {
     int x;
     int y;
 };

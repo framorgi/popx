@@ -1,63 +1,66 @@
 #include "pop.h"
 
-Pop::Pop(/* args */)
-{
+Pop::Pop(std::weak_ptr<IWorld> world) : world_(world) {
     alive_ = true;
     pos_.x = 0;
     pos_.y = 0;
-
 }
-void Pop::init()
-{
-}
-
-void Pop::die()
-{
+void Pop::init() {
+    // TODO: Implement initialization logic for Pop (set initial stats, behaviors, etc.)
 }
 
-bool Pop::try_spawn(std::shared_ptr<IWorld> world, Position p)
-{
-     pos_ = p;
+void Pop::die() {
+    // TODO: Implement death logic (cleanup, final actions, mark as dead)
+}
+
+bool Pop::try_spawn(Position p) {
+    pos_ = p;
+    auto world = world_.lock();
+    if (!world) {
+        return false; // World no longer exists
+    }
     return world->add_entity(shared_from_this());
 }
 
-void Pop::update(std::shared_ptr<IWorld> world)
-{
+void Pop::update() {
+    // TODO: Implement entity update logic (called each tick)
 }
 
-void Pop::despawn(std::shared_ptr<IWorld> world)
-{
+void Pop::despawn() {
     alive_ = false;
-    world->remove_entity(shared_from_this());
+    auto world = world_.lock();
+    if (world) {
+        world->remove_entity(shared_from_this());
+    }
 }
 
-void Pop::sense(std::shared_ptr<IWorld> world)
-{
+void Pop::sense() {
+    // TODO: Implement sensing logic (perceive nearby entities, environment, etc.)
+    // Use world_.lock() to access the world safely
 }
 
-void Pop::think()
-{
+void Pop::think() {
+    // TODO: Implement decision-making logic (AI, behavior selection, goal planning)
 }
 
-
-void Pop::act()
-{
-
+void Pop::act() {
+    // TODO: Implement action execution (move, interact, consume resources, etc.)
 }
 
-bool Pop::try_move(std::shared_ptr<IWorld> world, Position p)
-{
+bool Pop::try_move(Position p) {
+    // TODO: Implement movement logic (validate move, update position, notify world)
+    auto world = world_.lock();
+    if (!world) {
+        return false; // World no longer exists
+    }
+    // Add actual movement logic here
     return false;
 }
 
-Position Pop::get_position() const
-{
+Position Pop::get_position() const {
     return pos_;
 }
 
-bool Pop::is_alive()
-{
+bool Pop::is_alive() {
     return alive_;
 }
-
-

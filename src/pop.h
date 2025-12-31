@@ -1,31 +1,27 @@
 #pragma once
 #include "i_agent.h"
-
 #include "i_world.h"
 
-
-class Pop : public IAgent, public std::enable_shared_from_this<Pop> 
-{
-private:
+class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
+  private:
     /* data */
-public:
-    Pop(/* args */);
-  
+  public:
+    Pop(std::weak_ptr<IWorld> world);
+
     void init() override;
     void die() override;
-    void sense(std::shared_ptr<IWorld> world) override;
+    void sense() override;
     void think() override;
     void act() override;
-    bool try_move(std::shared_ptr<IWorld> world, Position p) override;
-    [[nodiscard]] Position get_position() const  override;
+    bool try_move(Position p) override;
+    [[nodiscard]] Position get_position() const override;
     bool is_alive() override;
-    bool try_spawn(std::shared_ptr<IWorld> world, Position p) override;
-    void update(std::shared_ptr<IWorld> world) override;
-    void despawn(std::shared_ptr<IWorld> world) override;
-    
+    bool try_spawn(Position p) override;
+    void update() override;
+    void despawn() override;
 
-    private :
+  private:
     Position pos_;
     bool alive_ = false;
+    std::weak_ptr<IWorld> world_; // Observes the world without owning it
 };
-

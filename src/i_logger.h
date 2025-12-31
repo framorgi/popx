@@ -1,15 +1,10 @@
 #pragma once
 #include <string>
 
-enum class LogLevel {
-    Debug,
-    Info,
-    Warning,
-    Error
-};
+enum class LogLevel { Debug, Info, Warning, Error };
 
 class ILogger {
-public:
+  public:
     virtual ~ILogger() = default;
 
     virtual void log(LogLevel level, const std::string& message) = 0;

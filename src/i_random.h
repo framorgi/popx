@@ -1,7 +1,6 @@
 #pragma once
 class IRandom {
-public:
-
+  public:
     virtual ~IRandom() = default;
 
     virtual int rnd_int(int min, int max) = 0;

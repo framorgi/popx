@@ -1,10 +1,9 @@
 
 
+#include "grid_world.h"
 #include "pops_manager.h"
 #include "popx_app.h"
-#include "grid_world.h"
 #include "sfml_graphic_engine.h"
-
 
 #include <memory>
 
@@ -48,8 +47,8 @@
     sf::CircleShape circle(cellSize/2); // raggio 40 -> diametro 80, quindi entra nella cella 100x100
     circle.setFillColor(sf::Color::Green);
 
-    int cellX = p->get_position().x; // 
-    int cellY =p->get_position().y; // 
+    int cellX = p->get_position().x; //
+    int cellY =p->get_position().y; //
 
     // Calcola la posizione in pixel per centrare il cerchio nella cella
     float circleX = cellX * cellSize + (cellSize / 2) - circle.getRadius();
@@ -79,28 +78,25 @@
 
         window.display();
         circleX+=incx;
-        if (circleX > windowSize || circleX < 0) 
+        if (circleX > windowSize || circleX < 0)
         {
             incx = -incx;
             if (circleY > windowSize || circleY < 0) incy = -incy;
             circleY+=incy;
         }
-       
+
 
         circle.setPosition(circleX, circleY);
-        
-        
+
+
         //sf::sleep(sf::milliseconds(1));
 
     }
 
     return 0;
 }*/
-    
 
-int  main ()
-{
-
+int main() {
     std::shared_ptr<ConsoleLogger> app_logger = std::make_shared<ConsoleLogger>();
     std::shared_ptr<GridWorld> app_gridworld = std::make_shared<GridWorld>(100, 100, app_logger);
     std::shared_ptr<PopsManager> app_agents_manager = std::make_shared<PopsManager>(app_gridworld, app_logger);

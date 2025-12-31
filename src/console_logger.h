@@ -1,12 +1,13 @@
 #pragma once
 #include "i_logger.h"
-#include <iostream>
-#include <mutex>
+
 #include <chrono>
 #include <iomanip>
+#include <iostream>
+#include <mutex>
 
 class ConsoleLogger : public ILogger {
-public:
+  public:
     ConsoleLogger();
     void log(LogLevel level, const std::string& message) override;
 
@@ -17,7 +18,7 @@ public:
 
     void set_level(LogLevel level) override;
 
-private:
+  private:
     std::mutex mutex_;
     LogLevel min_level_{LogLevel::Debug};
 

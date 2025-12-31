@@ -1,11 +1,10 @@
-#pragma once    
+#pragma once
 #include <memory>
 #include <string>
 #include <vector>
 
 class IGraphicEngine {
-
-public:
+  public:
     virtual ~IGraphicEngine() = default;
     // --------------------------
     // Tipi di supporto integrati
@@ -13,8 +12,7 @@ public:
     struct Color {
         int r = 0, g = 0, b = 0, a = 255;
         Color() = default;
-        Color(int red, int green, int blue, int alpha = 255)
-            : r(red), g(green), b(blue), a(alpha) {}
+        Color(int red, int green, int blue, int alpha = 255) : r(red), g(green), b(blue), a(alpha) {}
     };
 
     struct Vec2 {
@@ -40,7 +38,7 @@ public:
     // --------------------------
     // Gestione finestra / frame
     // --------------------------
-    virtual void clear(const Color& color = Color(0,0,0)) = 0;
+    virtual void clear(const Color& color = Color(0, 0, 0)) = 0;
     virtual void create_window(std::string title, int width, int height) = 0;
     virtual void display() = 0;
     [[nodiscard]] virtual bool is_open() const = 0;
@@ -59,5 +57,5 @@ public:
     // Testo
     // --------------------------
     virtual void draw_text(const std::string& text, const Vec2& pos, int size,
-                          const Color& color = Color(255,255,255), const std::string& fontName = "") = 0;
-    };
+                           const Color& color = Color(255, 255, 255), const std::string& fontName = "") = 0;
+};
