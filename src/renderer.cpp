@@ -6,7 +6,7 @@ Renderer::Renderer(std::shared_ptr<SfmlGraphicEngine> gfx, std::shared_ptr<GridW
 void Renderer::init() {
     // TODO: Complete initialization (load resources, setup camera, configure rendering settings)
 
-    gfx_->create_window("PopX Simulation", 300, 300);
+    gfx_->create_window("PopX Simulation", 800, 800);
 }
 
 void Renderer::draw() {
@@ -42,6 +42,6 @@ void Renderer::draw_entity(IEntity* entity) {
     // TODO: Improve entity rendering (different colors/shapes per type, animations, health bars)
 
     Position pos = entity->get_position();
-    IGraphicEngine::Circle circle({IGraphicEngine::Vec2{static_cast<float>(pos.x), static_cast<float>(pos.y)}, 5.f});
-    gfx_->draw_circle(circle, IGraphicEngine::Color(0, 255, 0));
+    IGraphicEngine::Circle circle({IGraphicEngine::Vec2{static_cast<float>(pos.x), static_cast<float>(pos.y)}, 2.f});
+    gfx_->draw_circle(circle, IGraphicEngine::Color(150, 150, 0));
 }

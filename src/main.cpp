@@ -98,7 +98,7 @@
 
 int main() {
     std::shared_ptr<ConsoleLogger> app_logger = std::make_shared<ConsoleLogger>();
-    std::shared_ptr<GridWorld> app_gridworld = std::make_shared<GridWorld>(100, 100, app_logger);
+    std::shared_ptr<GridWorld> app_gridworld = std::make_shared<GridWorld>(800, 800, app_logger);
     std::shared_ptr<PopsManager> app_agents_manager = std::make_shared<PopsManager>(app_gridworld, app_logger);
     std::shared_ptr<Simulator> app_sim = std::make_shared<Simulator>(app_gridworld, app_agents_manager, app_logger);
     std::shared_ptr<SfmlGraphicEngine> app_gfx = std::make_shared<SfmlGraphicEngine>();
