@@ -4,7 +4,7 @@
 #include "i_world.h"
 
 
-class Pop : public IAgent 
+class Pop : public IAgent, public std::enable_shared_from_this<Pop> 
 {
 private:
     /* data */

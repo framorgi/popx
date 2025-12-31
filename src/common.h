@@ -1,7 +1,7 @@
 
 #pragma once
 
-typedef struct{
+using Position = struct{
     int x;
     int y;
-}Position;
+};

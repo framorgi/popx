@@ -1,17 +1,18 @@
 #pragma once
 
-#include "i_agent.h"
+#include "i_entity.h"
 #include "i_slice.h"
+#include <memory>
 
 class Slice : ISlice
 {
 public:
-    Slice(std::shared_ptr<IAgent> occupant_ = nullptr) : occupant_(occupant_) {}
+    Slice(std::weak_ptr<IEntity> occupant = std::weak_ptr<IEntity>()) : occupant_(occupant) {}
 
     ~Slice() = default;
-    void set_occupant(std::shared_ptr<IAgent> occupant_) { occupant_ = occupant_; }
-    [[nodiscard]] std::shared_ptr<IAgent> get_occupant() const { return occupant_; }
+    void set_occupant(std::weak_ptr<IEntity> occupant) { occupant_ = occupant; }
+    [[nodiscard]] std::weak_ptr<IEntity> get_occupant() const { return occupant_; }
 
 private:
-    std::shared_ptr<IAgent> occupant_;
+    std::weak_ptr<IEntity> occupant_;  // Weak pointer - observes but doesn't own the entity
 };

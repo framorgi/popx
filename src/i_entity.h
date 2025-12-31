@@ -3,6 +3,13 @@
 #include "common.h"
 #include "i_world.h"
  
+
+
+ ///----------------------------------------------------------------------
+ /// @brief    IEntity interface that defines the methods for entities in the simulation
+ /// An Entity can be any object that exists in the world, such as agents, obstacles or anything else 
+ // that can be moved and occupy space in the world.
+ ///----------------------------------------------------------------------
 class IEntity
 {
 

@@ -29,14 +29,15 @@ void Renderer::save_frame() {
 void Renderer::draw_world( ) {
     // Implementazione per disegnare lo stato del mondo
     for (const auto& slice : world_->get_slices()) {
-        auto entity = slice->get_occupant();
+        auto weak_entity = slice->get_occupant();
+        auto entity = weak_entity.lock();  // Lock the weak_ptr to get shared_ptr
         if (entity) {
-            draw_entity(entity);
+            draw_entity(entity.get());  // Pass raw pointer to draw function
         }
     }
 }
 
-void Renderer::draw_entity(std::shared_ptr<IAgent> entity) {
+void Renderer::draw_entity(IEntity* entity) {
     // Implementazione per disegnare le entità
     Position pos = entity->get_position();
     IGraphicEngine::Circle circle({IGraphicEngine::Vec2{static_cast<float>(pos.x), static_cast<float>(pos.y)}, 5.f});

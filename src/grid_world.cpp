@@ -3,7 +3,10 @@
 
 
  GridWorld::GridWorld( int w, int h,std::shared_ptr<ILogger> logger) : width_(w), height_(h), logger_(logger)  {
-        slices_.resize(width_ * height_, std::make_shared<Slice>());
+        slices_.resize(width_ * height_);
+        for (auto& slice : slices_) {
+            slice = std::make_shared<Slice>();
+        }
         logger_->debug("Grid world created with size " + std::to_string(width_) + "x" + std::to_string(height_));
     }
 
@@ -15,15 +18,20 @@
 
 
     bool GridWorld::is_free(Position p) const {
-        return in_bounds(p.x, p.y) && slices_[index(p.x, p.y)]->get_occupant() == nullptr      ;
+        if (!in_bounds(p.x, p.y)) {
+            return false;
+        }
+        auto weak_occupant = slices_[index(p.x, p.y)]->get_occupant();
+        return weak_occupant.expired();  // Free if weak_ptr has expired or is empty
     }
 
     bool GridWorld::move_entity(std::shared_ptr<IEntity> entity, Position new_pos)   {
-        if (!is_free(new_pos))
+        if (!is_free(new_pos)) {
             return false;
+        }
 
         Position old_pos = entity->get_position();
-        slices_[index(old_pos.x, old_pos.y)]->set_occupant(nullptr);
+        slices_[index(old_pos.x, old_pos.y)]->set_occupant(std::weak_ptr<IEntity>());
         slices_[index(new_pos.x, new_pos.y)]->set_occupant(entity);
 
         return true;
@@ -31,18 +39,28 @@
 
     bool GridWorld::remove_entity(std::shared_ptr<IEntity> e)   {
         Position pos = e->get_position();
-        if (!in_bounds(pos.x, pos.y) || slices_[index(pos.x, pos.y)]->get_occupant() != e)
+        if (!in_bounds(pos.x, pos.y)) {
             return false;
-        slices_[index(pos.x, pos.y)]->set_occupant(nullptr);
+        }
+        
+        auto weak_occupant = slices_[index(pos.x, pos.y)]->get_occupant();
+        auto locked_occupant = weak_occupant.lock();
+        
+        if (!locked_occupant || locked_occupant.get() != e.get()) {
+            return false;
+        }
+        
+        slices_[index(pos.x, pos.y)]->set_occupant(std::weak_ptr<IEntity>());
         return true;
     }   
     bool GridWorld::add_entity(std::shared_ptr<IEntity> e)   {
         
         Position pos = e->get_position();
         logger_->debug("Adding entity to grid world at position (" + std::to_string(pos.x) + "," + std::to_string(pos.y) + ")");
-        if (!is_free(pos))
+        if (!is_free(pos)) {
             return false;
-        slices_[index(pos.x, pos.y)] = std::make_shared<Slice>(e);
+        }
+        slices_[index(pos.x, pos.y)]->set_occupant(e);
         return true;
 
     }

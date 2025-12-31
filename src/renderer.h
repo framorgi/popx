@@ -46,7 +46,7 @@ private:
 
 ///--------------------------------------------------------------------------
 /// @brief    Draws a single entity
-/// @param    entity Shared pointer to the agent to be drawn
+/// @param    entity Pointer to the entity to be drawn
 ///--------------------------------------------------------------------------
-    void draw_entity(   std::shared_ptr<IAgent> entity);
+    void draw_entity(IEntity* entity);
 };
