@@ -4,7 +4,6 @@
 #include "i_logger.h"
 #include "i_simulator.h"
 #include "i_world.h"
-#include "i_agents_manager.h"
 
 #include <memory>
 

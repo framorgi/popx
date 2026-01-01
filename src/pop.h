@@ -1,13 +1,17 @@
 #pragma once
 #include "i_agent.h"
-#include "i_world.h"
 #include "i_logger.h"
+#include "i_world.h"
 
+/// -----------------------------------------------------------------------------
+/// @class Pop
+/// @brief Implements the IAgent interface representing a population entity within the simulation.
+/// -----------------------------------------------------------------------------
 class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
   private:
     /* data */
   public:
-    Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger  );
+    Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger);
 
     void init() override;
     void die() override;

@@ -2,8 +2,7 @@
 
 #include <utility>
 
-PopXApp::PopXApp(std::shared_ptr<ISimulator> sim, std::shared_ptr<IRenderer> renderer,
-                 std::shared_ptr<ILogger> logger)
+PopXApp::PopXApp(std::shared_ptr<ISimulator> sim, std::shared_ptr<IRenderer> renderer, std::shared_ptr<ILogger> logger)
     : sim_(std::move(sim)), renderer_(std::move(renderer)), logger_(std::move(logger)), running_token_(false) {}
 void PopXApp::init() {
     logger_->info("POPx -- Initializing application");
@@ -18,7 +17,6 @@ void PopXApp::run() {
     {
         sim_->update();
 
-      
         renderer_->draw();
     }
 }

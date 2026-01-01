@@ -8,12 +8,10 @@ PopsManager::PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger>
 bool PopsManager::spawn_population() {
     // Example: Spawn a new pop agent and add it to the population
     std::shared_ptr<RandomUtility> random_util = std::make_shared<RandomUtility>();
-    for (int i = 0; i < 100; ++i) 
-    {
+    for (int i = 0; i < 100; ++i) {
         std::shared_ptr<Pop> new_pop = std::make_shared<Pop>(world_, logger_);
         pops_.push_back(new_pop);
-   
-        }
+    }
     for (auto& pop : pops_) {
         if (pop->is_alive()) {
             int w = random_util->rnd_int(0, world_->get_width());
@@ -22,8 +20,8 @@ bool PopsManager::spawn_population() {
             while (!(pop->try_spawn(Position{w, h}))) {
                 logger_->warning("Position (" + std::to_string(w) + ", " + std::to_string(h) +
                                  ") is occupied. Retrying...");
-                                  w = random_util->rnd_int(0, world_->get_width());
-             h = random_util->rnd_int(0, world_->get_height());
+                w = random_util->rnd_int(0, world_->get_width());
+                h = random_util->rnd_int(0, world_->get_height());
             }
 
             pop->init();
@@ -43,11 +41,11 @@ void PopsManager::update_cycle() {
     for (auto& pop : pops_) {
         if (pop->is_alive()) {
             // TODO: Implement update logic for alive agents (sense, think, act cycle)
-            Position p= pop->get_position();
-            
-             std::shared_ptr<RandomUtility> random_util = std::make_shared<RandomUtility>();
-            p.y+= random_util->rnd_int(-3,3);
-            p.x+= random_util->rnd_int(-3,3);
+            Position p = pop->get_position();
+
+            std::shared_ptr<RandomUtility> random_util = std::make_shared<RandomUtility>();
+            p.y += random_util->rnd_int(-3, 3);
+            p.x += random_util->rnd_int(-3, 3);
             logger_->debug("Moving agent from (" + std::to_string(pop->get_position().x) + ", " +
                            std::to_string(pop->get_position().y) + ") to (" + std::to_string(p.x) + ", " +
                            std::to_string(p.y) + ").");
