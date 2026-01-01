@@ -16,6 +16,7 @@ include( cmake/Settings.cmake)
 include( cmake/Options.cmake)
 include( cmake/Toolchain-x86.cmake) 
 include( cmake/ThirdPartyLibs.cmake)
+include( cmake/CodeFormatting.cmake)
 
 #Add subdirectories
 add_subdirectory(src)
