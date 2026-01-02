@@ -1,7 +1,9 @@
 #pragma once
 #include "common.h"
+#include "i_cell.h"
 
 #include <memory>
+#include <vector>
 
 class IEntity;
 
@@ -60,4 +62,17 @@ class IWorld {
     /// @return The height of the world
     ///----------------------------------------------------------------------
     [[nodiscard]] virtual int get_height() const = 0;
+
+    ///----------------------------------------------------------------------
+    /// @brief Get the grid cells of the world
+    /// @return vector of shared pointers to ICell representing the grid
+    ///----------------------------------------------------------------------
+    [[nodiscard]] virtual std::vector<std::shared_ptr<ICell>> get_cells() const = 0;
+
+    ///----------------------------------------------------------------------
+    /// @brief Get a specific cell by index
+    /// @param index The index of the cell to retrieve
+    /// @return Shared pointer to the ICell at the specified index
+    ///----------------------------------------------------------------------
+    [[nodiscard]] virtual std::shared_ptr<ICell> get_cell(int index) const = 0;
 };

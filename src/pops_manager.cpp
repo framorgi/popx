@@ -8,7 +8,7 @@ PopsManager::PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger>
 bool PopsManager::spawn_population() {
     // Example: Spawn a new pop agent and add it to the population
     std::shared_ptr<RandomUtility> random_util = std::make_shared<RandomUtility>();
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < 4; ++i) {
         std::shared_ptr<Pop> new_pop = std::make_shared<Pop>(world_, logger_);
         pops_.push_back(new_pop);
     }
@@ -44,8 +44,8 @@ void PopsManager::update_cycle() {
             Position p = pop->get_position();
 
             std::shared_ptr<RandomUtility> random_util = std::make_shared<RandomUtility>();
-            p.y += random_util->rnd_int(-3, 3);
-            p.x += random_util->rnd_int(-3, 3);
+            p.y += random_util->rnd_int(-1, 1);
+            p.x += random_util->rnd_int(-1, 1);
             logger_->debug("Moving agent from (" + std::to_string(pop->get_position().x) + ", " +
                            std::to_string(pop->get_position().y) + ") to (" + std::to_string(p.x) + ", " +
                            std::to_string(p.y) + ").");

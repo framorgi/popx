@@ -1,6 +1,8 @@
 #pragma once
 #include <memory>
 
+constexpr int cell_render_size = 10; // Size of each cell in pixels when rendering
+
 ///--------------------------------------------------------------------------
 /// @brief    Interface for Renderer who is responsible for rendering the simulation.Renderer is a wrapper around a
 /// graphic engine

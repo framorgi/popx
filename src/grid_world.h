@@ -76,10 +76,21 @@ class GridWorld : public IWorld {
     /// @brief    Get the grid cells of the world
     /// @return     vector of shared pointers to ICell representing the grid
     ///----------------------------------------------------------------------
-    [[nodiscard]] std::vector<std::shared_ptr<ICell>> get_slices() const {
+    [[nodiscard]] std::vector<std::shared_ptr<ICell>> get_cells() const override {
         return cells_;
     }
-
+    ///----------------------------------------------------------------------
+    /// @brief    Get a specific cell by index
+    /// @param    index The index of the cell
+    /// @return   Shared pointer to the ICell at the specified index
+    ///----------------------------------------------------------------------
+    [[nodiscard]] std::shared_ptr<ICell> get_cell(int index) const override {
+        if (index < 0 || index >= static_cast<int>(cells_.size())) {
+            return nullptr;
+        }
+        return cells_[index];
+    }
+    ///
   private:
     ///----------------------------------------------------------------------
     /// @brief    Check if coordinates are within the bounds of the grid

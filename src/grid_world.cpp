@@ -1,6 +1,8 @@
 #include "grid_world.h"
 
 #include "cell.h"
+#include "i_random.h"
+#include "random_utility.h"
 
 GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger) : width_(w), height_(h), logger_(logger) {
     cells_.resize(width_ * height_);
@@ -11,10 +13,23 @@ GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger) : width_(w),
 }
 
 void GridWorld::init() {
-    // TODO: Reconsider this implementation - setting to nullptr wastes constructor allocation
-    for (auto& cell : cells_) {
-        // cell = nullptr;
+    RandomUtility random_util;
+    RBFSet temp_rbf_set = random_util.rnd_rbf_set(10, 5.0, 100.0, 0.0, static_cast<double>(width_), 0.0,
+                                                  static_cast<double>(height_), 20.0, 20.0, 20.0, 20.0);
+
+    RBFSet elevation_rbf_set = random_util.rnd_symmetric_rbf_set(20, 5.0, 100.0, 0.0, static_cast<double>(width_), 0.0,
+                                                                 static_cast<double>(height_), 0.0, 20.0);
+    for (int y = 0; y < height_; ++y) {
+        for (int x = 0; x < width_; ++x) {
+            double temp_value =
+                random_util.evaluate_rbf_set(temp_rbf_set, static_cast<double>(x), static_cast<double>(y));
+            cells_[index(x, y)]->set_temperature((temp_value));
+            double elevation_value =
+                random_util.evaluate_rbf_set(elevation_rbf_set, static_cast<double>(x), static_cast<double>(y));
+            cells_[index(x, y)]->set_elevation((elevation_value));
+        }
     }
+    logger_->info("Grid world initialized with temperature field.");
 }
 
 bool GridWorld::is_free(Position p) const {

@@ -6,26 +6,26 @@
 #include "sfml_graphic_engine.h"
 
 #include <memory>
-
-
+constexpr int map_size = 150; // Size of each cell in pixels when rendering
 int main() {
-
     /// Setup application components
     /// ------------------------------------------------------------------------
 
     // Create Logger
     std::shared_ptr<ConsoleLogger> app_logger = std::make_shared<ConsoleLogger>();
-    
+
     // Create SimulationWorld
-    std::shared_ptr<GridWorld> app_grid_simulation_world = std::make_shared<GridWorld>(800, 800, app_logger);
-    
-    // Create Agents Manager. Constructor needs the SimulationWorld  
-    std::shared_ptr<PopsManager> app_agents_manager = std::make_shared<PopsManager>(app_grid_simulation_world, app_logger);
+    std::shared_ptr<GridWorld> app_grid_simulation_world = std::make_shared<GridWorld>(map_size, map_size, app_logger);
+
+    // Create Agents Manager. Constructor needs the SimulationWorld
+    std::shared_ptr<PopsManager> app_agents_manager =
+        std::make_shared<PopsManager>(app_grid_simulation_world, app_logger);
 
     // Create the main Simulator. Constructor needs the SimulationWorld and Agents Manager
-    std::shared_ptr<Simulator> app_main_simulator = std::make_shared<Simulator>(app_grid_simulation_world, app_agents_manager, app_logger);
+    std::shared_ptr<Simulator> app_main_simulator =
+        std::make_shared<Simulator>(app_grid_simulation_world, app_agents_manager, app_logger);
 
-    // Create the SFML Graphic Engine 
+    // Create the SFML Graphic Engine
     std::shared_ptr<SfmlGraphicEngine> app_gfx = std::make_shared<SfmlGraphicEngine>();
 
     // Create the Renderer. Constructor needs the Graphic Engine and the SimulationWorld
