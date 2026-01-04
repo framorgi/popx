@@ -31,6 +31,28 @@ class SfmlGraphicEngine : public IGraphicEngine {
     void draw_text(const std::string& text, const Vec2& pos, int size, const Color& color = Color(255, 255, 255),
                    const std::string& fontName = "") override;
 
+    ///--------------------------------------------------------------------------
+    /// @brief    Draws a buffer of quads
+    /// @param    quads Vector of quads to draw
+    ///--------------------------------------------------------------------------
+    void draw_quads(const std::vector<Quad>& quads) override;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Draws a buffer of triangles representing entities
+    /// @param    vertices Vector of entity vertices to draw
+    ///--------------------------------------------------------------------------
+    void draw_triangles(const std::vector<EntityVertex>& vertices) override;
+
   private:
     sf::RenderWindow window_;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Vertex array for drawing map quads
+    ///--------------------------------------------------------------------------
+    sf::VertexArray quad_vertices_;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Flag indicating if the engine has been initialized and the map buffer created
+    ///--------------------------------------------------------------------------
+    bool initialized_ = false;
 };

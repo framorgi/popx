@@ -1,8 +1,8 @@
 #pragma once
 #include <memory>
 
-constexpr int cell_render_size = 10; // Size of each cell in pixels when rendering
-
+constexpr int cell_render_size = 8; // Size of each cell in pixels when rendering
+constexpr int SEGMENTS = 16;        // Number of segments to approximate a circle for entity rendering
 ///--------------------------------------------------------------------------
 /// @brief    Interface for Renderer who is responsible for rendering the simulation.Renderer is a wrapper around a
 /// graphic engine

@@ -1,12 +1,12 @@
 #pragma once
 
+#include "i_graphic_engine.h"
+#include "i_renderer.h"
+
 #include <memory>
 
 class IEntity; // Forward declaration - avoids including full header
-
 class ICell {
-  private:
-    /* data */
   public:
     ~ICell() = default;
     virtual void set_occupant(std::weak_ptr<IEntity> occupant) = 0;
@@ -21,4 +21,13 @@ class ICell {
 
     virtual void set_humidity(double humidity) = 0;
     [[nodiscard]] virtual double get_humidity() const = 0;
+
+    [[nodiscard]] virtual bool need_rendering() const = 0;
+    virtual void reset_need_rendering() = 0;
+
+  protected:
+    ///--------------------------------------------------------------------------
+    /// @brief    Flag indicating if the cell needs rendering
+    ///--------------------------------------------------------------------------
+    bool need_rendering_ = true;
 };

@@ -52,32 +52,23 @@ class Renderer : public IRenderer {
 
   private:
     ///--------------------------------------------------------------------------
-    /// @brief    Shared pointer to the graphic engine  instance
+    /// @brief    Updates the entire world
     ///--------------------------------------------------------------------------
-    std::shared_ptr<IGraphicEngine> gfx_;
+    void update_world();
 
     ///--------------------------------------------------------------------------
-    /// @brief    Shared pointer to the world instance
+    /// @brief    Updates a single entity
+    /// @param    entity Shared pointer to the entity to be updated
     ///--------------------------------------------------------------------------
-    std::shared_ptr<IWorld> world_;
-    ///--------------------------------------------------------------------------
-    /// @brief    Draws the simulation world
-    ///--------------------------------------------------------------------------
-    void draw_world();
+    void update_entity(const std::shared_ptr<IEntity>& entity);
 
     ///--------------------------------------------------------------------------
-    /// @brief    Draws a single entity
-    /// @param    entity Shared pointer to the entity to be drawn
-    ///--------------------------------------------------------------------------
-    void draw_entity(const std::shared_ptr<IEntity>& entity);
-
-    ///--------------------------------------------------------------------------
-    /// @brief    Draws a single cell
-    /// @param    cell Pointer to the cell to be drawn
+    /// @brief    Update a single cell
+    /// @param    cell Pointer to the cell to be updated
     /// @param    x The x-coordinate of the cell
     /// @param    y The y-coordinate of the cell
     ///--------------------------------------------------------------------------
-    void draw_cell(const std::shared_ptr<ICell>& cell, int x, int y);
+    void update_cell(const std::shared_ptr<ICell>& cell, int x, int y);
 
     ///--------------------------------------------------------------------------
 
@@ -128,4 +119,29 @@ class Renderer : public IRenderer {
     /// @return   The color after applying the highlighting effect
     ///--------------------------------------------------------------------------
     static IGraphicEngine::Color apply_highlighting(const IGraphicEngine::Color& color, double height);
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Shared pointer to the graphic engine  instance
+    ///--------------------------------------------------------------------------
+    std::shared_ptr<IGraphicEngine> gfx_;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Shared pointer to the world instance
+    ///--------------------------------------------------------------------------
+    std::shared_ptr<IWorld> world_;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Buffer for storing quads representing the map
+    ///--------------------------------------------------------------------------
+    std::vector<IGraphicEngine::Quad> map_buffer_;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Buffer for storing vertices representing entities
+    ///--------------------------------------------------------------------------
+    std::vector<IGraphicEngine::EntityVertex> entity_buffer_;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Width and height of the world
+    int world_height_ = 0;
+    int world_width_ = 0;
 };

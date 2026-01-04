@@ -34,7 +34,15 @@ class IGraphicEngine {
         Circle() = default;
         Circle(const Vec2& c, float r) : center(c), radius(r) {}
     };
-
+    struct Quad {
+        Vec2 pos;
+        Vec2 size;
+        Color color;
+    };
+    struct EntityVertex {
+        Vec2 pos;
+        Color color;
+    };
     // --------------------------
     // Gestione finestra / frame
     // --------------------------
@@ -53,7 +61,16 @@ class IGraphicEngine {
     virtual void draw_point(const Vec2& point, const Color& color) = 0;
     virtual void draw_polygon(const std::vector<Vec2>& vertices, const Color& color) = 0;
 
+    //  --------------------------
+    // Draw quad buffer
+    //  --------------------------
+    virtual void draw_quads(const std::vector<Quad>& quads) = 0;
     // --------------------------
+
+    ///----------------
+    /// Draw entity triangles buffer
+    ///----------------
+    virtual void draw_triangles(const std::vector<EntityVertex>& vertices) = 0;
     // Testo
     // --------------------------
     virtual void draw_text(const std::string& text, const Vec2& pos, int size,

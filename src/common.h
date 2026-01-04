@@ -1,6 +1,6 @@
 
 #pragma once
-
+const int MAX_ENTITIES = 40;
 using Position = struct {
     int x;
     int y;

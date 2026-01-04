@@ -6,7 +6,7 @@
 #include "sfml_graphic_engine.h"
 
 #include <memory>
-constexpr int map_size = 150; // Size of each cell in pixels when rendering
+constexpr int map_size = 100; // Number of cells along one side of the square map
 int main() {
     /// Setup application components
     /// ------------------------------------------------------------------------

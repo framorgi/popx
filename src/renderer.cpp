@@ -1,10 +1,8 @@
 #include "renderer.h"
 
-#include "i_graphic_engine.h"
 #include "i_world.h"
-#include "random_utility.h"
 
-#include <cstdint>
+#include <cmath>
 
 Renderer::Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world)
     : gfx_(std::move(gfx)), world_(std::move(world)) {}
@@ -14,17 +12,34 @@ void Renderer::init() {
 
     gfx_->create_window("PopX Simulation", cell_render_size * world_->get_width(),
                         cell_render_size * world_->get_height());
+    world_height_ = world_->get_height();
+    world_width_ = world_->get_width();
+    int total_size = world_width_ * world_height_;
+    map_buffer_.resize(total_size); // Preallocate buffer for the entire map
+
+    // Initialize map buffer with default quads
+    for (int y = 0; y < world_height_; ++y) {
+        for (int x = 0; x < world_width_; ++x) {
+            int index = y * world_width_ + x;
+            map_buffer_[index] = IGraphicEngine::Quad{
+                IGraphicEngine::Vec2{static_cast<float>(x * cell_render_size),
+                                     static_cast<float>(y * cell_render_size)},
+                IGraphicEngine::Vec2{static_cast<float>(cell_render_size), static_cast<float>(cell_render_size)},
+                IGraphicEngine::Color(0, 0, 0)};
+        }
+    }
 }
 
 void Renderer::draw() {
     // TODO: Replace test drawing with actual world rendering (call draw_world())
     gfx_->clear();
-
-    // IGraphicEngine::Circle circle(
-    //     {IGraphicEngine::Vec2{static_cast<float>(center.x), static_cast<float>(center.y)}, 10.f});
-    // gfx_->draw_circle(circle, IGraphicEngine::Color(255, 150, 0));
-    draw_world();
-
+    // clear entity buffer every frame for now. Entity size can change very quickly so we need to redraw them all but
+    // this section can be optimized later
+    entity_buffer_.clear();
+    entity_buffer_.reserve(MAX_ENTITIES * SEGMENTS * 3);
+    update_world();
+    gfx_->draw_quads(map_buffer_);
+    gfx_->draw_triangles(entity_buffer_);
     gfx_->display();
 }
 
@@ -32,47 +47,73 @@ void Renderer::save_frame() {
     // TODO: Implement frame saving to file (screenshot, video recording)
 }
 
-void Renderer::draw_world() {
-    // TODO: Add grid rendering, background, UI elements
-
-    int width = world_->get_width();
-    int height = world_->get_height();
-    for (int x = 0; x < width; ++x) {
-        for (int y = 0; y < height; ++y) {
-            auto cell = world_->get_cell(y * width + x);
-            draw_cell(cell, x, y);
+void Renderer::update_world() {
+    for (int x = 0; x < world_width_; ++x) {
+        for (int y = 0; y < world_height_; ++y) {
+            auto cell = world_->get_cell(y * world_width_ + x);
+            if (cell->need_rendering()) {
+                update_cell(cell, x, y);
+            }
             if (auto entity = cell->get_occupant().lock()) {
-                draw_entity(entity);
+                update_entity(entity);
             }
         }
     }
 }
 
-void Renderer::draw_entity(const std::shared_ptr<IEntity>& entity) {
+void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
     // TODO: Improve entity rendering (different colors/shapes per type, animations, health bars)
     if (!entity) {
         return;
     }
 
+    constexpr float PI = 3.14159265359f;
+
     Position pos = entity->get_position();
-    IGraphicEngine::Circle circle(
-        {IGraphicEngine::Vec2{static_cast<float>(cell_render_size * pos.x + cell_render_size / 2),
-                              static_cast<float>(cell_render_size * pos.y + cell_render_size / 2)},
-         cell_render_size / 2.f});
-    gfx_->draw_circle(circle, IGraphicEngine::Color(150, 150, 0));
+
+    float cx = cell_render_size * pos.x + cell_render_size * 0.5f;
+    float cy = cell_render_size * pos.y + cell_render_size * 0.5f;
+    float radius = cell_render_size * 0.5f;
+
+    IGraphicEngine::Color color(150, 150, 0);
+
+    // foreach segment
+    for (int i = 0; i < SEGMENTS; ++i) {
+        float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
+        float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
+
+        IGraphicEngine::Vec2 center{cx, cy};
+        IGraphicEngine::Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
+        IGraphicEngine::Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+
+        entity_buffer_.push_back({center, color});
+        entity_buffer_.push_back({p0, color});
+        entity_buffer_.push_back({p1, color});
+    }
 }
 
-void Renderer::draw_cell(const std::shared_ptr<ICell>& cell, int x, int y)
+void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
+    int idx = y * world_width_ + x;
 
-{
+    // get the relative quad from the preallocated buffer
+    auto& q = map_buffer_[idx];
+
     IGraphicEngine::Rect rect{
         IGraphicEngine::Vec2{static_cast<float>(x * cell_render_size), static_cast<float>(y * cell_render_size)},
-        IGraphicEngine::Vec2{cell_render_size, cell_render_size}};
+        IGraphicEngine::Vec2{static_cast<float>(cell_render_size), static_cast<float>(cell_render_size)}};
+    // Determine cell color based on temperature
     IGraphicEngine::Color temperature_color = evaluate_temperature_color(cell->get_temperature());
+    // Determine ground color based on elevation
     double elevation = cell->get_elevation();
     IGraphicEngine::Color ground_color = evaluate_ground_color(elevation);
+    // Blend temperature and ground colors and finally apoply highlighting based on elevation
+    IGraphicEngine::Color final_color =
+        apply_highlighting(blend_colors(ground_color, temperature_color, 0.1), elevation);
 
-    gfx_->draw_rectangle(rect, apply_highlighting(blend_colors(ground_color, temperature_color, 0.1), elevation));
+    // Store the final color in the cell for future reference
+    q.color = final_color;
+    // Reset rendering flag
+    cell->reset_need_rendering();
 }
 
 IGraphicEngine::Color Renderer::evaluate_temperature_color(double temperature) {

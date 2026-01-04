@@ -15,6 +15,8 @@ void Cell::set_occupant(std::weak_ptr<IEntity> occupant) {
 
 void Cell::set_temperature(double temperature) {
     temperature_ = static_cast<float>(temperature);
+    /// Mark cell for rendering update
+    need_rendering_ = true;
 }
 [[nodiscard]] double Cell::get_temperature() const {
     return static_cast<double>(temperature_);
@@ -22,6 +24,8 @@ void Cell::set_temperature(double temperature) {
 
 void Cell::set_elevation(double elevation) {
     elevation_ = static_cast<float>(elevation);
+    /// Mark cell for rendering update
+    need_rendering_ = true;
 }
 [[nodiscard]] double Cell::get_elevation() const {
     return static_cast<double>(elevation_);
@@ -29,7 +33,17 @@ void Cell::set_elevation(double elevation) {
 
 void Cell::set_humidity(double humidity) {
     humidity_ = static_cast<float>(humidity);
+    /// Mark cell for rendering update
+    need_rendering_ = true;
 }
 [[nodiscard]] double Cell::get_humidity() const {
     return static_cast<double>(humidity_);
+}
+
+[[nodiscard]] bool Cell::need_rendering() const {
+    return need_rendering_;
+}
+
+void Cell::reset_need_rendering() {
+    need_rendering_ = false;
 }

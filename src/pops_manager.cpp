@@ -8,7 +8,7 @@ PopsManager::PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger>
 bool PopsManager::spawn_population() {
     // Example: Spawn a new pop agent and add it to the population
     std::shared_ptr<RandomUtility> random_util = std::make_shared<RandomUtility>();
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < MAX_ENTITIES; ++i) {
         std::shared_ptr<Pop> new_pop = std::make_shared<Pop>(world_, logger_);
         pops_.push_back(new_pop);
     }

@@ -31,6 +31,9 @@ class Cell : public ICell {
 
     [[nodiscard]] std::weak_ptr<IEntity> get_occupant() const override;
 
+    [[nodiscard]] bool need_rendering() const override;
+    void reset_need_rendering() override;
+
   private:
     ///----------------------------------------------
     // Occupant entity in the cell

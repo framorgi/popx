@@ -72,3 +72,57 @@ void SfmlGraphicEngine::draw_text(const std::string& text, const Vec2& pos, int 
 
     window_.draw(sf_text);
 }
+void SfmlGraphicEngine::draw_triangles(const std::vector<EntityVertex>& vertices) {
+    if (vertices.empty()) {
+        return;
+    }
+    sf::VertexArray vertex_array(sf::Triangles, vertices.size());
+
+    for (std::size_t i = 0; i < vertices.size(); ++i) {
+        const EntityVertex& ev = vertices[i];
+        vertex_array[i].position = sf::Vector2f(ev.pos.x, ev.pos.y);
+        vertex_array[i].color = sf::Color(ev.color.r, ev.color.g, ev.color.b, ev.color.a);
+    }
+
+    window_.draw(vertex_array);
+}
+void SfmlGraphicEngine::draw_quads(const std::vector<Quad>& quads) {
+    if (quads.empty()) {
+        return;
+    }
+    if (!initialized_) {
+        quad_vertices_.setPrimitiveType(sf::Quads);
+        quad_vertices_.resize(quads.size() * 4);
+
+        for (std::size_t i = 0; i < quads.size(); ++i) {
+            const Quad& q = quads[i];
+            std::size_t idx = i * 4;
+
+            float x = q.pos.x;
+            float y = q.pos.y;
+            float w = q.size.x;
+            float h = q.size.y;
+
+            quad_vertices_[idx + 0].position = {x, y};
+            quad_vertices_[idx + 1].position = {x + w, y};
+            quad_vertices_[idx + 2].position = {x + w, y + h};
+            quad_vertices_[idx + 3].position = {x, y + h};
+        }
+
+        initialized_ = true;
+    }
+
+    // aggiorna SOLO i colori
+    for (std::size_t i = 0; i < quads.size(); ++i) {
+        const sf::Color c(static_cast<sf::Uint8>(quads[i].color.r), static_cast<sf::Uint8>(quads[i].color.g),
+                          static_cast<sf::Uint8>(quads[i].color.b), static_cast<sf::Uint8>(quads[i].color.a));
+
+        std::size_t idx = i * 4;
+        quad_vertices_[idx + 0].color = c;
+        quad_vertices_[idx + 1].color = c;
+        quad_vertices_[idx + 2].color = c;
+        quad_vertices_[idx + 3].color = c;
+    }
+
+    window_.draw(quad_vertices_);
+}
