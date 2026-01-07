@@ -1,39 +1,17 @@
 #pragma once
+#include "color.h"
+#include "geometry.h"
+
 #include <memory>
 #include <string>
 #include <vector>
-
 class IGraphicEngine {
   public:
     virtual ~IGraphicEngine() = default;
     // --------------------------
     // Tipi di supporto integrati
     // --------------------------
-    struct Color {
-        int r = 0, g = 0, b = 0, a = 255;
-        Color() = default;
-        Color(int red, int green, int blue, int alpha = 255) : r(red), g(green), b(blue), a(alpha) {}
-    };
 
-    struct Vec2 {
-        float x = 0.f, y = 0.f;
-        Vec2() = default;
-        Vec2(float x_, float y_) : x(x_), y(y_) {}
-    };
-
-    struct Rect {
-        Vec2 pos;
-        Vec2 size;
-        Rect() = default;
-        Rect(const Vec2& p, const Vec2& s) : pos(p), size(s) {}
-    };
-
-    struct Circle {
-        Vec2 center;
-        float radius = 0.f;
-        Circle() = default;
-        Circle(const Vec2& c, float r) : center(c), radius(r) {}
-    };
     struct Quad {
         Vec2 pos;
         Vec2 size;

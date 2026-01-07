@@ -20,10 +20,8 @@ void Renderer::init() {
         for (int x = 0; x < world_width_; ++x) {
             int index = y * world_width_ + x;
             map_buffer_[index] = IGraphicEngine::Quad{
-                IGraphicEngine::Vec2{static_cast<float>(x * cell_render_size),
-                                     static_cast<float>(y * cell_render_size)},
-                IGraphicEngine::Vec2{static_cast<float>(cell_render_size), static_cast<float>(cell_render_size)},
-                IGraphicEngine::Color(0, 0, 0)};
+                Vec2{static_cast<float>(x * cell_render_size), static_cast<float>(y * cell_render_size)},
+                Vec2{static_cast<float>(cell_render_size), static_cast<float>(cell_render_size)}, Color(0, 0, 0)};
         }
     }
 }
@@ -73,16 +71,16 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
     float cy = cell_render_size * pos.y + cell_render_size * 0.5f;
     float radius = cell_render_size * 0.5f;
 
-    IGraphicEngine::Color color(150, 150, 0);
+    Color color(150, 150, 0);
 
     // foreach segment
     for (int i = 0; i < SEGMENTS; ++i) {
         float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
         float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
 
-        IGraphicEngine::Vec2 center{cx, cy};
-        IGraphicEngine::Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
-        IGraphicEngine::Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+        Vec2 center{cx, cy};
+        Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
+        Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
 
         entity_buffer_.push_back({center, color});
         entity_buffer_.push_back({p0, color});
@@ -96,17 +94,15 @@ void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
     // get the relative quad from the preallocated buffer
     auto& q = map_buffer_[idx];
 
-    IGraphicEngine::Rect rect{
-        IGraphicEngine::Vec2{static_cast<float>(x * cell_render_size), static_cast<float>(y * cell_render_size)},
-        IGraphicEngine::Vec2{static_cast<float>(cell_render_size), static_cast<float>(cell_render_size)}};
+    Rect rect{Vec2{static_cast<float>(x * cell_render_size), static_cast<float>(y * cell_render_size)},
+              Vec2{static_cast<float>(cell_render_size), static_cast<float>(cell_render_size)}};
     // Determine cell color based on temperature
-    IGraphicEngine::Color temperature_color = evaluate_temperature_color(cell->get_temperature());
+    Color temperature_color = evaluate_temperature_color(cell->get_temperature());
     // Determine ground color based on elevation
     double elevation = cell->get_elevation();
-    IGraphicEngine::Color ground_color = evaluate_ground_color(elevation);
+    Color ground_color = evaluate_ground_color(elevation);
     // Blend temperature and ground colors and finally apoply highlighting based on elevation
-    IGraphicEngine::Color final_color =
-        apply_highlighting(blend_colors(ground_color, temperature_color, 0.1), elevation);
+    Color final_color = apply_highlighting(blend_colors(ground_color, temperature_color, 0.1), elevation);
 
     // Store the final color in the cell for future reference
     q.color = final_color;
@@ -114,7 +110,7 @@ void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
     cell->reset_need_rendering();
 }
 
-IGraphicEngine::Color Renderer::evaluate_temperature_color(double temperature) {
+Color Renderer::evaluate_temperature_color(double temperature) {
     // Define key intervals
     if (temperature <= 0) {
         return {0, 0, 255}; // Dark blue for low temperatures
@@ -143,15 +139,13 @@ uint8_t Renderer::clamp_u8(int value) {
     return static_cast<uint8_t>(std::clamp(value, 0, 255));
 }
 
-IGraphicEngine::Color Renderer::color_interpolate(const IGraphicEngine::Color& a, const IGraphicEngine::Color& b,
-                                                  double t) {
-    return IGraphicEngine::Color{clamp_u8(static_cast<int>(a.r + t * (b.r - a.r))),
-                                 clamp_u8(static_cast<int>(a.g + t * (b.g - a.g))),
-                                 clamp_u8(static_cast<int>(a.b + t * (b.b - a.b)))};
+Color Renderer::color_interpolate(const Color& a, const Color& b, double t) {
+    return Color{clamp_u8(static_cast<int>(a.r + t * (b.r - a.r))), clamp_u8(static_cast<int>(a.g + t * (b.g - a.g))),
+                 clamp_u8(static_cast<int>(a.b + t * (b.b - a.b)))};
 }
 
-IGraphicEngine::Color Renderer::evaluate_ground_color(double elevation) {
-    IGraphicEngine::Color base;
+Color Renderer::evaluate_ground_color(double elevation) {
+    Color base;
     // RandomUtility rand_util;
 
     for (int i = 0; i < 9; ++i) {
@@ -170,8 +164,7 @@ IGraphicEngine::Color Renderer::evaluate_ground_color(double elevation) {
     return base;
 }
 
-IGraphicEngine::Color Renderer::blend_colors(const IGraphicEngine::Color& baseColor,
-                                             const IGraphicEngine::Color& blendColor, double factor) {
+Color Renderer::blend_colors(const Color& baseColor, const Color& blendColor, double factor) {
     // Clamp factor to [0.0, 1.0]
     factor = (factor < 0.0) ? 0.0 : (factor > 1.0) ? 1.0 : factor;
 
@@ -186,12 +179,12 @@ IGraphicEngine::Color Renderer::blend_colors(const IGraphicEngine::Color& baseCo
     b = (b < 0) ? 0 : (b > 255) ? 255 : b;
     a = (a < 0) ? 0 : (a > 255) ? 255 : a;
 
-    return IGraphicEngine::Color(r, g, b, a);
+    return Color(r, g, b, a);
 }
-IGraphicEngine::Color Renderer::apply_highlighting(const IGraphicEngine::Color& color, double height) {
+Color Renderer::apply_highlighting(const Color& color, double height) {
     double height_factor = std::min(1.0, height / 100.0);
     double lighting = 0.7 + 0.3 * height_factor;
-    return IGraphicEngine::Color(static_cast<uint8_t>(std::clamp(color.r * lighting, 0.0, 255.0)),
-                                 static_cast<uint8_t>(std::clamp(color.g * lighting, 0.0, 255.0)),
-                                 static_cast<uint8_t>(std::clamp(color.b * lighting, 0.0, 255.0)));
+    return Color(static_cast<uint8_t>(std::clamp(color.r * lighting, 0.0, 255.0)),
+                 static_cast<uint8_t>(std::clamp(color.g * lighting, 0.0, 255.0)),
+                 static_cast<uint8_t>(std::clamp(color.b * lighting, 0.0, 255.0)));
 }

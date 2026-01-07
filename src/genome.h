@@ -1,8 +1,8 @@
 
 #pragma once
 
+#include "color.h"
 #include "gene.h"
-#include "i_graphic_engine.h"
 
 #include <vector>
 /// -----------------------------------------------------------------------------
@@ -24,7 +24,7 @@ class Genome {
     /// @brief Retrieves the genetic color for visualization purposes.
     /// @return The genetic color.
     ///----------------------------------------------------------------------------
-    [[nodiscard]] IGraphicEngine::Color get_genetic_color() const;
+    [[nodiscard]] Color get_genetic_color() const;
     ///----------------------------------------------------------------------------
     /// @brief Adds a gene to the genome.
     /// @param gene The gene to be added.
@@ -49,7 +49,7 @@ class Genome {
     //--------------------------------------------------------------------------
     /// @brief          Genetic color value for visualization purposes.
     //--------------------------------------------------------------------------
-    IGraphicEngine::Color genetic_color_value_ = {0, 0, 0};
+    Color genetic_color_value_ = {0, 0, 0};
 
     //--------------------------------------------------------------------------
     /// @brief          Size of the genome (number of genes, so the number of connections).

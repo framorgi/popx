@@ -15,7 +15,7 @@ Genome::Genome(int size) {
     compute_genetic_color_value();
 }
 
-IGraphicEngine::Color Genome::get_genetic_color() const {
+Color Genome::get_genetic_color() const {
     return genetic_color_value_;
 }
 

@@ -1,16 +1,18 @@
 #pragma once
 
+#include "color.h"
 #include "i_entity.h"
 #include "i_graphic_engine.h"
 #include "i_renderer.h"
 #include "i_world.h"
+#include "render_state.h"
 #include "sfml_graphic_engine.h"
 
 #include <array>
 
 struct Level {
     double height;
-    IGraphicEngine::Color color; // RGB
+    Color color; // RGB
 };
 
 static const std::array<Level, 10> ground_color_levels = {{
@@ -77,14 +79,14 @@ class Renderer : public IRenderer {
     /// @param    temperature The temperature value
     /// @return   Color corresponding to the temperature
     ///--------------------------------------------------------------------------
-    static IGraphicEngine::Color evaluate_temperature_color(double temperature);
+    static Color evaluate_temperature_color(double temperature);
 
     ///--------------------------------------------------------------------------
     /// @brief    Evaluates color based on elevation
     /// @param    elevation The elevation value
     /// @return   Color corresponding to the elevation
     ///--------------------------------------------------------------------------
-    static IGraphicEngine::Color evaluate_ground_color(double elevation);
+    static Color evaluate_ground_color(double elevation);
 
     ///--------------------------------------------------------------------------
     /// @brief    Clamps an integer value to the range [0, 255]
@@ -100,8 +102,7 @@ class Renderer : public IRenderer {
     /// @param    t Interpolation factor [0.0, 1.0]
     /// @return   Interpolated color
     ///--------------------------------------------------------------------------
-    static IGraphicEngine::Color color_interpolate(const IGraphicEngine::Color& a, const IGraphicEngine::Color& b,
-                                                   double t);
+    static Color color_interpolate(const Color& a, const Color& b, double t);
 
     ///--------------------------------------------------------------------------
     /// @brief    Blend two colors based on a factor
@@ -110,8 +111,7 @@ class Renderer : public IRenderer {
     /// @param    factor Blend factor [0.0 - 1.0], where 0.0 is fully baseColor and 1.0 is fully blendColor
     /// @return   The blended color with clamped component values
     ///--------------------------------------------------------------------------
-    static IGraphicEngine::Color blend_colors(const IGraphicEngine::Color& baseColor,
-                                              const IGraphicEngine::Color& blendColor, double factor);
+    static Color blend_colors(const Color& baseColor, const Color& blendColor, double factor);
 
     ///--------------------------------------------------------------------------
     /// @brief    Apply highlighting effect to a color based on height
@@ -119,7 +119,7 @@ class Renderer : public IRenderer {
     /// @param    height The height value influencing the highlighting
     /// @return   The color after applying the highlighting effect
     ///--------------------------------------------------------------------------
-    static IGraphicEngine::Color apply_highlighting(const IGraphicEngine::Color& color, double height);
+    static Color apply_highlighting(const Color& color, double height);
 
     ///--------------------------------------------------------------------------
     /// @brief    Shared pointer to the graphic engine  instance
