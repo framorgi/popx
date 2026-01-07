@@ -1,16 +1,21 @@
 #include "pop.h"
 
+#include "render_state.h"
+
 Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger)
     : genome_(Genome(4)), world_(std::move(world)), logger_(std::move(logger)), pos_{0, 0} {
-    alive_ = true;
+    init();
 }
 void Pop::init() {
     // TODO: Implement initialization logic for Pop (set initial stats, behaviors, etc.)
     alive_ = true;
+    age_ = 0;
+    energy_ = 100.0f; // Example initial energy
 }
 
 void Pop::die() {
     // TODO: Implement death logic (cleanup, final actions, mark as dead)
+    alive_ = false;
 }
 
 bool Pop::try_spawn(Position p) {
@@ -23,6 +28,11 @@ bool Pop::try_spawn(Position p) {
 }
 
 void Pop::update() {
+    age_++;
+    energy_ -= 0.01f; // Example energy consumption
+    if (energy_ <= 0) {
+        die();
+    }
     // TODO: Implement entity update logic (called each tick)
 }
 
@@ -71,4 +81,14 @@ Position Pop::get_position() const {
 
 bool Pop::is_alive() {
     return alive_;
+}
+
+RenderState Pop::get_render_state() const {
+    RenderState state;
+    state.position = Vec2{static_cast<float>(pos_.x), static_cast<float>(pos_.y)};
+    state.color = alive_ ? genome_.get_genetic_color() : Color{0, 0, 0}; //  Black if dead
+    state.size = energy_ / 100.0f;                                       //  size
+    state.payload = PopVisualData{energy_ / 100.0f, age_ / 100.0f};      // Example payload
+    state.shape = RenderShape::Circle;                                   //  shape
+    return state;
 }

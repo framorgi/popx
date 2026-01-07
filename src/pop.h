@@ -4,6 +4,8 @@
 #include "i_logger.h"
 #include "i_world.h"
 #include "neuron.h"
+
+#include <cstdint>
 /// -----------------------------------------------------------------------------
 /// @class Pop
 /// @brief Implements the IAgent interface representing a population entity within the simulation.
@@ -68,7 +70,22 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     ///---------------------------------------------------------------------------
     void despawn() override;
 
+    ///---------------------------------------------------------------------------
+    /// @brief Gets the render state of the Pop for visualization.
+    /// @return The render state of the Pop.
+    ///---------------------------------------------------------------------------
+    [[nodiscard]] RenderState get_render_state() const override;
+
   private:
+    /// ---------------------------------------------------------------------------
+    /// @brief Age of the Pop entity.
+    /// ---------------------------------------------------------------------------
+    uint16_t age_;
+    /// ---------------------------------------------------------------------------
+    /// @brief Energy level of the Pop entity.
+    /// ---------------------------------------------------------------------------
+    uint16_t energy_;
+
     /// ---------------------------------------------------------------------------
     /// @brief Genome representing the genetic makeup of the Pop.
     /// ---------------------------------------------------------------------------

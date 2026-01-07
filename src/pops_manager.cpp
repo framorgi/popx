@@ -50,6 +50,7 @@ void PopsManager::update_cycle() {
                            std::to_string(pop->get_position().y) + ") to (" + std::to_string(p.x) + ", " +
                            std::to_string(p.y) + ").");
             pop->try_move(p);
+            pop->update();
         } else {
             // TODO: Handle dead agents (remove from vector, cleanup resources)
         }

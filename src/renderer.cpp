@@ -33,8 +33,12 @@ void Renderer::draw() {
     // this section can be optimized later
     entity_buffer_.clear();
     entity_buffer_.reserve(MAX_ENTITIES * SEGMENTS * 3);
+    // update entities and cell buffers
     update_world();
+    // draw the cell buffers as quads
     gfx_->draw_quads(map_buffer_);
+
+    // draw the entity buffers as composision of triangles
     gfx_->draw_triangles(entity_buffer_);
     gfx_->display();
 }
@@ -66,25 +70,27 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
     constexpr float PI = 3.14159265359f;
 
     Position pos = entity->get_position();
+    RenderState rs = entity->get_render_state();
+    if (rs.shape == RenderShape::Circle) {
+        if (auto pop = std::get_if<PopVisualData>(&rs.payload)) {
+            float cx = cell_render_size * pos.x + cell_render_size * rs.size;
+            float cy = cell_render_size * pos.y + cell_render_size * rs.size;
+            float radius = cell_render_size * rs.size;
 
-    float cx = cell_render_size * pos.x + cell_render_size * 0.5f;
-    float cy = cell_render_size * pos.y + cell_render_size * 0.5f;
-    float radius = cell_render_size * 0.5f;
+            // foreach segment
+            for (int i = 0; i < SEGMENTS; ++i) {
+                float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
+                float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
 
-    Color color(150, 150, 0);
+                Vec2 center{cx, cy};
+                Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
+                Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
 
-    // foreach segment
-    for (int i = 0; i < SEGMENTS; ++i) {
-        float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
-        float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
-
-        Vec2 center{cx, cy};
-        Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
-        Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
-
-        entity_buffer_.push_back({center, color});
-        entity_buffer_.push_back({p0, color});
-        entity_buffer_.push_back({p1, color});
+                entity_buffer_.push_back({center, rs.color});
+                entity_buffer_.push_back({p0, rs.color});
+                entity_buffer_.push_back({p1, rs.color});
+            }
+        }
     }
 }
 

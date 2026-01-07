@@ -1,6 +1,7 @@
 #pragma once
 #include "common.h"
 #include "i_world.h"
+#include "render_state.h"
 
 #include <memory>
 
@@ -12,6 +13,10 @@
 class IEntity {
   public:
     ~IEntity() = default;
+
+    /// @brief Get the render state of the entity
+    [[nodiscard]]
+    virtual RenderState get_render_state() const = 0;
 
     /// @brief Initialize the entity
     /// @param world The world in which the entity exists
@@ -25,7 +30,7 @@ class IEntity {
     virtual void despawn() = 0;
 
     /// @brief Get the entity's position
-    virtual Position get_position() const = 0;
+    [[nodiscard]] virtual Position get_position() const = 0;
 
     /// @brief Set the agent's position
     virtual bool try_move(Position p) = 0;
