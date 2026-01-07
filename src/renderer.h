@@ -1,5 +1,6 @@
 #pragma once
-#include "grid_world.h"
+
+#include "i_entity.h"
 #include "i_graphic_engine.h"
 #include "i_renderer.h"
 #include "i_world.h"

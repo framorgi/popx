@@ -1,7 +1,5 @@
 #include "renderer.h"
 
-#include "i_world.h"
-
 #include <cmath>
 
 Renderer::Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world)
