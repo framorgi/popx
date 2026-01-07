@@ -1,8 +1,9 @@
 #pragma once
+#include "genome.h"
 #include "i_agent.h"
 #include "i_logger.h"
 #include "i_world.h"
-
+#include "neuron.h"
 /// -----------------------------------------------------------------------------
 /// @class Pop
 /// @brief Implements the IAgent interface representing a population entity within the simulation.
@@ -68,6 +69,10 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     void despawn() override;
 
   private:
+    /// ---------------------------------------------------------------------------
+    /// @brief Genome representing the genetic makeup of the Pop.
+    /// ---------------------------------------------------------------------------
+    Genome genome_;
     /// ---------------------------------------------------------------------------
     /// @brief Current position of the Pop in the world.
     /// ---------------------------------------------------------------------------

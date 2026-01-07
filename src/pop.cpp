@@ -1,11 +1,12 @@
 #include "pop.h"
 
 Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger)
-    : world_(std::move(world)), logger_(std::move(logger)), pos_{0, 0} {
+    : genome_(Genome(4)), world_(std::move(world)), logger_(std::move(logger)), pos_{0, 0} {
     alive_ = true;
 }
 void Pop::init() {
     // TODO: Implement initialization logic for Pop (set initial stats, behaviors, etc.)
+    alive_ = true;
 }
 
 void Pop::die() {
