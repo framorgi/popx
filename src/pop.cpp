@@ -1,5 +1,6 @@
 #include "pop.h"
 
+#include "random_utility.h"
 #include "render_state.h"
 
 Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger)
@@ -29,10 +30,17 @@ bool Pop::try_spawn(Position p) {
 
 void Pop::update() {
     age_++;
-    energy_ -= 0.01f; // Example energy consumption
+    // energy_ -= 0.01f; // Example energy consumption
     if (energy_ <= 0) {
         die();
     }
+
+    auto world = world_.lock();
+    if (!world) {
+        return; // World no longer exists
+    }
+    RandomUtility rand_util;
+    return world->set_feromone(pos_, Feromone_t::DANGER_FEROMONE, max_feromones);
     // TODO: Implement entity update logic (called each tick)
 }
 
@@ -65,10 +73,9 @@ bool Pop::try_move(Position p) {
         return false; // World no longer exists
     }
     // Add actual movement logic here
-    logger_->debug("Attempting to move to position (" + std::to_string(p.x) + ", " + std::to_string(p.y) + ").");
     if (world->move_entity(shared_from_this(), p)) {
         pos_ = p;
-        logger_->info("Moved to position (" + std::to_string(p.x) + ", " + std::to_string(p.y) + ").");
+
         return true;
     }
     logger_->warning("Move to position (" + std::to_string(p.x) + ", " + std::to_string(p.y) + ") failed.");
@@ -87,7 +94,7 @@ RenderState Pop::get_render_state() const {
     RenderState state;
     state.position = Vec2{static_cast<float>(pos_.x), static_cast<float>(pos_.y)};
     state.color = alive_ ? genome_.get_genetic_color() : Color{0, 0, 0}; //  Black if dead
-    state.size = energy_ / 100.0f;                                       //  size
+    state.size = 1;                                                      //  size
     state.payload = PopVisualData{energy_ / 100.0f, age_ / 100.0f};      // Example payload
     state.shape = RenderShape::Circle;                                   //  shape
     return state;

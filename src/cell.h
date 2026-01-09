@@ -3,14 +3,13 @@
 #include "common.h"
 #include "i_cell.h"
 #include "i_entity.h"
+#include "render_state.h"
 
-#include <map>
 #include <memory>
 
 ///----------------------------------------------
 // Type definitions for cell attributes
 ///----------------------------------------------
-using FeromoneMap = std::map<Feromone_t, float>;
 
 class Cell : public ICell {
   public:
@@ -31,10 +30,20 @@ class Cell : public ICell {
 
     [[nodiscard]] std::weak_ptr<IEntity> get_occupant() const override;
 
-    [[nodiscard]] bool need_rendering() const override;
-    void reset_need_rendering() override;
+    [[nodiscard]] RenderState get_render_state() const override;
+
+    void set_feromone(Feromone_t type, int value) override;
+
+    [[nodiscard]] FeromoneMap get_feromone_map() const override;
+
+    void update() override;
 
   private:
+    ///----------------------------------------------
+    // Helper method to decay feromones over time
+    ///----------------------------------------------
+    void decay_feromones();
+
     ///----------------------------------------------
     // Occupant entity in the cell
     ///----------------------------------------------

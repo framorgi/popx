@@ -1,5 +1,7 @@
 #include "renderer.h"
 
+#include "common.h"
+
 #include <cmath>
 
 Renderer::Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world)
@@ -13,13 +15,13 @@ void Renderer::init() {
     world_height_ = world_->get_height();
     world_width_ = world_->get_width();
     int total_size = world_width_ * world_height_;
-    map_buffer_.resize(total_size); // Preallocate buffer for the entire map
+    map_layer_.resize(total_size); // Preallocate buffer for the entire map
 
     // Initialize map buffer with default quads
     for (int y = 0; y < world_height_; ++y) {
         for (int x = 0; x < world_width_; ++x) {
             int index = y * world_width_ + x;
-            map_buffer_[index] = IGraphicEngine::Quad{
+            map_layer_[index] = IGraphicEngine::Quad{
                 Vec2{static_cast<float>(x * cell_render_size), static_cast<float>(y * cell_render_size)},
                 Vec2{static_cast<float>(cell_render_size), static_cast<float>(cell_render_size)}, Color(0, 0, 0)};
         }
@@ -31,15 +33,22 @@ void Renderer::draw() {
     gfx_->clear();
     // clear entity buffer every frame for now. Entity size can change very quickly so we need to redraw them all but
     // this section can be optimized later
-    entity_buffer_.clear();
-    entity_buffer_.reserve(MAX_ENTITIES * SEGMENTS * 3);
+    entity_layer_.clear();
+    entity_layer_.reserve(MAX_ENTITIES * SEGMENTS * 3);
+
+    feromone_layer_.clear();
+    feromone_layer_.reserve(world_width_ * world_height_ * SEGMENTS * 3); // assume 10% cells have feromones
     // update entities and cell buffers
+    // before drawing every layer i loop once through the world to get all the cells and entities render data needed to
+    // draw
     update_world();
     // draw the cell buffers as quads
-    gfx_->draw_quads(map_buffer_);
-
+    gfx_->draw_quads(map_layer_);
+    // draw the feromone buffers as composision of triangles
+    gfx_->draw_triangles(feromone_layer_);
     // draw the entity buffers as composision of triangles
-    gfx_->draw_triangles(entity_buffer_);
+    gfx_->draw_triangles(entity_layer_);
+
     gfx_->display();
 }
 
@@ -51,9 +60,8 @@ void Renderer::update_world() {
     for (int x = 0; x < world_width_; ++x) {
         for (int y = 0; y < world_height_; ++y) {
             auto cell = world_->get_cell(y * world_width_ + x);
-            if (cell->need_rendering()) {
-                update_cell(cell, x, y);
-            }
+            update_cell(cell, x, y);
+
             if (auto entity = cell->get_occupant().lock()) {
                 update_entity(entity);
             }
@@ -68,14 +76,70 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
     }
 
     constexpr float PI = 3.14159265359f;
+    // every entity defines a method for getting its render state
 
-    Position pos = entity->get_position();
     RenderState rs = entity->get_render_state();
-    if (rs.shape == RenderShape::Circle) {
-        if (auto pop = std::get_if<PopVisualData>(&rs.payload)) {
-            float cx = cell_render_size * pos.x + cell_render_size * rs.size;
-            float cy = cell_render_size * pos.y + cell_render_size * rs.size;
-            float radius = cell_render_size * rs.size;
+    Position pos = {static_cast<int>(rs.position.x), static_cast<int>(rs.position.y)};
+    if (auto pop = std::get_if<PopVisualData>(&rs.payload)) {
+        float cx = cell_render_size * pos.x + cell_render_size * rs.size / 2;
+        float cy = cell_render_size * pos.y + cell_render_size * rs.size / 2;
+        float radius = cell_render_size * rs.size / 2;
+
+        // foreach segment
+        for (int i = 0; i < SEGMENTS; ++i) {
+            float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
+            float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
+
+            Vec2 center{cx, cy};
+            Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
+            Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+
+            entity_layer_.push_back({center, rs.color});
+            entity_layer_.push_back({p0, rs.color});
+            entity_layer_.push_back({p1, rs.color});
+        }
+    }
+}
+
+void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
+    constexpr float PI = 3.14159265359f;
+    int idx = y * world_width_ + x;
+
+    // get the render state from the cell
+    auto rs = cell->get_render_state();
+    // get payload data
+
+    if (auto cell_data = std::get_if<CellVisualData>(&rs.payload)) {
+        // get the relative quad from the map layer buffer
+        auto& q = map_layer_[idx];
+
+        Rect rect{Vec2{static_cast<float>(x * cell_render_size), static_cast<float>(y * cell_render_size)},
+                  Vec2{static_cast<float>(cell_render_size), static_cast<float>(cell_render_size)}};
+        // Determine cell color based on temperature
+        Color temperature_color = evaluate_temperature_color(cell->get_temperature());
+        // Determine ground color based on elevation
+        double elevation = cell_data->elevation;
+        Color ground_color;
+        if (cell_data->water) {
+            ground_color = Color(0, 0, 255); // Blue for water cells
+        } else {
+            ground_color = evaluate_ground_color(elevation);
+        }
+        // Blend temperature and ground colors and finally apoply highlighting based on elevation
+        Color final_color = apply_highlighting(blend_colors(ground_color, temperature_color, 0.1), elevation);
+
+        // Store the final color in the cell for future reference
+        q.color = final_color;
+
+        if (cell_data->feromones_a != 0.0) {
+            // Add feromone representation to the feromone layer
+            double intensity = cell_data->feromones_a;
+            Color feromone_color =
+                Color(255, 0, 100, static_cast<uint8_t>(intensity * 255)); // Red with alpha based on intensity
+
+            float cx = cell_render_size * static_cast<float>(x) + cell_render_size;
+            float cy = cell_render_size * static_cast<float>(y) + cell_render_size;
+            float radius = cell_render_size * intensity / 1.7f;
 
             // foreach segment
             for (int i = 0; i < SEGMENTS; ++i) {
@@ -86,34 +150,12 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
                 Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
                 Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
 
-                entity_buffer_.push_back({center, rs.color});
-                entity_buffer_.push_back({p0, rs.color});
-                entity_buffer_.push_back({p1, rs.color});
+                feromone_layer_.push_back({center, feromone_color});
+                feromone_layer_.push_back({p0, feromone_color});
+                feromone_layer_.push_back({p1, feromone_color});
             }
         }
     }
-}
-
-void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
-    int idx = y * world_width_ + x;
-
-    // get the relative quad from the preallocated buffer
-    auto& q = map_buffer_[idx];
-
-    Rect rect{Vec2{static_cast<float>(x * cell_render_size), static_cast<float>(y * cell_render_size)},
-              Vec2{static_cast<float>(cell_render_size), static_cast<float>(cell_render_size)}};
-    // Determine cell color based on temperature
-    Color temperature_color = evaluate_temperature_color(cell->get_temperature());
-    // Determine ground color based on elevation
-    double elevation = cell->get_elevation();
-    Color ground_color = evaluate_ground_color(elevation);
-    // Blend temperature and ground colors and finally apoply highlighting based on elevation
-    Color final_color = apply_highlighting(blend_colors(ground_color, temperature_color, 0.1), elevation);
-
-    // Store the final color in the cell for future reference
-    q.color = final_color;
-    // Reset rendering flag
-    cell->reset_need_rendering();
 }
 
 Color Renderer::evaluate_temperature_color(double temperature) {
@@ -154,7 +196,7 @@ Color Renderer::evaluate_ground_color(double elevation) {
     Color base;
     // RandomUtility rand_util;
 
-    for (int i = 0; i < 9; ++i) {
+    for (int i = 0; i < ground_color_levels.size() - 1; ++i) {
         if (elevation >= ground_color_levels[i].height && elevation <= ground_color_levels[i + 1].height) {
             // float t = (elevation - ground_color_levels[i].height) /
             //(ground_color_levels[i + 1].height - ground_color_levels[i].height);
@@ -170,14 +212,14 @@ Color Renderer::evaluate_ground_color(double elevation) {
     return base;
 }
 
-Color Renderer::blend_colors(const Color& baseColor, const Color& blendColor, double factor) {
+Color Renderer::blend_colors(const Color& base_color, const Color& blend_color, double factor) {
     // Clamp factor to [0.0, 1.0]
     factor = (factor < 0.0) ? 0.0 : (factor > 1.0) ? 1.0 : factor;
 
-    int r = static_cast<int>(baseColor.r * (1.0 - factor) + blendColor.r * factor);
-    int g = static_cast<int>(baseColor.g * (1.0 - factor) + blendColor.g * factor);
-    int b = static_cast<int>(baseColor.b * (1.0 - factor) + blendColor.b * factor);
-    int a = static_cast<int>(baseColor.a * (1.0 - factor) + blendColor.a * factor);
+    int r = static_cast<int>(base_color.r * (1.0 - factor) + blend_color.r * factor);
+    int g = static_cast<int>(base_color.g * (1.0 - factor) + blend_color.g * factor);
+    int b = static_cast<int>(base_color.b * (1.0 - factor) + blend_color.b * factor);
+    int a = static_cast<int>(base_color.a * (1.0 - factor) + blend_color.a * factor);
 
     // Clamp values to [0, 255]
     r = (r < 0) ? 0 : (r > 255) ? 255 : r;
@@ -185,7 +227,7 @@ Color Renderer::blend_colors(const Color& baseColor, const Color& blendColor, do
     b = (b < 0) ? 0 : (b > 255) ? 255 : b;
     a = (a < 0) ? 0 : (a > 255) ? 255 : a;
 
-    return Color(r, g, b, a);
+    return {r, g, b, a};
 }
 Color Renderer::apply_highlighting(const Color& color, double height) {
     double height_factor = std::min(1.0, height / 100.0);

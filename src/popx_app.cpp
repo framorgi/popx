@@ -1,5 +1,6 @@
 #include "popx_app.h"
 
+#include <thread>
 #include <utility>
 
 PopXApp::PopXApp(std::shared_ptr<ISimulator> sim, std::shared_ptr<IRenderer> renderer, std::shared_ptr<ILogger> logger)
@@ -18,6 +19,7 @@ void PopXApp::run() {
         sim_->update();
 
         renderer_->draw();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1)); // Approx ~60 FPS
     }
 }
 void PopXApp::stop() {

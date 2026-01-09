@@ -111,7 +111,7 @@ class Renderer : public IRenderer {
     /// @param    factor Blend factor [0.0 - 1.0], where 0.0 is fully baseColor and 1.0 is fully blendColor
     /// @return   The blended color with clamped component values
     ///--------------------------------------------------------------------------
-    static Color blend_colors(const Color& baseColor, const Color& blendColor, double factor);
+    static Color blend_colors(const Color& base_color, const Color& blend_color, double factor);
 
     ///--------------------------------------------------------------------------
     /// @brief    Apply highlighting effect to a color based on height
@@ -134,12 +134,17 @@ class Renderer : public IRenderer {
     ///--------------------------------------------------------------------------
     /// @brief    Buffer for storing quads representing the map
     ///--------------------------------------------------------------------------
-    std::vector<IGraphicEngine::Quad> map_buffer_;
+    std::vector<IGraphicEngine::Quad> map_layer_;
 
     ///--------------------------------------------------------------------------
     /// @brief    Buffer for storing vertices representing entities
     ///--------------------------------------------------------------------------
-    std::vector<IGraphicEngine::EntityVertex> entity_buffer_;
+    std::vector<IGraphicEngine::EntityVertex> entity_layer_;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Buffer for storing vertices representing feromones
+    ///--------------------------------------------------------------------------
+    std::vector<IGraphicEngine::EntityVertex> feromone_layer_;
 
     ///--------------------------------------------------------------------------
     /// @brief    Width and height of the world

@@ -75,4 +75,27 @@ class IWorld {
     /// @return Shared pointer to the ICell at the specified index
     ///----------------------------------------------------------------------
     [[nodiscard]] virtual std::shared_ptr<ICell> get_cell(int index) const = 0;
+
+    ///----------------------------------------------------------------------
+    /// @brief Get a specific cell by position
+    /// @param pos The position of the cell to retrieve
+    /// @return Shared pointer to the ICell at the specified position
+    ///----------------------------------------------------------------------
+    [[nodiscard]] virtual std::shared_ptr<ICell> get_cell(Position pos) const = 0;
+
+    ///----------------------------------------------------------------------
+    /// @brief Get the feromone level % of a specific type at a given position
+    /// @param p The position to check
+    /// @param type The type of feromone
+    /// @return The feromone level at the specified position
+    ///----------------------------------------------------------------------
+    [[nodiscard]] virtual double get_feromone_magnitude(Position p, Feromone_t type) const = 0;
+
+    ///----------------------------------------------------------------------
+    /// @brief    Set the feromone level of a specific type at a given position
+    /// @param    p The position to set
+    /// @param    type The type of feromone
+    /// @param    value The value to set
+    ///----------------------------------------------------------------------
+    virtual void set_feromone(Position p, Feromone_t type, int value) = 0;
 };

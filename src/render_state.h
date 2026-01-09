@@ -1,19 +1,23 @@
 #pragma once
 
-#include <variant> 
 #include "color.h"
 #include "geometry.h"
 
-enum class RenderShape {
-    Circle,
-    Segment,
-    Square,
-    Triangle
-};
+#include <variant>
+
+enum class RenderShape { Circle, Segment, Square, Triangle };
 
 struct PopVisualData {
     float energy;
     float age;
+};
+struct CellVisualData {
+    double temperature;
+    double elevation;
+    double humidity;
+    bool water;
+    double feromones_a;
+    double feromones_b;
 };
 
 struct RenderState {
@@ -22,5 +26,6 @@ struct RenderState {
     float size;
     Color color;
 
-    std::variant<std::monostate, PopVisualData> payload;
+    std::variant<CellVisualData, PopVisualData> payload;
+    bool dirty;
 };

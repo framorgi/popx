@@ -90,7 +90,35 @@ class GridWorld : public IWorld {
         }
         return cells_[index];
     }
-    ///
+
+    ///----------------------------------------------------------------------
+    /// @brief Get a specific cell by position
+    /// @param pos The position of the cell to retrieve
+    /// @return Shared pointer to the ICell at the specified position
+    ///----------------------------------------------------------------------
+    [[nodiscard]] std::shared_ptr<ICell> get_cell(Position pos) const override {
+        if (!in_bounds(pos.x, pos.y)) {
+            return nullptr;
+        }
+        return cells_[index(pos.x, pos.y)];
+    }
+
+    ///----------------------------------------------------------------------
+    /// @brief Get the feromone level of a specific type at a given position
+    /// @param p The position to check
+    /// @param type The type of feromone
+    /// @return The feromone level at the specified position
+    ///----------------------------------------------------------------------
+    [[nodiscard]] double get_feromone_magnitude(Position p, Feromone_t type) const override;
+
+    ///----------------------------------------------------------------------
+    /// @brief    Set the feromone level of a specific type at a given position
+    /// @param    p The position to set
+    /// @param    type The type of feromone
+    /// @param    value The value to set
+    ///----------------------------------------------------------------------
+    void set_feromone(Position p, Feromone_t type, int value) override;
+
   private:
     ///----------------------------------------------------------------------
     /// @brief    Check if coordinates are within the bounds of the grid
