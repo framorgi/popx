@@ -1,7 +1,7 @@
 
 #pragma once
 #include <map>
-const int MAX_ENTITIES = 40;
+const int MAX_ENTITIES = 100;
 using Position = struct {
     int x;
     int y;

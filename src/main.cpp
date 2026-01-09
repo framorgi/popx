@@ -1,19 +1,20 @@
 
 
+#include "console_logger.h"
 #include "grid_world.h"
 #include "pops_manager.h"
 #include "popx_app.h"
 #include "sfml_graphic_engine.h"
 
 #include <memory>
-constexpr int map_size = 100; // Number of cells along one side of the square map
+constexpr int map_size = 180; // Number of cells along one side of the square map
 int main() {
     /// Setup application components
     /// ------------------------------------------------------------------------
 
     // Create Logger
     std::shared_ptr<ConsoleLogger> app_logger = std::make_shared<ConsoleLogger>();
-
+    app_logger->set_level(LogLevel::Error);
     // Create SimulationWorld
     std::shared_ptr<GridWorld> app_grid_simulation_world = std::make_shared<GridWorld>(map_size, map_size, app_logger);
 
