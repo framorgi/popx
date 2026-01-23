@@ -5,8 +5,18 @@
 #include "i_logger.h"
 #include "i_world.h"
 #include "neuron.h"
+#include "random_utility.h"
 
 #include <cstdint>
+#include <memory>
+#include <type_traits>
+
+enum class State {
+    SENSE,
+    THINK,
+    ACT
+
+};
 /// -----------------------------------------------------------------------------
 /// @class Pop
 /// @brief Implements the IAgent interface representing a population entity within the simulation.
@@ -23,7 +33,7 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Initializes the Pop entity (sets initial stats, behaviors, etc.).
     ///---------------------------------------------------------------------------
     void init() override;
-    ///---------------------------------------------------------------------------
+    ///-----------------------------------------------------------\----------------
     /// @brief Handles the death of the Pop entity (cleanup, final actions, mark as dead).
     ///---------------------------------------------------------------------------
     void die() override;
@@ -77,13 +87,6 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     ///---------------------------------------------------------------------------
     [[nodiscard]] RenderState get_render_state() const override;
 
-    ///---------------------------------------------------------------------------
-    /// @brief Updates the last movement direction based on new and old positions.
-    /// @param new_pos The new position after movement.
-    /// @param old_pos The old position before movement.
-    ///---------------------------------------------------------------------------
-    void update_last_direction(Position new_pos, Position old_pos);
-
   private:
     /// ---------------------------------------------------------------------------
     /// @brief Age of the Pop entity.
@@ -111,6 +114,16 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Alive status of the Pop entity.
     /// ---------------------------------------------------------------------------
     bool alive_ = false;
+
+    /// ---------------------------------------------------------------------------
+    /// @brief Current state of the Pop entity state machine  .
+    /// ---------------------------------------------------------------------------
+    State current_state_ = State::SENSE;
+
+    /// ---------------------------------------------------------------------------
+    /// @brief INternal counter of steps taken in the current state.
+    /// ---------------------------------------------------------------------------
+    uint64_t steps_in_current_state_ = 0;
     /// ---------------------------------------------------------------------------
     /// @brief Weak pointer to the world the Pop belongs to.
     /// ---------------------------------------------------------------------------
@@ -119,4 +132,20 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Shared pointer to a logger for logging events and errors.
     /// ---------------------------------------------------------------------------
     std::shared_ptr<ILogger> logger_;
+    /// ---------------------------------------------------------------------------
+    /// @brief Shared pointer to a random utility for generating random numbers.
+    /// ---------------------------------------------------------------------------
+    std::shared_ptr<RandomUtility> random_util_;
+    ///---------------------------------------------------------------------------
+    /// @brief Updates the last movement direction based on new and old positions.
+    /// @param new_pos The new position after movement.
+    /// @param old_pos The old position before movement.
+    ///---------------------------------------------------------------------------
+    void update_last_direction(Position new_pos, Position old_pos);
+    ///---------------------------------------------------------------------------
+    /// @brief Emits a feromone of specified type and intensity at the Pop's position.
+    /// @param type The type of feromone to emit.
+    /// @param intensity The intensity of the feromone to emit.
+    ///---------------------------------------------------------------------------
+    void emit_feromone(Feromone_t type, int intensity);
 };

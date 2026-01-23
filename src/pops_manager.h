@@ -20,4 +20,14 @@ class PopsManager : public IAgentsManager {
     std::vector<std::shared_ptr<Pop>> pops_;
     std::shared_ptr<IWorld> world_;
     std::shared_ptr<ILogger> logger_;
+    ///--------------------------------------------------------------------------
+    /// Buckets for managing agent states (sense, think, act)
+    ///--------------------------------------------------------------------------
+    std::vector<std::shared_ptr<Pop>> sense_bucket_;
+    std::vector<std::shared_ptr<Pop>> think_bucket_;
+    std::vector<std::shared_ptr<Pop>> act_bucket_;
+    ///--------------------------------------------------------------------------
+    /// Rotates the buckets to cycle agent states
+    ///--------------------------------------------------------------------------
+    void rotate_buckets();
 };

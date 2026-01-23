@@ -3,7 +3,11 @@
 #include <utility>
 
 PopsManager::PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger)
-    : world_(std::move(world)), logger_(std::move(logger)) {}
+    : world_(std::move(world)), logger_(std::move(logger)) {
+    sense_bucket_.reserve(MAX_ENTITIES);
+    think_bucket_.reserve(MAX_ENTITIES);
+    act_bucket_.reserve(MAX_ENTITIES);
+}
 
 bool PopsManager::spawn_population() {
     // Example: Spawn a new pop agent and add it to the population
@@ -11,6 +15,15 @@ bool PopsManager::spawn_population() {
     for (int i = 0; i < MAX_ENTITIES; ++i) {
         std::shared_ptr<Pop> new_pop = std::make_shared<Pop>(world_, logger_);
         pops_.push_back(new_pop);
+        int phase = rand() % 3;
+
+        if (phase == 0) {
+            sense_bucket_.push_back(new_pop);
+        } else if (phase == 1) {
+            think_bucket_.push_back(new_pop);
+        } else {
+            act_bucket_.push_back(new_pop);
+        }
     }
     for (auto& pop : pops_) {
         if (pop->is_alive()) {
@@ -38,21 +51,39 @@ bool PopsManager::spawn_population() {
 }
 
 void PopsManager::update_cycle() {
-    for (auto& pop : pops_) {
+    // 1. SENSE
+    for (auto& pop : sense_bucket_) {
         if (pop->is_alive()) {
-            // TODO: Implement update logic for alive agents (sense, think, act cycle)
-            Position p = pop->get_position();
-
-            std::shared_ptr<RandomUtility> random_util = std::make_shared<RandomUtility>();
-            p.y += random_util->rnd_int(-1, 1);
-            p.x += random_util->rnd_int(-1, 1);
-            logger_->debug("Moving agent from (" + std::to_string(pop->get_position().x) + ", " +
-                           std::to_string(pop->get_position().y) + ") to (" + std::to_string(p.x) + ", " +
-                           std::to_string(p.y) + ").");
-            pop->try_move(p);
-            pop->update();
-        } else {
-            // TODO: Handle dead agents (remove from vector, cleanup resources)
+            pop->sense();
         }
     }
+
+    // 2. THINK
+    for (auto& pop : think_bucket_) {
+        if (pop->is_alive()) {
+            pop->think();
+        }
+    }
+
+    // 3. ACT
+    for (auto& pop : act_bucket_) {
+        if (pop->is_alive()) {
+            pop->act();
+        }
+    }
+
+    // for (auto& pop : pops_) {
+    //     if (pop->is_alive()) {
+    //         pop->update();
+    //     } else {
+    //         // TODO: Handle dead agents (remove from vector, cleanup resources)
+    //     }
+    // }
+
+    rotate_buckets();
+}
+
+void PopsManager::rotate_buckets() {
+    std::swap(sense_bucket_, think_bucket_);
+    std::swap(think_bucket_, act_bucket_);
 }

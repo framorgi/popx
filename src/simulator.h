@@ -5,6 +5,8 @@
 #include "i_simulator.h"
 #include "i_world.h"
 
+#include <sys/types.h>
+
 #include <memory>
 
 ///--------------------------------------------------------------------------
@@ -42,5 +44,7 @@ class Simulator : public ISimulator {
     std::shared_ptr<IWorld> world_;
     std::shared_ptr<IAgentsManager> agents_manager_;
     std::shared_ptr<ILogger> logger_;
+
+    uint64_t tick_count_ = 0;
     // statistic handler
 };
