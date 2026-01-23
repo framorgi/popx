@@ -1,4 +1,5 @@
 #pragma once
+#include "common.h"
 #include "genome.h"
 #include "i_agent.h"
 #include "i_logger.h"
@@ -76,6 +77,13 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     ///---------------------------------------------------------------------------
     [[nodiscard]] RenderState get_render_state() const override;
 
+    ///---------------------------------------------------------------------------
+    /// @brief Updates the last movement direction based on new and old positions.
+    /// @param new_pos The new position after movement.
+    /// @param old_pos The old position before movement.
+    ///---------------------------------------------------------------------------
+    void update_last_direction(Position new_pos, Position old_pos);
+
   private:
     /// ---------------------------------------------------------------------------
     /// @brief Age of the Pop entity.
@@ -94,6 +102,11 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Current position of the Pop in the world.
     /// ---------------------------------------------------------------------------
     Position pos_;
+
+    /// ---------------------------------------------------------------------------
+    /// @brief Last movement direction of the Pop entity.
+    /// ---------------------------------------------------------------------------
+    Position last_direction_;
     /// ---------------------------------------------------------------------------
     /// @brief Alive status of the Pop entity.
     /// ---------------------------------------------------------------------------

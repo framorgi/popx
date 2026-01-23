@@ -1,5 +1,6 @@
 
 
+#include "common.h"
 #include "console_logger.h"
 #include "grid_world.h"
 #include "pops_manager.h"
@@ -7,7 +8,6 @@
 #include "sfml_graphic_engine.h"
 
 #include <memory>
-constexpr int map_size = 180; // Number of cells along one side of the square map
 int main() {
     /// Setup application components
     /// ------------------------------------------------------------------------
