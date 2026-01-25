@@ -63,7 +63,7 @@ void Pop::sense() {
         case Sensor::BOUNDARY_DIST_X:
         case Sensor::BOUNDARY_DIST:
         case Sensor::BOUNDARY_DIST_Y:
-        case Sensor::GENETIC_SIM_FWD:
+
         case Sensor::LAST_MOVE_DIR_X:
         case Sensor::LAST_MOVE_DIR_Y:
         case Sensor::POPULATION_DENSITY_N:
@@ -78,11 +78,46 @@ void Pop::sense() {
         case Sensor::TEMP_DRV_W:
         case Sensor::TEMP_DRV_E:
         case Sensor::TEMP_DRV_S:
-        case Sensor::SENSE_FEROMONE_FOOD:
-        case Sensor::SENSE_FEROMONE_FOOD_DRV_N:
-        case Sensor::SENSE_FEROMONE_FOOD_DRV_W:
-        case Sensor::SENSE_FEROMONE_FOOD_DRV_E:
-        case Sensor::SENSE_FEROMONE_FOOD_DRV_S:
+        case Sensor::SENSE_FEROMONE_FOOD: {
+            val = static_cast<double>(get_feromone_strength(FeromoneT::FOOD_FEROMONE, pos_)) / MaxFeromones;
+            break;
+        }
+        case Sensor::SENSE_FEROMONE_FOOD_DRV_N: {
+            auto val_a = static_cast<double>(get_feromone_strength(FeromoneT::FOOD_FEROMONE, pos_)) / MaxFeromones;
+            auto val_b =
+                static_cast<double>(get_feromone_strength(FeromoneT::FOOD_FEROMONE, PositionT{pos_.x, pos_.y - 1})) /
+                MaxFeromones;
+
+            val = val_b - val_a;
+            break;
+        }
+        case Sensor::SENSE_FEROMONE_FOOD_DRV_W: {
+            auto val_a = static_cast<double>(get_feromone_strength(FeromoneT::FOOD_FEROMONE, pos_)) / MaxFeromones;
+            auto val_b =
+                static_cast<double>(get_feromone_strength(FeromoneT::FOOD_FEROMONE, PositionT{pos_.x - 1, pos_.y})) /
+                MaxFeromones;
+
+            val = val_b - val_a;
+            break;
+        }
+        case Sensor::SENSE_FEROMONE_FOOD_DRV_E: {
+            auto val_a = static_cast<double>(get_feromone_strength(FeromoneT::FOOD_FEROMONE, pos_)) / MaxFeromones;
+            auto val_b =
+                static_cast<double>(get_feromone_strength(FeromoneT::FOOD_FEROMONE, PositionT{pos_.x + 1, pos_.y})) /
+                MaxFeromones;
+
+            val = val_b - val_a;
+            break;
+        }
+        case Sensor::SENSE_FEROMONE_FOOD_DRV_S: {
+            auto val_a = static_cast<double>(get_feromone_strength(FeromoneT::FOOD_FEROMONE, pos_)) / MaxFeromones;
+            auto val_b =
+                static_cast<double>(get_feromone_strength(FeromoneT::FOOD_FEROMONE, PositionT{pos_.x, pos_.y + 1})) /
+                MaxFeromones;
+
+            val = val_b - val_a;
+            break;
+        }
         case Sensor::GLUCOSE_DENSITY_N:
         case Sensor::GLUCOSE_DENSITY_W:
         case Sensor::GLUCOSE_DENSITY_E:

@@ -8,7 +8,7 @@ enum class Sensor {
     BOUNDARY_DIST_X, // I X distance to nearest edge of world
     BOUNDARY_DIST,   // I distance to nearest edge of world
     BOUNDARY_DIST_Y, // I Y distance to nearest edge of world
-    GENETIC_SIM_FWD, // I genetic similarity forward
+
     LAST_MOVE_DIR_X, // I +- amount of X movement in last movement
     LAST_MOVE_DIR_Y, // I +- amount of Y movement in last movement
 
