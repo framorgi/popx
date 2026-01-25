@@ -1,11 +1,12 @@
 #pragma once
 #include "i_graphic_engine.h"
+#include "i_logger.h"
 
 #include <SFML/Graphics.hpp>
 
 class SfmlGraphicEngine : public IGraphicEngine {
   public:
-    SfmlGraphicEngine();
+    SfmlGraphicEngine(std::shared_ptr<ILogger> logger);
 
     // --------------------------
     // Gestione finestra / frame
@@ -14,7 +15,8 @@ class SfmlGraphicEngine : public IGraphicEngine {
     void create_window(std::string title, int width, int height) override;
     void display() override;
     bool is_open() const override;
-    void refresh() override;
+    void poll_event() override;
+    ;
 
     // --------------------------
     // Primitive di disegno
@@ -44,6 +46,13 @@ class SfmlGraphicEngine : public IGraphicEngine {
     void draw_triangles(const std::vector<EntityVertex>& vertices) override;
 
   private:
+    ///--------------------------------------------------------------------------
+    /// @brief    Shared pointer to the logger instance
+    ///--------------------------------------------------------------------------
+    std::shared_ptr<ILogger> logger_;
+    ///--------------------------------------------------------------------------
+    /// @brief    SFML Render window instance
+    ///--------------------------------------------------------------------------
     sf::RenderWindow window_;
 
     ///--------------------------------------------------------------------------

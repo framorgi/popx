@@ -3,12 +3,15 @@
 #include "color.h"
 #include "i_entity.h"
 #include "i_graphic_engine.h"
+#include "i_logger.h"
 #include "i_renderer.h"
 #include "i_world.h"
 #include "render_state.h"
 #include "sfml_graphic_engine.h"
 
 #include <array>
+#include <cmath>
+#include <memory>
 
 struct Level {
     double height;
@@ -39,7 +42,7 @@ class Renderer : public IRenderer {
     /// @param    world Shared pointer to the IWorld instance
     ///--------------------------------------------------------------------------
     // TODO: check if we need to pass the implemented objects or the interfaces
-    Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world);
+    Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger);
     ///--------------------------------------------------------------------------
     /// @brief    Initializes the renderer
     ///--------------------------------------------------------------------------
@@ -52,6 +55,17 @@ class Renderer : public IRenderer {
     /// @brief    Saves the current frame to a file
     ///--------------------------------------------------------------------------
     void save_frame() override;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Checks if the rendering window is open
+    /// @return   True if the window is open, false otherwise
+    ///--------------------------------------------------------------------------
+    [[nodiscard]] bool window_open() const override;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Polls for window events
+    ///--------------------------------------------------------------------------
+    void poll_event() override;
 
   private:
     ///--------------------------------------------------------------------------
@@ -130,6 +144,11 @@ class Renderer : public IRenderer {
     /// @brief    Shared pointer to the world instance
     ///--------------------------------------------------------------------------
     std::shared_ptr<IWorld> world_;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Shared pointer to the logger instance
+    ///--------------------------------------------------------------------------
+    std::shared_ptr<ILogger> logger_;
 
     ///--------------------------------------------------------------------------
     /// @brief    Buffer for storing quads representing the map

@@ -2,7 +2,7 @@
 #pragma once
 #include <map>
 
-constexpr int map_size = 180; // Number of cells along one side of the square map
+constexpr int map_size = 130; // Number of cells along one side of the square map
 const int MAX_ENTITIES = 100;
 using Position = struct {
     int x;

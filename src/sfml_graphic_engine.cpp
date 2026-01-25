@@ -1,8 +1,10 @@
 #include "sfml_graphic_engine.h"
 
-SfmlGraphicEngine::SfmlGraphicEngine(/* args */) {}
+SfmlGraphicEngine::SfmlGraphicEngine(std::shared_ptr<ILogger> logger) : logger_(std::move(logger)) {}
+
 void SfmlGraphicEngine::create_window(std::string title, int width, int height) {
     window_.create(sf::VideoMode(width, height), title);
+    window_.setVerticalSyncEnabled(true);
 }
 
 void SfmlGraphicEngine::clear(const Color& color) {
@@ -16,11 +18,13 @@ void SfmlGraphicEngine::display() {
 bool SfmlGraphicEngine::is_open() const {
     return window_.isOpen();
 }
-void SfmlGraphicEngine::refresh() {
+void SfmlGraphicEngine::poll_event() {
     sf::Event event;
     while (window_.pollEvent(event)) {
-        if (event.type == sf::Event::Closed)
+        if (event.type == sf::Event::Closed) {
             window_.close();
+            logger_->info("Window closed by user.");
+        }
     }
 }
 void SfmlGraphicEngine::draw_circle(const Circle& circle, const Color& color) {

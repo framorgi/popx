@@ -27,10 +27,10 @@ int main() {
         std::make_shared<Simulator>(app_grid_simulation_world, app_agents_manager, app_logger);
 
     // Create the SFML Graphic Engine
-    std::shared_ptr<SfmlGraphicEngine> app_gfx = std::make_shared<SfmlGraphicEngine>();
+    std::shared_ptr<SfmlGraphicEngine> app_gfx = std::make_shared<SfmlGraphicEngine>(app_logger);
 
     // Create the Renderer. Constructor needs the Graphic Engine and the SimulationWorld
-    std::shared_ptr<Renderer> app_renderer = std::make_shared<Renderer>(app_gfx, app_grid_simulation_world);
+    std::shared_ptr<Renderer> app_renderer = std::make_shared<Renderer>(app_gfx, app_grid_simulation_world, app_logger);
 
     // Create the main Application. Constructor needs the Simulator and Renderer
     PopXApp app(app_main_simulator, app_renderer, app_logger);

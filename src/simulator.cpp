@@ -17,9 +17,7 @@ void Simulator::update() {
     // start simulator tick
 
     agents_manager_->update_cycle();
-    if (tick_count_ % 4 == 0) {
-        world_->update_cycle();
-    }
+    { world_->update_cycle(); }
 
     // simulator tick finished
     tick_count_++;

@@ -4,8 +4,8 @@
 
 #include <cmath>
 
-Renderer::Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world)
-    : gfx_(std::move(gfx)), world_(std::move(world)) {}
+Renderer::Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger)
+    : gfx_(std::move(gfx)), world_(std::move(world)), logger_(std::move(logger)) {}
 
 void Renderer::init() {
     // TODO: Complete initialization (load resources, setup camera, configure rendering settings)
@@ -235,4 +235,11 @@ Color Renderer::apply_highlighting(const Color& color, double height) {
     return Color(static_cast<uint8_t>(std::clamp(color.r * lighting, 0.0, 255.0)),
                  static_cast<uint8_t>(std::clamp(color.g * lighting, 0.0, 255.0)),
                  static_cast<uint8_t>(std::clamp(color.b * lighting, 0.0, 255.0)));
+}
+
+bool Renderer::window_open() const {
+    return gfx_->is_open();
+}
+void Renderer::poll_event() {
+    gfx_->poll_event();
 }
