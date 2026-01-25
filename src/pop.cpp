@@ -241,15 +241,18 @@ bool Pop::try_move(PositionT p) {
         logger_->error("Failed to move: World no longer exists.");
         return false; // World no longer exists
     }
-    // cache last position for direction calculation
-    PositionT old_pos = pos_;
-    //  movement logic
-    if (world->move_entity(shared_from_this(), p)) {
-        pos_ = p;
-        update_last_direction(pos_, old_pos);
-        return true;
+    auto stiff = world->get_elevation(p) - world->get_elevation(pos_);
+    if (stiff < MaxClimbableSlope) {
+        // cache last position for direction calculation
+        PositionT old_pos = pos_;
+        //  movement logic
+        if (world->move_entity(shared_from_this(), p)) {
+            pos_ = p;
+            update_last_direction(pos_, old_pos);
+            return true;
+        }
+        logger_->warning("Move to position (" + std::to_string(p.x) + ", " + std::to_string(p.y) + ") failed.");
     }
-    logger_->warning("Move to position (" + std::to_string(p.x) + ", " + std::to_string(p.y) + ") failed.");
     return false;
 }
 

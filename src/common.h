@@ -37,3 +37,5 @@ using FeromoneMapT = std::map<FeromoneT, int>;
 constexpr double FeromoneDecayRate = 0.99; // Decay rate per update
 
 enum class Direction { N, NE, E, SE, S, SW, W, NW };
+
+constexpr double MaxClimbableSlope = 3.0; // Maximum elevation difference that can be climbed in one move

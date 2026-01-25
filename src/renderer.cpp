@@ -45,7 +45,7 @@ void Renderer::draw() {
     // draw the cell buffers as quads
     gfx_->draw_quads(map_layer_);
     // draw the feromone buffers as composision of triangles
-    gfx_->draw_triangles(feromone_layer_);
+    // gfx_->draw_triangles(feromone_layer_);
     // draw the entity buffers as composision of triangles
     gfx_->draw_triangles(entity_layer_);
 

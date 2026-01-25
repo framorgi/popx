@@ -129,6 +129,20 @@ class GridWorld : public IWorld {
     //--------------------------------------------------------------------------
     [[nodiscard]] int get_feromone_strength(FeromoneT type, PositionT pos) const override;
 
+    ///----------------------------------------------------------------------
+    /// @brief      Get the temperature at a given position
+    /// @param      pos Position to check
+    /// @return     temperature at the given position
+    ///----------------------------------------------------------------------
+    [[nodiscard]] double get_temperature(PositionT pos) const override;
+
+    ///----------------------------------------------------------------------
+    /// @brief      Get the elevation at a given position
+    /// @param      pos Position to check
+    /// @return     elevation at the given position
+    ///----------------------------------------------------------------------
+    [[nodiscard]] double get_elevation(PositionT pos) const override;
+
   private:
     ///----------------------------------------------------------------------
     /// @brief    Check if coordinates are within the bounds of the grid

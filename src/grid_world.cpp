@@ -161,3 +161,19 @@ void GridWorld::set_feromone(PositionT p, FeromoneT type, int value) {
             return 0; // Other feromone types not implemented
     }
 }
+
+[[nodiscard]] double GridWorld::get_temperature(PositionT pos) const {
+    if (!in_bounds(pos.x, pos.y)) {
+        return 0.0; // Out of bounds
+    }
+    auto cell = cells_[index(pos.x, pos.y)];
+    return cell->get_temperature();
+}
+
+[[nodiscard]] double GridWorld::get_elevation(PositionT pos) const {
+    if (!in_bounds(pos.x, pos.y)) {
+        return 0; // Out of bounds
+    }
+    auto cell = cells_[index(pos.x, pos.y)];
+    return static_cast<int>(cell->get_elevation());
+}
