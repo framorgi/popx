@@ -54,13 +54,13 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @param p The target position to move to.
     /// @return True if the move was successful, false otherwise.
     ///---------------------------------------------------------------------------
-    bool try_move(Position p) override;
+    bool try_move(PositionT p) override;
     ///---------------------------------------------------------------------------
     /// @brief Gets the current position of the Pop.
     /// @return The current position of the Pop.
     ///---------------------------------------------------------------------------
 
-    [[nodiscard]] Position get_position() const override;
+    [[nodiscard]] PositionT get_position() const override;
     ///---------------------------------------------------------------------------
     /// @brief Checks if the Pop is alive.
     /// @return True if the Pop is alive, false otherwise.
@@ -71,7 +71,7 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @param p The position to spawn the new Pop.
     /// @return True if the spawn was successful, false otherwise.
     ///---------------------------------------------------------------------------
-    bool try_spawn(Position p) override;
+    bool try_spawn(PositionT p) override;
     ///---------------------------------------------------------------------------
     /// @brief Updates the state of the Pop (called each simulation tick).
     ///---------------------------------------------------------------------------
@@ -104,12 +104,12 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// ---------------------------------------------------------------------------
     /// @brief Current position of the Pop in the world.
     /// ---------------------------------------------------------------------------
-    Position pos_;
+    PositionT pos_;
 
     /// ---------------------------------------------------------------------------
     /// @brief Last movement direction of the Pop entity.
     /// ---------------------------------------------------------------------------
-    Position last_direction_;
+    PositionT last_direction_;
     /// ---------------------------------------------------------------------------
     /// @brief Alive status of the Pop entity.
     /// ---------------------------------------------------------------------------
@@ -141,7 +141,7 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @param new_pos The new position after movement.
     /// @param old_pos The old position before movement.
     ///---------------------------------------------------------------------------
-    void update_last_direction(Position new_pos, Position old_pos);
+    void update_last_direction(PositionT new_pos, PositionT old_pos);
     ///---------------------------------------------------------------------------
     /// @brief Emits a feromone of specified type and intensity at the Pop's position.
     /// @param type The type of feromone to emit.

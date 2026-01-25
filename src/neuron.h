@@ -12,31 +12,31 @@ enum class Sensor {
     LAST_MOVE_DIR_X, // I +- amount of X movement in last movement
     LAST_MOVE_DIR_Y, // I +- amount of Y movement in last movement
 
-    POPULATION_DENSITY_N, //
-    POPULATION_DENSITY_W, //
-    POPULATION_DENSITY_E, //
-    POPULATION_DENSITY_S, //
-    TEMP_AVG_N,           //
-    TEMP_AVG_W,           //
-    TEMP_AVG_E,           //
-    TEMP_AVG_S,           //
-    TEMP_DRV_N,           //
-    TEMP_DRV_W,           //
-    TEMP_DRV_E,           //
-    TEMP_DRV_S,           //
-    SENSE_SIGNAL,         //
-    SENSE_SIGNAL_DRV_N,   //
-    SENSE_SIGNAL_DRV_W,   //
-    SENSE_SIGNAL_DRV_E,   //
-    SENSE_SIGNAL_DRV_S,   //
-    GLUCOSE_DENSITY_N,    //
-    GLUCOSE_DENSITY_W,    //
-    GLUCOSE_DENSITY_E,    //
-    GLUCOSE_DENSITY_S,    //
-    OSC1,                 // I oscillator +-value
-    AGE,                  // I
-    TEMP,                 // I
-    RANDOM,               //   random sensor value, uniform distribution
+    POPULATION_DENSITY_N,      //
+    POPULATION_DENSITY_W,      //
+    POPULATION_DENSITY_E,      //
+    POPULATION_DENSITY_S,      //
+    TEMP_AVG_N,                //
+    TEMP_AVG_W,                //
+    TEMP_AVG_E,                //
+    TEMP_AVG_S,                //
+    TEMP_DRV_N,                //
+    TEMP_DRV_W,                //
+    TEMP_DRV_E,                //
+    TEMP_DRV_S,                //
+    SENSE_FEROMONE_FOOD,       //
+    SENSE_FEROMONE_FOOD_DRV_N, //
+    SENSE_FEROMONE_FOOD_DRV_W, //
+    SENSE_FEROMONE_FOOD_DRV_E, //
+    SENSE_FEROMONE_FOOD_DRV_S, //
+    GLUCOSE_DENSITY_N,         //
+    GLUCOSE_DENSITY_W,         //
+    GLUCOSE_DENSITY_E,         //
+    GLUCOSE_DENSITY_S,         //
+    OSC1,                      // I oscillator +-value
+    AGE,                       // I
+    TEMP,                      // I
+    RANDOM,                    //   random sensor value, uniform distribution
 
     NUM_SENSES, // <<------------------ END OF ACTIVE SENSES MARKER
 };

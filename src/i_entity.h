@@ -20,8 +20,8 @@ class IEntity {
 
     /// @brief Initialize the entity
     /// @param world The world in which the entity exists
-    /// @note This method is called once when the entity is created and set the position in the world
-    virtual bool try_spawn(Position p) = 0;
+    /// @note This method is called once when the entity is created and set the Position  in the world
+    virtual bool try_spawn(PositionT p) = 0;
 
     /// @brief entity can have an update method to update its state
     virtual void update() = 0;
@@ -29,9 +29,9 @@ class IEntity {
     /// @brief Terminate the entity
     virtual void despawn() = 0;
 
-    /// @brief Get the entity's position
-    [[nodiscard]] virtual Position get_position() const = 0;
+    /// @brief Get the entity's PositionT
+    [[nodiscard]] virtual PositionT get_position() const = 0;
 
-    /// @brief Set the agent's position
-    virtual bool try_move(Position p) = 0;
+    /// @brief Set the agent's PositionT
+    virtual bool try_move(PositionT p) = 0;
 };

@@ -34,7 +34,7 @@ void Renderer::draw() {
     // clear entity buffer every frame for now. Entity size can change very quickly so we need to redraw them all but
     // this section can be optimized later
     entity_layer_.clear();
-    entity_layer_.reserve(MAX_ENTITIES * SEGMENTS * 3);
+    entity_layer_.reserve(MaxEntities * SEGMENTS * 3);
 
     feromone_layer_.clear();
     feromone_layer_.reserve(world_width_ * world_height_ * SEGMENTS * 3); // assume 10% cells have feromones
@@ -79,7 +79,7 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
     // every entity defines a method for getting its render state
 
     RenderState rs = entity->get_render_state();
-    Position pos = {static_cast<int>(rs.position.x), static_cast<int>(rs.position.y)};
+    PositionT pos = {static_cast<int>(rs.position.x), static_cast<int>(rs.position.y)};
     if (auto pop = std::get_if<PopVisualData>(&rs.payload)) {
         float cx = cell_render_size * pos.x + cell_render_size * rs.size / 2;
         float cy = cell_render_size * pos.y + cell_render_size * rs.size / 2;

@@ -4,15 +4,15 @@
 
 PopsManager::PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger)
     : world_(std::move(world)), logger_(std::move(logger)) {
-    sense_bucket_.reserve(MAX_ENTITIES);
-    think_bucket_.reserve(MAX_ENTITIES);
-    act_bucket_.reserve(MAX_ENTITIES);
+    sense_bucket_.reserve(MaxEntities);
+    think_bucket_.reserve(MaxEntities);
+    act_bucket_.reserve(MaxEntities);
 }
 
 bool PopsManager::spawn_population() {
     // Example: Spawn a new pop agent and add it to the population
     std::shared_ptr<RandomUtility> random_util = std::make_shared<RandomUtility>();
-    for (int i = 0; i < MAX_ENTITIES; ++i) {
+    for (int i = 0; i < MaxEntities; ++i) {
         std::shared_ptr<Pop> new_pop = std::make_shared<Pop>(world_, logger_);
         pops_.push_back(new_pop);
         int phase = rand() % 3;
@@ -30,7 +30,7 @@ bool PopsManager::spawn_population() {
             int w = random_util->rnd_int(0, world_->get_width());
             int h = random_util->rnd_int(0, world_->get_height());
             logger_->debug("Spawning agent at random position (" + std::to_string(w) + ", " + std::to_string(h) + ").");
-            while (!(pop->try_spawn(Position{w, h}))) {
+            while (!(pop->try_spawn(PositionT{w, h}))) {
                 logger_->warning("Position (" + std::to_string(w) + ", " + std::to_string(h) +
                                  ") is occupied. Retrying...");
                 w = random_util->rnd_int(0, world_->get_width());

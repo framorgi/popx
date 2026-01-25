@@ -5,6 +5,8 @@
 #include "random_utility.h"
 #include "render_state.h"
 
+#include <algorithm>
+
 Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger)
     : genome_(Genome(4)), world_(std::move(world)), logger_(std::move(logger)), pos_{0, 0}, age_(0), energy_(100.0f),
       last_direction_{0, 0}, random_util_(std::make_shared<RandomUtility>()) {
@@ -20,7 +22,7 @@ void Pop::die() {
     alive_ = false;
 }
 
-bool Pop::try_spawn(Position p) {
+bool Pop::try_spawn(PositionT p) {
     pos_ = p;
     auto world = world_.lock();
     if (!world) {
@@ -53,10 +55,10 @@ void Pop::sense() {
     double val = 0.0;
     switch (sensor) {
         case Sensor::LOC_X:
-            val = static_cast<double>(pos_.x) / map_size;
+            val = static_cast<double>(pos_.x) / MapSize;
             break;
         case Sensor::LOC_Y:
-            val = static_cast<double>(pos_.y) / map_size;
+            val = static_cast<double>(pos_.y) / MapSize;
             break;
         case Sensor::BOUNDARY_DIST_X:
         case Sensor::BOUNDARY_DIST:
@@ -76,17 +78,20 @@ void Pop::sense() {
         case Sensor::TEMP_DRV_W:
         case Sensor::TEMP_DRV_E:
         case Sensor::TEMP_DRV_S:
-        case Sensor::SENSE_SIGNAL:
-        case Sensor::SENSE_SIGNAL_DRV_N:
-        case Sensor::SENSE_SIGNAL_DRV_W:
-        case Sensor::SENSE_SIGNAL_DRV_E:
-        case Sensor::SENSE_SIGNAL_DRV_S:
+        case Sensor::SENSE_FEROMONE_FOOD:
+        case Sensor::SENSE_FEROMONE_FOOD_DRV_N:
+        case Sensor::SENSE_FEROMONE_FOOD_DRV_W:
+        case Sensor::SENSE_FEROMONE_FOOD_DRV_E:
+        case Sensor::SENSE_FEROMONE_FOOD_DRV_S:
         case Sensor::GLUCOSE_DENSITY_N:
         case Sensor::GLUCOSE_DENSITY_W:
         case Sensor::GLUCOSE_DENSITY_E:
         case Sensor::GLUCOSE_DENSITY_S:
         case Sensor::OSC1:
-        case Sensor::AGE:
+        case Sensor::AGE: {
+            val = static_cast<double>(age_) / MaxAge;
+            break;
+        }
         case Sensor::TEMP:
         case Sensor::RANDOM:
         case Sensor::NUM_SENSES:
@@ -104,7 +109,7 @@ void Pop::act() {
     // set  current state to ACT
     current_state_ = State::ACT;
 
-    Position p = pos_;
+    PositionT p = pos_;
     auto random_action = static_cast<Action>(random_util_->rnd_int(0, 12));
     switch (random_action) {
         case Action::MOVE_FORWARD: // W continue last direction
@@ -195,14 +200,14 @@ void Pop::act() {
     }
 }
 
-bool Pop::try_move(Position p) {
+bool Pop::try_move(PositionT p) {
     auto world = world_.lock();
     if (!world) {
         logger_->error("Failed to move: World no longer exists.");
         return false; // World no longer exists
     }
     // cache last position for direction calculation
-    Position old_pos = pos_;
+    PositionT old_pos = pos_;
     //  movement logic
     if (world->move_entity(shared_from_this(), p)) {
         pos_ = p;
@@ -213,7 +218,7 @@ bool Pop::try_move(Position p) {
     return false;
 }
 
-Position Pop::get_position() const {
+PositionT Pop::get_position() const {
     return pos_;
 }
 
@@ -241,7 +246,7 @@ RenderState Pop::get_render_state() const {
     return state;
 }
 
-void Pop::update_last_direction(Position new_pos, Position old_pos) {
+void Pop::update_last_direction(PositionT new_pos, PositionT old_pos) {
     last_direction_.x = new_pos.x - old_pos.x;
     last_direction_.y = new_pos.y - old_pos.y;
 }

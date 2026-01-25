@@ -19,7 +19,7 @@ class IWorld {
     /// @param p The position to check
     /// @return True if the position is free, false otherwise
     ///----------------------------------------------------------------------
-    [[nodiscard]] virtual bool is_free(Position p) const = 0;
+    [[nodiscard]] virtual bool is_free(PositionT p) const = 0;
 
     /// @brief Add an entity to the world (World stores reference, does not take ownership)
     /// @param entity The entity to add
@@ -42,7 +42,7 @@ class IWorld {
     /// @param new_pos The new position for the entity
     /// @return True if the entity was moved successfully, false otherwise
     ///----------------------------------------------------------------------
-    virtual bool move_entity(std::shared_ptr<IEntity> entity, Position new_pos) = 0;
+    virtual bool move_entity(std::shared_ptr<IEntity> entity, PositionT new_pos) = 0;
 
     ///----------------------------------------------------------------------
     /// @brief Update the world for a simulation cycle
@@ -81,7 +81,7 @@ class IWorld {
     /// @param pos The position of the cell to retrieve
     /// @return Shared pointer to the ICell at the specified position
     ///----------------------------------------------------------------------
-    [[nodiscard]] virtual std::shared_ptr<ICell> get_cell(Position pos) const = 0;
+    [[nodiscard]] virtual std::shared_ptr<ICell> get_cell(PositionT pos) const = 0;
 
     ///----------------------------------------------------------------------
     /// @brief Get the feromone level % of a specific type at a given position
@@ -89,7 +89,7 @@ class IWorld {
     /// @param type The type of feromone
     /// @return The feromone level at the specified position
     ///----------------------------------------------------------------------
-    [[nodiscard]] virtual double get_feromone_magnitude(Position p, FeromoneT type) const = 0;
+    [[nodiscard]] virtual double get_feromone_magnitude(PositionT p, FeromoneT type) const = 0;
 
     ///----------------------------------------------------------------------
     /// @brief    Set the feromone level of a specific type at a given position
@@ -97,5 +97,5 @@ class IWorld {
     /// @param    type The type of feromone
     /// @param    value The value to set
     ///----------------------------------------------------------------------
-    virtual void set_feromone(Position p, FeromoneT type, int value) = 0;
+    virtual void set_feromone(PositionT p, FeromoneT type, int value) = 0;
 };

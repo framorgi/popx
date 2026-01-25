@@ -32,14 +32,14 @@ class GridWorld : public IWorld {
     /// @param    p The position to check
     /// @return   True if the position is free, false otherwise
     ///----------------------------------------------------------------------
-    [[nodiscard]] bool is_free(Position p) const override;
+    [[nodiscard]] bool is_free(PositionT p) const override;
     ///----------------------------------------------------------------------
     /// @brief    Move an entity to a new position
     /// @param    entity The entity to move
     /// @param    new_pos The new position for the entity
     /// @return   True if the entity was moved successfully, false otherwise
     ///----------------------------------------------------------------------
-    bool move_entity(std::shared_ptr<IEntity> entity, Position new_pos) override;
+    bool move_entity(std::shared_ptr<IEntity> entity, PositionT new_pos) override;
 
     ///----------------------------------------------------------------------
     /// @brief    Remove an entity from the world
@@ -96,7 +96,7 @@ class GridWorld : public IWorld {
     /// @param pos The position of the cell to retrieve
     /// @return Shared pointer to the ICell at the specified position
     ///----------------------------------------------------------------------
-    [[nodiscard]] std::shared_ptr<ICell> get_cell(Position pos) const override {
+    [[nodiscard]] std::shared_ptr<ICell> get_cell(PositionT pos) const override {
         if (!in_bounds(pos.x, pos.y)) {
             return nullptr;
         }
@@ -109,7 +109,7 @@ class GridWorld : public IWorld {
     /// @param type The type of feromone
     /// @return The feromone level at the specified position
     ///----------------------------------------------------------------------
-    [[nodiscard]] double get_feromone_magnitude(Position p, FeromoneT type) const override;
+    [[nodiscard]] double get_feromone_magnitude(PositionT p, FeromoneT type) const override;
 
     ///----------------------------------------------------------------------
     /// @brief    Set the feromone level of a specific type at a given position
@@ -117,7 +117,7 @@ class GridWorld : public IWorld {
     /// @param    type The type of feromone
     /// @param    value The value to set
     ///----------------------------------------------------------------------
-    void set_feromone(Position p, FeromoneT type, int value) override;
+    void set_feromone(PositionT p, FeromoneT type, int value) override;
 
   private:
     ///----------------------------------------------------------------------

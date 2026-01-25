@@ -33,7 +33,7 @@ void GridWorld::init() {
     logger_->info("Grid world initialized with temperature field.");
 }
 
-bool GridWorld::is_free(Position p) const {
+bool GridWorld::is_free(PositionT p) const {
     if (!in_bounds(p.x, p.y)) {
         logger_->warning("Position (" + std::to_string(p.x) + "," + std::to_string(p.y) + ") is out of bounds.");
         return false;
@@ -49,7 +49,7 @@ bool GridWorld::is_free(Position p) const {
     return is_free;
 }
 
-bool GridWorld::move_entity(std::shared_ptr<IEntity> entity, Position new_pos) {
+bool GridWorld::move_entity(std::shared_ptr<IEntity> entity, PositionT new_pos) {
     if (!is_free(new_pos)) {
         logger_->warning("Failed to move entity to occupied position (" + std::to_string(new_pos.x) + "," +
                          std::to_string(new_pos.y) + ")");
@@ -57,7 +57,7 @@ bool GridWorld::move_entity(std::shared_ptr<IEntity> entity, Position new_pos) {
     }
 
     logger_->debug("Moving entity to position (" + std::to_string(new_pos.x) + "," + std::to_string(new_pos.y) + ")");
-    Position old_pos = entity->get_position();
+    PositionT old_pos = entity->get_position();
     cells_[index(old_pos.x, old_pos.y)]->set_occupant(std::weak_ptr<IEntity>());
     cells_[index(new_pos.x, new_pos.y)]->set_occupant(entity);
 
@@ -65,7 +65,7 @@ bool GridWorld::move_entity(std::shared_ptr<IEntity> entity, Position new_pos) {
 }
 
 bool GridWorld::remove_entity(std::shared_ptr<IEntity> e) {
-    Position pos = e->get_position();
+    PositionT pos = e->get_position();
     if (!in_bounds(pos.x, pos.y)) {
         return false;
     }
@@ -81,7 +81,7 @@ bool GridWorld::remove_entity(std::shared_ptr<IEntity> e) {
     return true;
 }
 bool GridWorld::add_entity(std::shared_ptr<IEntity> e) {
-    Position pos = e->get_position();
+    PositionT pos = e->get_position();
     logger_->debug("Adding entity to grid world at position (" + std::to_string(pos.x) + "," + std::to_string(pos.y) +
                    ")");
     if (!is_free(pos)) {
@@ -110,7 +110,7 @@ bool GridWorld::update_cycle() {
     return true;
 }
 
-double GridWorld::get_feromone_magnitude(Position p, FeromoneT type) const {
+double GridWorld::get_feromone_magnitude(PositionT p, FeromoneT type) const {
     if (!in_bounds(p.x, p.y)) {
         return 0.0;
     }
@@ -132,7 +132,7 @@ double GridWorld::get_feromone_magnitude(Position p, FeromoneT type) const {
     }
 }
 
-void GridWorld::set_feromone(Position p, FeromoneT type, int value) {
+void GridWorld::set_feromone(PositionT p, FeromoneT type, int value) {
     if (!in_bounds(p.x, p.y)) {
         logger_->warning("Cannot set feromone - position out of bounds!");
         return;
