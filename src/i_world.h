@@ -98,4 +98,15 @@ class IWorld {
     /// @param    value The value to set
     ///----------------------------------------------------------------------
     virtual void set_feromone(PositionT p, FeromoneT type, int value) = 0;
+
+    ///----------------------------------------------------------------------
+    /// @brief      Get the strength of a specific feromone type at a given position
+    ///
+    /// @param      FeromoneT type of feromone
+    /// @param      pos Position to check
+    ///
+    /// @return     feromone strength at the given position
+    ///----------------------------------------------------------------------
+
+    [[nodiscard]] virtual int get_feromone_strength(FeromoneT type, PositionT pos) const = 0;
 };

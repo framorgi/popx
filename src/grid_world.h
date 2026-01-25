@@ -119,6 +119,16 @@ class GridWorld : public IWorld {
     ///----------------------------------------------------------------------
     void set_feromone(PositionT p, FeromoneT type, int value) override;
 
+    //--------------------------------------------------------------------------
+    /// @brief      Get the strength of a specific feromone type at a given position
+    ///
+    /// @param      FeromoneT type of feromone
+    /// @param      pos Position to check
+    ///
+    /// @return     feromone strength at the given position
+    //--------------------------------------------------------------------------
+    [[nodiscard]] int get_feromone_strength(FeromoneT type, PositionT pos) const override;
+
   private:
     ///----------------------------------------------------------------------
     /// @brief    Check if coordinates are within the bounds of the grid

@@ -258,3 +258,11 @@ void Pop::emit_feromone(FeromoneT type, int intensity) {
     }
     world->set_feromone(pos_, type, intensity);
 }
+[[nodiscard]] int Pop::get_feromone_strength(FeromoneT type, PositionT pos) const {
+    auto world = world_.lock();
+    if (!world) {
+        return 0; // World no longer exists
+    }
+    int strength = world->get_feromone_strength(type, pos);
+    return strength;
+}

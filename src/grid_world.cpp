@@ -140,3 +140,24 @@ void GridWorld::set_feromone(PositionT p, FeromoneT type, int value) {
     auto cell = cells_[index(p.x, p.y)];
     cell->set_feromone(type, value);
 }
+
+[[nodiscard]] int GridWorld::get_feromone_strength(FeromoneT type, PositionT pos) const {
+    if (!in_bounds(pos.x, pos.y)) {
+        return 0; // Out of bounds
+    }
+    auto cell = cells_[index(pos.x, pos.y)];
+    FeromoneMapT fm = cell->get_feromone_map();
+
+    switch (type) {
+        case FeromoneT::DANGER_FEROMONE:
+            return fm.at(FeromoneT::DANGER_FEROMONE);
+        case FeromoneT::FOOD_FEROMONE:
+            return fm.at(FeromoneT::FOOD_FEROMONE);
+        case FeromoneT::MATE_FEROMONE:
+            return fm.at(FeromoneT::MATE_FEROMONE);
+        case FeromoneT::HOME_FEROMONE:
+            return fm.at(FeromoneT::HOME_FEROMONE);
+        default:
+            return 0; // Other feromone types not implemented
+    }
+}

@@ -148,4 +148,12 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @param intensity The intensity of the feromone to emit.
     ///---------------------------------------------------------------------------
     void emit_feromone(FeromoneT type, int intensity);
+
+    ///---------------------------------------------------------------------------
+    /// @brief Gets the strength of a specific feromone type at a given position.
+    /// @param type The type of feromone.
+    /// @param pos The position to check for feromone strength.
+    /// @return The strength of the specified feromone type at the given position.
+    ///---------------------------------------------------------------------------
+    [[nodiscard]] int get_feromone_strength(FeromoneT type, PositionT pos) const;
 };
