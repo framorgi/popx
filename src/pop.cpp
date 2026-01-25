@@ -181,7 +181,7 @@ void Pop::act() {
             break;
         case Action::EMIT_SIGNAL: // W
             // TODO: Implement emit signal
-            emit_feromone(Feromone_t::DANGER_FEROMONE, 100);
+            emit_feromone(FeromoneT::DANGER_FEROMONE, 100);
             break;
         case Action::BURN_CALORIES: // W
             // TODO: Implement burn calories
@@ -246,7 +246,7 @@ void Pop::update_last_direction(Position new_pos, Position old_pos) {
     last_direction_.y = new_pos.y - old_pos.y;
 }
 
-void Pop::emit_feromone(Feromone_t type, int intensity) {
+void Pop::emit_feromone(FeromoneT type, int intensity) {
     auto world = world_.lock();
     if (!world) {
         return; // World no longer exists

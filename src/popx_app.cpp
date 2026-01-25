@@ -19,7 +19,7 @@ void PopXApp::run() {
     // // Accumulator take trace of elapsed time between frames.
     // If too much time has elapsed, we may need to perform multiple simulation updates to catch up. If less time has
     // elapsed, we might skip simulation updates to maintain a consistent frame rate.
-    const sf::Time dt = sf::milliseconds(10); // Fixed time step of 10 milliseconds (50 updates per second)
+    const sf::Time dt = sf::milliseconds(10); // Fixed time step of 10 milliseconds (200 updates per second)
 
     sf::Clock clock;
     sf::Time accumulator = sf::Time::Zero;
@@ -41,8 +41,8 @@ void PopXApp::run() {
         // fixed fps cap-- //TODO: adjust or remove- Vsync not working properly on WSL, maybe this can be removed once
         // enabled vsync
         auto frame_time = clock.getElapsedTime();
-        if (frame_time < sf::milliseconds(5))
-            sf::sleep(sf::milliseconds(5) - frame_time);
+        if (frame_time < sf::milliseconds(16))
+            sf::sleep(sf::milliseconds(16) - frame_time);
 
         // std::this_thread::sleep_for(std::chrono::milliseconds(1)); // Approx ~60 FPS
     }

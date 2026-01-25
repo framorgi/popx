@@ -9,17 +9,17 @@ using Position = struct {
     int y;
 };
 
-constexpr unsigned water_threshold = 100;
-constexpr unsigned max_h2o = 1000;
-constexpr unsigned max_c6h12o6 = 500;
-constexpr unsigned max_lipids = 300;
-constexpr unsigned max_o2 = 1000;
-constexpr unsigned max_co2 = 1000;
-constexpr unsigned max_n2 = 2000;
-constexpr unsigned max_caco3 = 500;
-constexpr unsigned max_feromones = 100;
+constexpr unsigned WaterThreshold = 100;
+constexpr unsigned MaxH2o = 1000;
+constexpr unsigned MaxC6h12o6 = 500;
+constexpr unsigned MaxLipids = 300;
+constexpr unsigned MaxO2 = 1000;
+constexpr unsigned MaxCo2 = 1000;
+constexpr unsigned MaxN2 = 2000;
+constexpr unsigned MaxCaco3 = 500;
+constexpr unsigned MaxFeromones = 100;
 
-using Organics = struct {
+using OrganicsT = struct {
     unsigned c6h12o6;
     unsigned lipids; // can be transformed into energy and reduce temperature exchange factor [0.01 - 0.5]
     unsigned o2;
@@ -29,7 +29,9 @@ using Organics = struct {
     unsigned caco3;
 };
 
-using Feromone_t = enum { FOOD_FEROMONE, DANGER_FEROMONE, MATE_FEROMONE, HOME_FEROMONE };
-using FeromoneMap = std::map<Feromone_t, int>;
+using FeromoneT = enum { FOOD_FEROMONE, DANGER_FEROMONE, MATE_FEROMONE, HOME_FEROMONE };
+using FeromoneMapT = std::map<FeromoneT, int>;
+
+constexpr double FeromoneDecayRate = 0.99; // Decay rate per update
 
 enum class Direction { N, NE, E, SE, S, SW, W, NW };

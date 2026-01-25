@@ -9,13 +9,13 @@ Cell::Cell(std::weak_ptr<IEntity> occupant)
 
 {
     // Initialize organics to zero
-    organics_ = Organics{0, 0, 0, 0, 0, 0, 0};
+    organics_ = OrganicsT{0, 0, 0, 0, 0, 0, 0};
     RandomUtility rand_util;
     // Initialize feromones to zero
-    feromones_[Feromone_t::FOOD_FEROMONE] = 0;
-    feromones_[Feromone_t::DANGER_FEROMONE] = 0;
-    feromones_[Feromone_t::MATE_FEROMONE] = 0;
-    feromones_[Feromone_t::HOME_FEROMONE] = 0;
+    feromones_[FeromoneT::FOOD_FEROMONE] = 0;
+    feromones_[FeromoneT::DANGER_FEROMONE] = 0;
+    feromones_[FeromoneT::MATE_FEROMONE] = 0;
+    feromones_[FeromoneT::HOME_FEROMONE] = 0;
 }
 
 void Cell::set_occupant(std::weak_ptr<IEntity> occupant) {
@@ -47,18 +47,18 @@ void Cell::set_humidity(double humidity) {
     return static_cast<double>(humidity_);
 }
 
-void Cell::set_feromone(Feromone_t type, int value) {
+void Cell::set_feromone(FeromoneT type, int value) {
     feromones_[type] += value;
 
     if (feromones_[type] < 0) {
         feromones_[type] = 0;
     }
-    if (feromones_[type] > (max_feromones)) {
-        feromones_[type] = (max_feromones);
+    if (feromones_[type] > (MaxFeromones)) {
+        feromones_[type] = (MaxFeromones);
     }
 }
 
-[[nodiscard]] FeromoneMap Cell::get_feromone_map() const {
+[[nodiscard]] FeromoneMapT Cell::get_feromone_map() const {
     return feromones_;
 }
 
@@ -70,18 +70,17 @@ RenderState Cell::get_render_state() const {
     state.payload = CellVisualData{temperature_,
                                    elevation_,
                                    humidity_,
-                                   organics_.h2o > water_threshold, // water presence based on threshold
-                                   static_cast<double>(feromones_.at(Feromone_t::DANGER_FEROMONE)) / max_feromones,
-                                   static_cast<double>(feromones_.at(Feromone_t::FOOD_FEROMONE)) / max_feromones};
+                                   organics_.h2o > WaterThreshold, // water presence based on threshold
+                                   static_cast<double>(feromones_.at(FeromoneT::DANGER_FEROMONE)) / MaxFeromones,
+                                   static_cast<double>(feromones_.at(FeromoneT::FOOD_FEROMONE)) / MaxFeromones};
     state.shape = RenderShape::Circle; //  shape
 
     return state;
 }
 
 void Cell::decay_feromones() {
-    const double decay_rate = 0.97; // Decay rate per update
     for (auto& [type, value] : feromones_) {
-        value = static_cast<int>(value * decay_rate);
+        value = static_cast<int>(value * FeromoneDecayRate);
         if (value < 1) {
             value = 0; // Threshold to zero
         }

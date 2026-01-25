@@ -89,7 +89,7 @@ class IWorld {
     /// @param type The type of feromone
     /// @return The feromone level at the specified position
     ///----------------------------------------------------------------------
-    [[nodiscard]] virtual double get_feromone_magnitude(Position p, Feromone_t type) const = 0;
+    [[nodiscard]] virtual double get_feromone_magnitude(Position p, FeromoneT type) const = 0;
 
     ///----------------------------------------------------------------------
     /// @brief    Set the feromone level of a specific type at a given position
@@ -97,5 +97,5 @@ class IWorld {
     /// @param    type The type of feromone
     /// @param    value The value to set
     ///----------------------------------------------------------------------
-    virtual void set_feromone(Position p, Feromone_t type, int value) = 0;
+    virtual void set_feromone(Position p, FeromoneT type, int value) = 0;
 };

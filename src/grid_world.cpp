@@ -110,29 +110,29 @@ bool GridWorld::update_cycle() {
     return true;
 }
 
-double GridWorld::get_feromone_magnitude(Position p, Feromone_t type) const {
+double GridWorld::get_feromone_magnitude(Position p, FeromoneT type) const {
     if (!in_bounds(p.x, p.y)) {
         return 0.0;
     }
     auto cell = cells_[index(p.x, p.y)];
-    FeromoneMap fm = cell->get_feromone_map();
+    FeromoneMapT fm = cell->get_feromone_map();
 
     switch (type) {
-        case Feromone_t::DANGER_FEROMONE:
-            return static_cast<double>(fm.at(Feromone_t::DANGER_FEROMONE)) / max_feromones;
-        case Feromone_t::FOOD_FEROMONE:
-            return static_cast<double>(fm.at(Feromone_t::FOOD_FEROMONE)) / max_feromones;
-        case Feromone_t::MATE_FEROMONE:
-            return static_cast<double>(fm.at(Feromone_t::MATE_FEROMONE)) / max_feromones;
+        case FeromoneT::DANGER_FEROMONE:
+            return static_cast<double>(fm.at(FeromoneT::DANGER_FEROMONE)) / MaxFeromones;
+        case FeromoneT::FOOD_FEROMONE:
+            return static_cast<double>(fm.at(FeromoneT::FOOD_FEROMONE)) / MaxFeromones;
+        case FeromoneT::MATE_FEROMONE:
+            return static_cast<double>(fm.at(FeromoneT::MATE_FEROMONE)) / MaxFeromones;
 
-        case Feromone_t::HOME_FEROMONE:
-            return static_cast<double>(fm.at(Feromone_t::HOME_FEROMONE)) / max_feromones;
+        case FeromoneT::HOME_FEROMONE:
+            return static_cast<double>(fm.at(FeromoneT::HOME_FEROMONE)) / MaxFeromones;
         default:
             return 0.0; // Other feromone types not implemented in visual data
     }
 }
 
-void GridWorld::set_feromone(Position p, Feromone_t type, int value) {
+void GridWorld::set_feromone(Position p, FeromoneT type, int value) {
     if (!in_bounds(p.x, p.y)) {
         logger_->warning("Cannot set feromone - position out of bounds!");
         return;

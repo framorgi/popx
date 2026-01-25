@@ -147,5 +147,5 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @param type The type of feromone to emit.
     /// @param intensity The intensity of the feromone to emit.
     ///---------------------------------------------------------------------------
-    void emit_feromone(Feromone_t type, int intensity);
+    void emit_feromone(FeromoneT type, int intensity);
 };

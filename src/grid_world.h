@@ -109,7 +109,7 @@ class GridWorld : public IWorld {
     /// @param type The type of feromone
     /// @return The feromone level at the specified position
     ///----------------------------------------------------------------------
-    [[nodiscard]] double get_feromone_magnitude(Position p, Feromone_t type) const override;
+    [[nodiscard]] double get_feromone_magnitude(Position p, FeromoneT type) const override;
 
     ///----------------------------------------------------------------------
     /// @brief    Set the feromone level of a specific type at a given position
@@ -117,7 +117,7 @@ class GridWorld : public IWorld {
     /// @param    type The type of feromone
     /// @param    value The value to set
     ///----------------------------------------------------------------------
-    void set_feromone(Position p, Feromone_t type, int value) override;
+    void set_feromone(Position p, FeromoneT type, int value) override;
 
   private:
     ///----------------------------------------------------------------------

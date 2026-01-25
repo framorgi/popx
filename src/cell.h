@@ -32,9 +32,9 @@ class Cell : public ICell {
 
     [[nodiscard]] RenderState get_render_state() const override;
 
-    void set_feromone(Feromone_t type, int value) override;
+    void set_feromone(FeromoneT type, int value) override;
 
-    [[nodiscard]] FeromoneMap get_feromone_map() const override;
+    [[nodiscard]] FeromoneMapT get_feromone_map() const override;
 
     void update() override;
 
@@ -69,12 +69,12 @@ class Cell : public ICell {
     ///----------------------------------------------
     // Organic compounds present in the cell
     ///----------------------------------------------
-    Organics organics_;
+    OrganicsT organics_;
 
     ///----------------------------------------------
     // Feromones present in the cell
     ///----------------------------------------------
-    FeromoneMap feromones_;
+    FeromoneMapT feromones_;
 
     ///----------------------------------------------
     // Cell state attributes
