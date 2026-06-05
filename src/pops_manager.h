@@ -32,4 +32,8 @@ class PopsManager : public IAgentsManager {
     /// Rotates the buckets to cycle agent states
     ///--------------------------------------------------------------------------
     void rotate_buckets();
+    ///--------------------------------------------------------------------------
+    /// @brief Attempts to spawn an offspring of parent into an adjacent free cell.
+    ///--------------------------------------------------------------------------
+    void try_reproduce(std::shared_ptr<Pop>& parent);
 };

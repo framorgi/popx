@@ -61,6 +61,11 @@ class SfmlGraphicEngine : public IGraphicEngine {
     sf::VertexArray quad_vertices_;
 
     ///--------------------------------------------------------------------------
+    /// @brief    Persistent vertex array for drawing entity triangles
+    ///--------------------------------------------------------------------------
+    sf::VertexArray triangle_vertices_;
+
+    ///--------------------------------------------------------------------------
     /// @brief    Flag indicating if the engine has been initialized and the map buffer created
     ///--------------------------------------------------------------------------
     bool initialized_ = false;

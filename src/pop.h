@@ -32,6 +32,10 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @param logger Shared pointer to a logger for logging events and errors.
     ///----------------------------------------------------------------------------
     Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config);
+    ///----------------------------------------------------------------------------
+    /// @brief Constructor for offspring: uses a pre-built genome instead of generating a random one.
+    ///----------------------------------------------------------------------------
+    Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config, Genome genome);
 
     /// @brief Serialises brain weights to JSON with the given generation stamp.
     void serialize_brain(unsigned generation) const;
@@ -87,6 +91,26 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     ///---------------------------------------------------------------------------
     void despawn() override;
 
+    ///----------------------------------------------------------------------------
+    /// @brief Returns true if this Pop satisfies all conditions to reproduce this cycle.
+    ///----------------------------------------------------------------------------
+    [[nodiscard]] bool wants_to_reproduce() const;
+
+    ///----------------------------------------------------------------------------
+    /// @brief Creates a (possibly mutated) copy of this genome for an offspring.
+    ///----------------------------------------------------------------------------
+    [[nodiscard]] Genome make_offspring_genome() const;
+
+    ///----------------------------------------------------------------------------
+    /// @brief Halves the parent's internal reserves and writes the donated amounts to the out params.
+    ///----------------------------------------------------------------------------
+    void donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_carbon);
+
+    ///----------------------------------------------------------------------------
+    /// @brief Sets internal reserves directly (used to initialise offspring with parent donation).
+    ///----------------------------------------------------------------------------
+    void set_resources(unsigned glucose, unsigned water, unsigned calcium, unsigned carbon);
+
     ///---------------------------------------------------------------------------
     /// @brief Gets the render state of the Pop for visualization.
     /// @return The render state of the Pop.
@@ -101,7 +125,7 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// ---------------------------------------------------------------------------
     /// @brief Energy level of the Pop entity.
     /// ---------------------------------------------------------------------------
-    uint16_t energy_;
+    float energy_;
 
     /// ---------------------------------------------------------------------------
     /// @brief Genome representing the genetic makeup of the Pop.
@@ -186,6 +210,14 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Internal calcium reserve.
     /// ---------------------------------------------------------------------------
     unsigned calcium_ = 0;
+    /// ---------------------------------------------------------------------------
+    /// @brief Internal carbon reserve  .
+    /// ---------------------------------------------------------------------------
+    unsigned carbon_ = 0;
+    /// ---------------------------------------------------------------------------
+    /// @brief Energy cost incurred by the Pop's actions in the current cycle.
+    /// ---------------------------------------------------------------------------
+    float energy_cost_ = 0.0f;
     ///---------------------------------------------------------------------------
     /// @brief Updates the last movement direction based on new and old positions.
     /// @param new_pos The new position after movement.
@@ -220,4 +252,9 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @return     elevation at the given position
     ///----------------------------------------------------------------------
     [[nodiscard]] double get_elevation(PositionT pos) const;
+
+    ///----------------------------------------------------------------------
+    /// @brief      Update the physiology of the Pop based on energy cost of actions
+    ///----------------------------------------------------------------------
+    void update_physiology();
 };

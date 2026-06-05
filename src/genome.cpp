@@ -26,6 +26,18 @@ const std::vector<Gene>& Genome ::get_genes() const {
     return genes_;
 }
 
+Genome Genome::mutated(double point_mutation_rate) const {
+    Genome offspring = *this;
+    RandomUtility rand;
+    for (auto& gene : offspring.genes_) {
+        if (rand.rnd_double(0.0, 1.0) < point_mutation_rate) {
+            gene = Gene{};
+        }
+    }
+    offspring.compute_genetic_color_value();
+    return offspring;
+}
+
 void Genome::compute_genetic_color_value() {
     uint8_t r = 0;
     uint8_t g = 0;

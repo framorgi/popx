@@ -2,8 +2,7 @@
 #pragma once
 #include <map>
 
-constexpr int MapSize = 130; // Number of cells along one side of the square map
-constexpr int MaxEntities = 100;
+constexpr int MapSize = 100; // Number of cells along one side of the square map
 
 constexpr unsigned MaxAge = 1000;
 using PositionT = struct {
@@ -13,7 +12,7 @@ using PositionT = struct {
 
 constexpr unsigned WaterThreshold = 100;
 constexpr unsigned MaxH2o = 1000;
-constexpr unsigned MaxC6h12o6 = 500;
+constexpr unsigned MaxC6h12o6 = 50;
 constexpr unsigned MaxLipids = 300;
 constexpr unsigned MaxO2 = 1000;
 constexpr unsigned MaxCo2 = 1000;

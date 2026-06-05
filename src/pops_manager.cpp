@@ -1,5 +1,6 @@
 #include "pops_manager.h"
 
+#include <algorithm>
 #include <utility>
 
 PopsManager::PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger,
@@ -73,15 +74,79 @@ void PopsManager::update_cycle() {
         }
     }
 
-    // for (auto& pop : pops_) {
-    //     if (pop->is_alive()) {
-    //         pop->update();
-    //     } else {
-    //         // TODO: Handle dead agents (remove from vector, cleanup resources)
-    //     }
-    // }
+    // Update all agents; those that die here will be despawned below
+    for (auto& pop : pops_) {
+        if (pop->is_alive()) {
+            pop->update();
+            if (!pop->is_alive()) {
+                logger_->info("An agent has died at position (" + std::to_string(pop->get_position().x) + ", " +
+                              std::to_string(pop->get_position().y) + ").");
+            }
+        }
+    }
+
+    // Despawn dead agents: remove reference from world, then erase from all containers
+    auto is_dead = [](const std::shared_ptr<Pop>& p) { return !p->is_alive(); };
+
+    for (auto& pop : pops_) {
+        if (!pop->is_alive()) {
+            world_->remove_entity(pop);
+        }
+    }
+
+    auto erase_dead = [&](std::vector<std::shared_ptr<Pop>>& bucket) {
+        bucket.erase(std::remove_if(bucket.begin(), bucket.end(), is_dead), bucket.end());
+    };
+
+    erase_dead(sense_bucket_);
+    erase_dead(think_bucket_);
+    erase_dead(act_bucket_);
+    erase_dead(pops_);
+
+    // Reproduction phase: snapshot parents ready to reproduce, then spawn offspring
+    std::vector<std::shared_ptr<Pop>> reproducers;
+    for (auto& pop : pops_) {
+        if (pop->wants_to_reproduce()) {
+            reproducers.push_back(pop);
+        }
+    }
+    for (auto& parent : reproducers) {
+        try_reproduce(parent);
+    }
 
     rotate_buckets();
+}
+
+void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
+    auto child = std::make_shared<Pop>(world_, logger_, config_, parent->make_offspring_genome());
+
+    // Try all 8 adjacent cells (cardinal first, then diagonal)
+    const int dx[] = {0, 1, 0, -1, 1, 1, -1, -1};
+    const int dy[] = {-1, 0, 1, 0, -1, 1, 1, -1};
+    const PositionT pp = parent->get_position();
+
+    for (int i = 0; i < 8; ++i) {
+        PositionT candidate{pp.x + dx[i], pp.y + dy[i]};
+        if (child->try_spawn(candidate) && (act_bucket_.size() + think_bucket_.size() + sense_bucket_.size() < 100)) {
+            unsigned g = 0, w = 0, ca = 0, co = 0;
+            parent->donate_resources(g, w, ca, co);
+            child->set_resources(g, w, ca, co);
+
+            pops_.push_back(child);
+            const int phase = rand() % 3;
+            if (phase == 0)
+                sense_bucket_.push_back(child);
+            else if (phase == 1)
+                think_bucket_.push_back(child);
+            else
+                act_bucket_.push_back(child);
+
+            logger_->info("Offspring spawned at (" + std::to_string(candidate.x) + "," + std::to_string(candidate.y) +
+                          ") from parent at (" + std::to_string(pp.x) + "," + std::to_string(pp.y) + ").");
+            return;
+        }
+    }
+    // No free adjacent cell this cycle — parent retains resources, will retry next cycle.
 }
 
 void PopsManager::rotate_buckets() {

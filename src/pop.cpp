@@ -13,11 +13,20 @@
 namespace {
 std::atomic<unsigned> s_pop_counter{0};
 }
+constexpr float move_cost = 0.3f;
 
 Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config)
     : genome_(Genome(RandomUtility().rnd_int(static_cast<int>(config->get_genome_min_length()),
                                              static_cast<int>(config->get_genome_max_length())))),
       world_(std::move(world)), logger_(std::move(logger)), config_(std::move(config)),
+      brain_(std::make_unique<Brain>(config_)), pos_{0, 0}, age_(0), energy_(100.0f), last_direction_{0, 0},
+      random_util_(std::make_shared<RandomUtility>()) {
+    pop_id_ = "pop_" + std::to_string(s_pop_counter++);
+    init();
+}
+
+Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config, Genome genome)
+    : genome_(std::move(genome)), world_(std::move(world)), logger_(std::move(logger)), config_(std::move(config)),
       brain_(std::make_unique<Brain>(config_)), pos_{0, 0}, age_(0), energy_(100.0f), last_direction_{0, 0},
       random_util_(std::make_shared<RandomUtility>()) {
     pop_id_ = "pop_" + std::to_string(s_pop_counter++);
@@ -29,7 +38,7 @@ void Pop::init() {
     water_ = 100;
     sensor_values_.assign(brain_->get_size_s(), 0.0f);
     brain_->wire(genome_);
-    brain_->serialize(pop_id_, 0);
+    // brain_->serialize(pop_id_, 0);
 }
 
 void Pop::die() {
@@ -48,8 +57,9 @@ bool Pop::try_spawn(PositionT p) {
 
 void Pop::update() {
     age_++;
-    // energy_ -= 0.01f; // Example energy consumption
-    if (energy_ <= 0) {
+    update_physiology();
+
+    if (energy_ <= 0 || age_ > 20000) {
         die();
     }
 }
@@ -64,6 +74,8 @@ void Pop::despawn() {
 
 void Pop::sense() {
     current_state_ = State::SENSE;
+    // reset energy cost for this cycle
+    energy_cost_ = 0;
 
     auto world = world_.lock();
     if (!world)
@@ -268,14 +280,15 @@ void Pop::think() {
 }
 
 void Pop::serialize_brain(unsigned generation) const {
-    brain_->serialize(pop_id_, generation);
+    // brain_->serialize(pop_id_, generation);
 }
 
 void Pop::act() {
     current_state_ = State::ACT;
 
-    if (last_action_ < 0 || last_action_ > static_cast<int>(Action::KILL_FORWARD))
+    if (last_action_ < 0 || last_action_ > static_cast<int>(Action::KILL_FORWARD)) {
         return;
+    }
 
     PositionT p = pos_;
     auto world = world_.lock();
@@ -286,37 +299,45 @@ void Pop::act() {
             p.x += last_direction_.x;
             p.y += last_direction_.y;
             try_move(p);
+            energy_cost_ += move_cost;
             break;
         case Action::MOVE_LEFT:
             p.x -= last_direction_.y;
             p.y += last_direction_.x;
             try_move(p);
+            energy_cost_ += move_cost;
             break;
         case Action::MOVE_RIGHT:
             p.x += last_direction_.y;
             p.y -= last_direction_.x;
             try_move(p);
+            energy_cost_ += move_cost;
             break;
         case Action::MOVE_RANDOM:
             p.x += random_util_->rnd_int(-1, 1);
             p.y += random_util_->rnd_int(-1, 1);
             try_move(p);
+            energy_cost_ += move_cost;
             break;
         case Action::MOVE_EAST:
             p.x += 1;
             try_move(p);
+            energy_cost_ += move_cost;
             break;
         case Action::MOVE_WEST:
             p.x -= 1;
             try_move(p);
+            energy_cost_ += move_cost;
             break;
         case Action::MOVE_NORTH:
             p.y -= 1;
             try_move(p);
+            energy_cost_ += move_cost;
             break;
         case Action::MOVE_SOUTH:
             p.y += 1;
             try_move(p);
+            energy_cost_ += move_cost;
             break;
         // ── feromone signalling ─────────────────────────────────────────────
         case Action::EMIT_SIGNAL_FOOD:
@@ -333,12 +354,14 @@ void Pop::act() {
             break;
         // ── resource acquisition ────────────────────────────────────────────
         case Action::GET_GLUCOSE:
-            if (world)
+            if (world) {
                 glucose_ += world->get_cell(pos_)->take_glucose(2);
+            }
             break;
         case Action::GET_H2O:
-            if (world)
+            if (world) {
                 water_ += world->get_cell(pos_)->take_water(2);
+            }
             break;
         case Action::GET_CALCIUM:
             if (world)
@@ -423,6 +446,32 @@ RenderState Pop::get_render_state() const {
     return state;
 }
 
+bool Pop::wants_to_reproduce() const {
+    return alive_ && energy_ > 75.0f && age_ > 100 && glucose_ > 25;
+}
+
+Genome Pop::make_offspring_genome() const {
+    return genome_.mutated(config_->get_point_mutation_rate());
+}
+
+void Pop::donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_carbon) {
+    out_glucose = glucose_ / 2;
+    out_water = water_ / 2;
+    out_calcium = calcium_ / 2;
+    out_carbon = carbon_ / 2;
+    glucose_ -= out_glucose;
+    water_ -= out_water;
+    calcium_ -= out_calcium;
+    carbon_ -= out_carbon;
+}
+
+void Pop::set_resources(unsigned glucose, unsigned water, unsigned calcium, unsigned carbon) {
+    glucose_ = glucose;
+    water_ = water;
+    calcium_ = calcium;
+    carbon_ = carbon;
+}
+
 void Pop::update_last_direction(PositionT new_pos, PositionT old_pos) {
     last_direction_.x = new_pos.x - old_pos.x;
     last_direction_.y = new_pos.y - old_pos.y;
@@ -442,4 +491,22 @@ void Pop::emit_feromone(FeromoneT type, int intensity) {
     }
     int strength = world->get_feromone_strength(type, pos);
     return strength;
+}
+
+void Pop::update_physiology() {
+    auto world = world_.lock();
+    if (world) {
+        glucose_ += world->get_cell(pos_)->take_glucose(1);
+    }
+    /// Metabolism
+    energy_ -= 0.02f;        // Basal metabolic rate
+    energy_ -= energy_cost_; // Additional cost from actions
+    // chances of converting reserves to energy
+    if (glucose_ > 0) {
+        RandomUtility rand;
+        if (rand.rnd_double(0.0, 1.0) < 0.5) {
+            energy_ += 0.1f; // Energy gain from glucose
+            glucose_ -= 1;   // Consume glucose
+        }
+    }
 }

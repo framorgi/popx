@@ -4,7 +4,7 @@ SfmlGraphicEngine::SfmlGraphicEngine(std::shared_ptr<ILogger> logger) : logger_(
 
 void SfmlGraphicEngine::create_window(std::string title, int width, int height) {
     window_.create(sf::VideoMode(width, height), title);
-    window_.setVerticalSyncEnabled(true);
+    window_.setFramerateLimit(30);
 }
 
 void SfmlGraphicEngine::clear(const Color& color) {
@@ -13,7 +13,6 @@ void SfmlGraphicEngine::clear(const Color& color) {
 
 void SfmlGraphicEngine::display() {
     window_.display();
-    sf::sleep(sf::milliseconds(1));
 }
 bool SfmlGraphicEngine::is_open() const {
     return window_.isOpen();
@@ -80,15 +79,16 @@ void SfmlGraphicEngine::draw_triangles(const std::vector<EntityVertex>& vertices
     if (vertices.empty()) {
         return;
     }
-    sf::VertexArray vertex_array(sf::Triangles, vertices.size());
+    triangle_vertices_.setPrimitiveType(sf::Triangles);
+    triangle_vertices_.resize(vertices.size());
 
     for (std::size_t i = 0; i < vertices.size(); ++i) {
         const EntityVertex& ev = vertices[i];
-        vertex_array[i].position = sf::Vector2f(ev.pos.x, ev.pos.y);
-        vertex_array[i].color = sf::Color(ev.color.r, ev.color.g, ev.color.b, ev.color.a);
+        triangle_vertices_[i].position = sf::Vector2f(ev.pos.x, ev.pos.y);
+        triangle_vertices_[i].color = sf::Color(ev.color.r, ev.color.g, ev.color.b, ev.color.a);
     }
 
-    window_.draw(vertex_array);
+    window_.draw(triangle_vertices_);
 }
 void SfmlGraphicEngine::draw_quads(const std::vector<Quad>& quads) {
     if (quads.empty()) {

@@ -37,6 +37,12 @@ class Genome {
     ///----------------------------------------------------------------------------
     [[nodiscard]] const std::vector<Gene>& get_genes() const;
 
+    ///----------------------------------------------------------------------------
+    /// @brief Returns a copy of this genome with random point mutations applied.
+    /// @param point_mutation_rate Probability [0,1] of each gene being replaced by a new random gene.
+    ///----------------------------------------------------------------------------
+    [[nodiscard]] Genome mutated(double point_mutation_rate) const;
+
   private:
     ///----------------------------------------------------------------------------
     /// @brief          Computes the genetic color value based on the genes.
