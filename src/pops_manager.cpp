@@ -1,6 +1,7 @@
 #include "pops_manager.h"
 
 #include <algorithm>
+#include <execution>
 #include <utility>
 
 PopsManager::PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger,
@@ -53,21 +54,21 @@ bool PopsManager::spawn_population() {
 }
 
 void PopsManager::update_cycle() {
-    // 1. SENSE
-    for (auto& pop : sense_bucket_) {
-        if (pop->is_alive()) {
-            pop->sense();
-        }
-    }
+    // 1. SENSE — read-only on world, writes only per-agent sensor_values_ → safe to parallelise
+    std::for_each(std::execution::par_unseq, sense_bucket_.begin(), sense_bucket_.end(),
+                  [](const std::shared_ptr<Pop>& pop) {
+                      if (pop->is_alive())
+                          pop->sense();
+                  });
 
-    // 2. THINK
-    for (auto& pop : think_bucket_) {
-        if (pop->is_alive()) {
-            pop->think();
-        }
-    }
+    // 2. THINK — pure local brain computation, no shared state → safe to parallelise
+    std::for_each(std::execution::par_unseq, think_bucket_.begin(), think_bucket_.end(),
+                  [](const std::shared_ptr<Pop>& pop) {
+                      if (pop->is_alive())
+                          pop->think();
+                  });
 
-    // 3. ACT
+    // 3. ACT — writes world (move, feromones, kill) → must remain sequential
     for (auto& pop : act_bucket_) {
         if (pop->is_alive()) {
             pop->act();
