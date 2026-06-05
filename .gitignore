@@ -63,3 +63,10 @@ desktop.ini
 .DS_Store
 .AppleDouble
 .LSOverride
+
+
+#data output
+/data_out/*
+
+#pyton pycache__pycache__/
+*.pyc

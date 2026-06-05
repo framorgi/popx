@@ -4,8 +4,8 @@
 
 #include <cmath>
 
-Renderer::Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger)
-    : gfx_(std::move(gfx)), world_(std::move(world)), logger_(std::move(logger)) {}
+Renderer::Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world, std::shared_ptr<IConfig> config)
+    : gfx_(std::move(gfx)), world_(std::move(world)), config_(std::move(config)) {}
 
 void Renderer::init() {
     // TODO: Complete initialization (load resources, setup camera, configure rendering settings)
@@ -14,6 +14,7 @@ void Renderer::init() {
                         cell_render_size * world_->get_height());
     world_height_ = world_->get_height();
     world_width_ = world_->get_width();
+    population_ = static_cast<int>(config_->get_population());
     int total_size = world_width_ * world_height_;
     map_layer_.resize(total_size); // Preallocate buffer for the entire map
 
@@ -34,7 +35,7 @@ void Renderer::draw() {
     // clear entity buffer every frame for now. Entity size can change very quickly so we need to redraw them all but
     // this section can be optimized later
     entity_layer_.clear();
-    entity_layer_.reserve(MaxEntities * SEGMENTS * 3);
+    entity_layer_.reserve(static_cast<std::size_t>(population_) * SEGMENTS * 3);
 
     feromone_layer_.clear();
     feromone_layer_.reserve(world_width_ * world_height_ * SEGMENTS * 3); // assume 10% cells have feromones
@@ -119,12 +120,8 @@ void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
         Color temperature_color = evaluate_temperature_color(cell->get_temperature());
         // Determine ground color based on elevation
         double elevation = cell_data->elevation;
-        Color ground_color;
-        if (cell_data->water) {
-            ground_color = Color(0, 0, 255); // Blue for water cells
-        } else {
-            ground_color = evaluate_ground_color(elevation);
-        }
+        Color ground_color = evaluate_ground_color(elevation);
+
         // Blend temperature and ground colors and finally apoply highlighting based on elevation
         Color final_color = apply_highlighting(blend_colors(ground_color, temperature_color, 0.1), elevation);
 

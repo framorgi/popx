@@ -2,6 +2,8 @@
 #include "common.h"
 #include "genome.h"
 #include "i_agent.h"
+#include "i_brain.h"
+#include "i_config.h"
 #include "i_logger.h"
 #include "i_world.h"
 #include "neuron.h"
@@ -9,6 +11,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <type_traits>
 
 enum class State {
@@ -28,7 +31,10 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @param world Weak pointer to the world the Pop belongs to.
     /// @param logger Shared pointer to a logger for logging events and errors.
     ///----------------------------------------------------------------------------
-    Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger);
+    Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config);
+
+    /// @brief Serialises brain weights to JSON with the given generation stamp.
+    void serialize_brain(unsigned generation) const;
     ///---------------------------------------------------------------------------
     /// @brief Initializes the Pop entity (sets initial stats, behaviors, etc.).
     ///---------------------------------------------------------------------------
@@ -133,9 +139,53 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// ---------------------------------------------------------------------------
     std::shared_ptr<ILogger> logger_;
     /// ---------------------------------------------------------------------------
+    /// @brief Shared pointer to the simulation configuration.
+    /// ---------------------------------------------------------------------------
+    std::shared_ptr<IConfig> config_;
+    /// ---------------------------------------------------------------------------
+    /// @brief Neural network brain used for decision making.
+    /// ---------------------------------------------------------------------------
+    std::unique_ptr<IBrain> brain_;
+    /// ---------------------------------------------------------------------------
     /// @brief Shared pointer to a random utility for generating random numbers.
     /// ---------------------------------------------------------------------------
     std::shared_ptr<RandomUtility> random_util_;
+    /// ---------------------------------------------------------------------------
+    /// @brief Unique string identifier for this Pop instance.
+    /// ---------------------------------------------------------------------------
+    std::string pop_id_;
+    /// ---------------------------------------------------------------------------
+    /// @brief Last action index produced by the brain (-1 = no action).
+    /// ---------------------------------------------------------------------------
+    int last_action_ = -1;
+    /// ---------------------------------------------------------------------------
+    /// @brief Sensor values computed by sense(), consumed by think().
+    /// ---------------------------------------------------------------------------
+    std::vector<float> sensor_values_;
+    /// ---------------------------------------------------------------------------
+    /// @brief Directional scan radius in cells (used by POPULATION_DENSITY etc.).
+    /// ---------------------------------------------------------------------------
+    int probe_dist_ = 4;
+    /// ---------------------------------------------------------------------------
+    /// @brief Oscillator period in simulation steps.
+    /// ---------------------------------------------------------------------------
+    float osc_period_ = 100.0f;
+    /// ---------------------------------------------------------------------------
+    /// @brief Reactivity factor, modified by SET_RESPONSIVENESS.
+    /// ---------------------------------------------------------------------------
+    float responsiveness_ = 1.0f;
+    /// ---------------------------------------------------------------------------
+    /// @brief Internal glucose reserve.
+    /// ---------------------------------------------------------------------------
+    unsigned glucose_ = 100;
+    /// ---------------------------------------------------------------------------
+    /// @brief Internal water reserve.
+    /// ---------------------------------------------------------------------------
+    unsigned water_ = 100;
+    /// ---------------------------------------------------------------------------
+    /// @brief Internal calcium reserve.
+    /// ---------------------------------------------------------------------------
+    unsigned calcium_ = 0;
     ///---------------------------------------------------------------------------
     /// @brief Updates the last movement direction based on new and old positions.
     /// @param new_pos The new position after movement.

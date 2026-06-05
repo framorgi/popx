@@ -33,16 +33,16 @@ void Genome::compute_genetic_color_value() {
 
     // R: struttura
     r |= (genes_.size() & 1) << 7;
-    r |= (genes_.front().get_source_type() & 1) << 6;
-    r |= (genes_.back().get_source_type() & 1) << 5;
+    r |= (genes_.front().get_source_type() & 7) << 4;
+    r |= (genes_.back().get_source_type() & 7) << 1;
 
     // G: sink/source type
-    g |= (genes_.front().get_sink_type() & 1) << 7;
-    g |= (genes_.back().get_sink_type() & 1) << 6;
+    g |= (genes_.front().get_sink_type() & 7) << 5;
+    g |= (genes_.back().get_sink_type() & 7) << 2;
 
     // B: numeri
-    b |= (genes_.front().get_source_num() & 3) << 6; // usa più bit
-    b |= (genes_.back().get_sink_num() & 3) << 4;
+    b |= (genes_.front().get_source_num() & 15) << 4;
+    b |= (genes_.back().get_sink_num() & 15);
 
     genetic_color_value_ = {r, g, b};
 }

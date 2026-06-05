@@ -30,5 +30,14 @@ class ICell {
     virtual void set_feromone(FeromoneT type, int value) = 0;
     [[nodiscard]] virtual FeromoneMapT get_feromone_map() const = 0;
 
+    // --- Chemical resources ---------------------------------------------------
+    [[nodiscard]] virtual unsigned get_glucose() const = 0;
+    [[nodiscard]] virtual unsigned get_water() const = 0;
+    [[nodiscard]] virtual unsigned get_calcium() const = 0;
+    [[nodiscard]] virtual unsigned get_carbon() const = 0;
+    /// Remove up to `amount` units; returns the quantity actually taken.
+    virtual unsigned take_glucose(unsigned amount) = 0;
+    virtual unsigned take_water(unsigned amount) = 0;
+    virtual unsigned take_calcium(unsigned amount) = 0;
     virtual void update() = 0;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "color.h"
+#include "i_config.h"
 #include "i_entity.h"
 #include "i_graphic_engine.h"
 #include "i_logger.h"
@@ -42,7 +43,7 @@ class Renderer : public IRenderer {
     /// @param    world Shared pointer to the IWorld instance
     ///--------------------------------------------------------------------------
     // TODO: check if we need to pass the implemented objects or the interfaces
-    Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger);
+    Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world, std::shared_ptr<IConfig> config);
     ///--------------------------------------------------------------------------
     /// @brief    Initializes the renderer
     ///--------------------------------------------------------------------------
@@ -144,6 +145,7 @@ class Renderer : public IRenderer {
     /// @brief    Shared pointer to the world instance
     ///--------------------------------------------------------------------------
     std::shared_ptr<IWorld> world_;
+    std::shared_ptr<IConfig> config_;
 
     ///--------------------------------------------------------------------------
     /// @brief    Shared pointer to the logger instance
@@ -169,4 +171,5 @@ class Renderer : public IRenderer {
     /// @brief    Width and height of the world
     int world_height_ = 0;
     int world_width_ = 0;
+    int population_ = 0;
 };

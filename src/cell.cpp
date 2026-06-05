@@ -4,13 +4,23 @@
 #include "random_utility.h"
 #include "render_state.h"
 
+#include <algorithm>
+
 Cell::Cell(std::weak_ptr<IEntity> occupant)
     : occupant_(std::move(occupant)), temperature_(20.0f), humidity_(50.0f), elevation_(0.0f)
 
 {
-    // Initialize organics to zero
-    organics_ = OrganicsT{0, 0, 0, 0, 0, 0, 0};
+    // Initialize organics with random values
     RandomUtility rand_util;
+    organics_ = OrganicsT{
+        static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(MaxC6h12o6))),
+        static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(MaxLipids))),
+        0,
+        0,
+        static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(MaxH2o))),
+        0,
+        static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(MaxCaco3))),
+    };
     // Initialize feromones to zero
     feromones_[FeromoneT::FOOD_FEROMONE] = 0;
     feromones_[FeromoneT::DANGER_FEROMONE] = 0;
@@ -60,6 +70,37 @@ void Cell::set_feromone(FeromoneT type, int value) {
 
 [[nodiscard]] FeromoneMapT Cell::get_feromone_map() const {
     return feromones_;
+}
+
+unsigned Cell::get_glucose() const {
+    return organics_.c6h12o6;
+}
+unsigned Cell::get_water() const {
+    return organics_.h2o;
+}
+unsigned Cell::get_calcium() const {
+    return organics_.caco3;
+}
+unsigned Cell::get_carbon() const {
+    return organics_.lipids;
+}
+
+unsigned Cell::take_glucose(unsigned amount) {
+    const unsigned taken = std::min(amount, organics_.c6h12o6);
+    organics_.c6h12o6 -= taken;
+    return taken;
+}
+
+unsigned Cell::take_water(unsigned amount) {
+    const unsigned taken = std::min(amount, organics_.h2o);
+    organics_.h2o -= taken;
+    return taken;
+}
+
+unsigned Cell::take_calcium(unsigned amount) {
+    const unsigned taken = std::min(amount, organics_.caco3);
+    organics_.caco3 -= taken;
+    return taken;
 }
 
 RenderState Cell::get_render_state() const {

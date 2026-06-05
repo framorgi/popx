@@ -41,8 +41,8 @@ int16_t Gene::get_weight() const {
 void Gene::genetic_lottery() {
     RandomUtility rand;
     weight_ = rand.rnd_int(0, 0xffff) - 0x8000;
-    source_type_ = rand.rnd_int(0, 1);
-    source_num_ = rand.rnd_int(0, 127);
-    sink_type_ = rand.rnd_int(0, 1);
-    sink_num_ = rand.rnd_int(0, 127);
+    source_type_ = rand.rnd_int(0, 7);
+    source_num_ = rand.rnd_int(0, 31);
+    sink_type_ = rand.rnd_int(0, 7);
+    sink_num_ = rand.rnd_int(0, 31);
 }
