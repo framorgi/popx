@@ -91,6 +91,12 @@ unsigned Cell::take_glucose(unsigned amount) {
     return taken;
 }
 
+unsigned Cell::give_glucose(unsigned amount) {
+    const unsigned given = std::min(amount, organics_.c6h12o6);
+    organics_.c6h12o6 += given;
+    return given;
+}
+
 unsigned Cell::take_water(unsigned amount) {
     const unsigned taken = std::min(amount, organics_.h2o);
     organics_.h2o -= taken;
@@ -112,8 +118,8 @@ RenderState Cell::get_render_state() const {
                                    elevation_,
                                    humidity_,
                                    organics_.h2o > WaterThreshold, // water presence based on threshold
-                                   static_cast<double>(feromones_.at(FeromoneT::DANGER_FEROMONE)) / MaxFeromones,
-                                   static_cast<double>(feromones_.at(FeromoneT::FOOD_FEROMONE)) / MaxFeromones};
+                                   static_cast<double>(feromones_.at(FeromoneT::FOOD_FEROMONE)) / MaxFeromones,
+                                   static_cast<double>(feromones_.at(FeromoneT::DANGER_FEROMONE)) / MaxFeromones};
     state.shape = RenderShape::Circle; //  shape
 
     return state;

@@ -37,6 +37,7 @@ class ICell {
     [[nodiscard]] virtual unsigned get_carbon() const = 0;
     /// Remove up to `amount` units; returns the quantity actually taken.
     virtual unsigned take_glucose(unsigned amount) = 0;
+    virtual unsigned give_glucose(unsigned amount) = 0;
     virtual unsigned take_water(unsigned amount) = 0;
     virtual unsigned take_calcium(unsigned amount) = 0;
     virtual void update() = 0;

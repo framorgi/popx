@@ -4,7 +4,7 @@ SfmlGraphicEngine::SfmlGraphicEngine(std::shared_ptr<ILogger> logger) : logger_(
 
 void SfmlGraphicEngine::create_window(std::string title, int width, int height) {
     window_.create(sf::VideoMode(width, height), title);
-    window_.setFramerateLimit(30);
+    window_.setFramerateLimit(60);
 }
 
 void SfmlGraphicEngine::clear(const Color& color) {

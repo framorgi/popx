@@ -13,7 +13,7 @@
 namespace {
 std::atomic<unsigned> s_pop_counter{0};
 }
-constexpr float move_cost = 0.3f;
+constexpr float move_cost = 0.1f;
 
 Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config)
     : genome_(Genome(RandomUtility().rnd_int(static_cast<int>(config->get_genome_min_length()),
@@ -38,11 +38,16 @@ void Pop::init() {
     water_ = 100;
     sensor_values_.assign(brain_->get_size_s(), 0.0f);
     brain_->wire(genome_);
-    // brain_->serialize(pop_id_, 0);
+    brain_->serialize(pop_id_, 0);
 }
 
 void Pop::die() {
     // TODO: Implement death logic (cleanup, final actions, mark as dead)
+
+    auto world = world_.lock();
+    if (world) {
+        world->get_cell(pos_)->give_glucose(glucose_); // Return remaining glucose to the cell
+    }
     alive_ = false;
 }
 
@@ -59,7 +64,7 @@ void Pop::update() {
     age_++;
     update_physiology();
 
-    if (energy_ <= 0 || age_ > 20000) {
+    if (energy_ <= 0 || age_ > 200000) {
         die();
     }
 }
@@ -280,7 +285,7 @@ void Pop::think() {
 }
 
 void Pop::serialize_brain(unsigned generation) const {
-    // brain_->serialize(pop_id_, generation);
+    brain_->serialize(pop_id_, generation);
 }
 
 void Pop::act() {
@@ -341,16 +346,16 @@ void Pop::act() {
             break;
         // ── feromone signalling ─────────────────────────────────────────────
         case Action::EMIT_SIGNAL_FOOD:
-            emit_feromone(FeromoneT::FOOD_FEROMONE, 50);
+            emit_feromone(FeromoneT::FOOD_FEROMONE, RandomUtility().rnd_int(70, 100));
             break;
         case Action::EMIT_SIGNAL_DANGER:
-            emit_feromone(FeromoneT::DANGER_FEROMONE, 50);
+            emit_feromone(FeromoneT::DANGER_FEROMONE, RandomUtility().rnd_int(70, 100));
             break;
         case Action::EMIT_SIGNAL_MATE:
-            emit_feromone(FeromoneT::MATE_FEROMONE, 50);
+            emit_feromone(FeromoneT::MATE_FEROMONE, RandomUtility().rnd_int(70, 100));
             break;
         case Action::EMIT_SIGNAL_HOME:
-            emit_feromone(FeromoneT::HOME_FEROMONE, 50);
+            emit_feromone(FeromoneT::HOME_FEROMONE, RandomUtility().rnd_int(70, 100));
             break;
         // ── resource acquisition ────────────────────────────────────────────
         case Action::GET_GLUCOSE:
@@ -447,7 +452,7 @@ RenderState Pop::get_render_state() const {
 }
 
 bool Pop::wants_to_reproduce() const {
-    return alive_ && energy_ > 75.0f && age_ > 100 && glucose_ > 25;
+    return alive_ && energy_ > 30.0f && age_ > 50 && glucose_ > 10;
 }
 
 Genome Pop::make_offspring_genome() const {
@@ -482,6 +487,7 @@ void Pop::emit_feromone(FeromoneT type, int intensity) {
     if (!world) {
         return; // World no longer exists
     }
+
     world->set_feromone(pos_, type, intensity);
 }
 [[nodiscard]] int Pop::get_feromone_strength(FeromoneT type, PositionT pos) const {
@@ -496,7 +502,7 @@ void Pop::emit_feromone(FeromoneT type, int intensity) {
 void Pop::update_physiology() {
     auto world = world_.lock();
     if (world) {
-        glucose_ += world->get_cell(pos_)->take_glucose(1);
+        glucose_ += world->get_cell(pos_)->take_glucose(2);
     }
     /// Metabolism
     energy_ -= 0.02f;        // Basal metabolic rate
@@ -505,7 +511,7 @@ void Pop::update_physiology() {
     if (glucose_ > 0) {
         RandomUtility rand;
         if (rand.rnd_double(0.0, 1.0) < 0.5) {
-            energy_ += 0.1f; // Energy gain from glucose
+            energy_ += 0.2f; // Energy gain from glucose
             glucose_ -= 1;   // Consume glucose
         }
     }

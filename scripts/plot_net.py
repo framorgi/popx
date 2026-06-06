@@ -95,6 +95,7 @@ def _load_all(nnets_dir: str):
                 path,
                 data,
             ))
+            print(f"[plot_net] Loaded: {path}")
         except (json.JSONDecodeError, OSError):
             print(f"[plot_net] Skipping unreadable file: {path}")
 
@@ -196,98 +197,117 @@ def _draw(ax, fig, data: dict, index: int, total: int):
                 edge_colors.append((1.0, 0.0, 0.0, alpha) if v < 0
                                    else (0.0, 0.75, 0.0, alpha))
 
-    # ── keep only nodes that participate in at least one edge ──────────────
+    # ── prune disconnected SENSOR and OUTPUT nodes; keep ALL hidden nodes ────
+    # This ensures every hidden layer column is always rendered, even if silent.
     endpoints = {u for u, _ in G.edges()} | {v for _, v in G.edges()}
     for node in list(G.nodes()):
-        if node not in endpoints:
+        nd = G.nodes[node]
+        L  = nd["layer"]
+        if (L == 0 or L == num_hidden + 1) and node not in endpoints:
             G.remove_node(node)
 
-    if G.number_of_nodes() == 0:
+    # ── layout: fixed column per layer, each column spaced independently ────
+    # Build per-layer node lists; guarantee every layer 0..num_layers-1 exists.
+    by_layer: dict = {L: [] for L in range(num_layers)}
+    for node, nd in G.nodes(data=True):
+        by_layer[nd["layer"]].append((nd["idx"], node))
+    for items in by_layer.values():
+        items.sort()
+
+    # Each column distributes its own nodes evenly over y=[0,1].
+    # This avoids sensor/output nodes clustering at the top when hidden
+    # layers are much larger.
+    pos = {}
+    for L in range(num_layers):
+        items = by_layer[L]
+        n = len(items)
+        x = L / (num_layers - 1) if num_layers > 1 else 0.5
+        for rank, (_, node) in enumerate(items):
+            y = 1.0 - rank / (n - 1) if n > 1 else 0.5
+            pos[node] = (x, y)
+
+    if not pos:
         ax.text(0.5, 0.5, "No connections in this network",
                 ha="center", va="center", transform=ax.transAxes, fontsize=11)
         fig.suptitle(
             f"Network {index+1}/{total}   |   pop:{pop_id}   |   gen:{generation}"
             f"\n[← / →] navigate    [q] quit",
-            fontsize=8,
+            fontsize=10,
         )
         fig.canvas.draw_idle()
         return
 
-    # ── compute custom positions: one column per layer, evenly spaced ──────
-    # Group by layer, sort by original neuron index for a stable layout.
-    by_layer: dict = {}
-    for node, nd in G.nodes(data=True):
-        by_layer.setdefault(nd["layer"], []).append((nd["idx"], node))
-    for items in by_layer.values():
-        items.sort()
-
-    # Which layers are present (may skip silent hidden layers with no edges)
-    active_layers = sorted(by_layer.keys())
-    n_active      = len(active_layers)
-    max_count     = max(len(v) for v in by_layer.values())
-
-    pos = {}
-    for col_idx, L in enumerate(active_layers):
-        items = by_layer[L]
-        n = len(items)
-        x = col_idx / (n_active - 1) if n_active > 1 else 0.5
-        for rank, (_, node) in enumerate(items):
-            # distribute evenly over [0, 1], top-to-bottom by index
-            y = 1.0 - rank / (max_count - 1) if max_count > 1 else 0.5
-            pos[node] = (x, y)
-
-    # ── adaptive figure dimensions ─────────────────────────────────────────
-    row_h_in = 0.38          # vertical inches per node in the tallest column
-    col_w_in = 3.5           # horizontal inches per active layer column
-    fig_h = max(max_count * row_h_in, 6.0)
-    fig_w = max(n_active    * col_w_in, 9.0)
-    fig.set_size_inches(fig_w, fig_h, forward=True)
-
-    # ── adaptive node / font sizing ────────────────────────────────────────
-    node_area = max(20, int(1200 / max_count))
-    font_sz   = max(3.0, min(7.0, 200.0 / max_count))
-    lbl_dy    = 0.5 / max(max_count - 1, 1)   # label offset above node centre
-    label_pos = {k: (v[0], v[1] + lbl_dy) for k, v in pos.items()}
+    # ── node / font sizing ─────────────────────────────────────────────────
+    max_col = max(len(v) for v in by_layer.values())  # tallest column
+    node_area    = max(20, int(1400 / max(max_col, 1)))
+    font_sz_io   = max(7.0, min(11.0, 300.0 / max(size_s, size_y, 1)))
+    font_sz_hid  = max(3.5, min(7.0,  200.0 / max(max_col, 1)))
+    label_offset = 0.04   # data-unit gap between node centre and label edge
 
     node_list = list(G.nodes())
     colors    = [node_colors_map.get(n, "gray") for n in node_list]
 
     nx.draw_networkx_nodes(G, pos, ax=ax, nodelist=node_list,
                            node_size=node_area, node_color=colors)
-    nx.draw_networkx_labels(G, label_pos,
-                            labels={n: labels[n] for n in node_list if n in labels},
-                            ax=ax, font_size=font_sz)
+
     if G.number_of_edges() > 0:
         nx.draw_networkx_edges(
             G, pos, ax=ax,
             connectionstyle="arc3,rad=0.05",
-            arrowsize=6,
+            arrowsize=8,
             arrowstyle="-|>",
             width=edge_widths,
             edge_color=edge_colors,
         )
 
-    # ── layer legend annotations ───────────────────────────────────────────
+    # ── draw labels: S/Y face outward, hidden centered above ───────────────
+    for node in G.nodes():
+        if node not in pos:
+            continue
+        x, y = pos[node]
+        nd  = G.nodes[node]
+        L   = nd["layer"]
+        lbl = labels.get(node, "")
+        if L == 0:
+            ax.text(x - label_offset, y, lbl,
+                    ha="right", va="center",
+                    fontsize=font_sz_io, color="darkgoldenrod",
+                    clip_on=False, transform=ax.transData)
+        elif L == num_hidden + 1:
+            ax.text(x + label_offset, y, lbl,
+                    ha="left", va="center",
+                    fontsize=font_sz_io, color="darkorange",
+                    clip_on=False, transform=ax.transData)
+        else:
+            col_n = len(by_layer[L])
+            if col_n <= 20:
+                ax.text(x, y + 0.015, lbl,
+                        ha="center", va="bottom",
+                        fontsize=font_sz_hid, color="purple",
+                        clip_on=False, transform=ax.transData)
+
+    # ── layer headers for ALL layers (always visible) ─────────────────────
     layer_names = {0: "Sensors"}
     for h in range(1, num_hidden + 1):
         layer_names[h] = f"Hidden {h}"
     layer_names[num_hidden + 1] = "Outputs"
 
-    for col_idx, L in enumerate(active_layers):
-        x = col_idx / (n_active - 1) if n_active > 1 else 0.5
-        ax.text(x, 1.0 + lbl_dy * 2, layer_names.get(L, f"L{L}"),
-                ha="center", va="bottom", fontsize=font_sz + 1,
-                transform=ax.transData, fontweight="bold")
+    for L in range(num_layers):
+        x = L / (num_layers - 1) if num_layers > 1 else 0.5
+        ax.text(x, 1.06, layer_names.get(L, f"L{L}"),
+                ha="center", va="bottom",
+                fontsize=font_sz_io, fontweight="bold",
+                clip_on=False, transform=ax.transData)
+
+    # ── axis limits: generous margins for side labels ─────────────────────
+    ax.set_xlim(-0.30, 1.30)
+    ax.set_ylim(-0.06, 1.15)
 
     fig.suptitle(
         f"Network {index+1}/{total}   |   pop:{pop_id}   |   generation:{generation}"
         f"\n[← / →] navigate    [q] quit",
-        fontsize=8,
+        fontsize=10,
     )
-    try:
-        fig.tight_layout()
-    except Exception:
-        pass
     fig.canvas.draw_idle()
 
 
@@ -300,8 +320,13 @@ class NetworkViewer:
     def __init__(self, nnets_dir: str):
         self._snapshots = _load_all(nnets_dir)
         self._idx = 0
-        self._fig, self._ax = plt.subplots(figsize=(9, 7))
-        self._fig.patch.set_facecolor("lavenderblush")
+        self._fig, self._ax = plt.subplots(figsize=(16, 9))
+        self._fig.patch.set_facecolor("lightblue")
+        # Maximize the window (works with Qt5Agg backend)
+        try:
+            plt.get_current_fig_manager().window.showMaximized()
+        except Exception:
+            pass
         self._fig.canvas.mpl_connect("key_press_event", self._on_key)
         self._refresh()
 

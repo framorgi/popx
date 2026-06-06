@@ -41,6 +41,7 @@ class Cell : public ICell {
     [[nodiscard]] unsigned get_calcium() const override;
     [[nodiscard]] unsigned get_carbon() const override;
     unsigned take_glucose(unsigned amount) override;
+    unsigned give_glucose(unsigned amount) override;
     unsigned take_water(unsigned amount) override;
     unsigned take_calcium(unsigned amount) override;
     void update() override;

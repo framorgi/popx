@@ -112,7 +112,8 @@ void PopsManager::update_cycle() {
         }
     }
     for (auto& parent : reproducers) {
-        try_reproduce(parent);
+        if (pops_.size() < 50)
+            try_reproduce(parent);
     }
 
     rotate_buckets();
@@ -128,7 +129,7 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
 
     for (int i = 0; i < 8; ++i) {
         PositionT candidate{pp.x + dx[i], pp.y + dy[i]};
-        if (child->try_spawn(candidate) && (act_bucket_.size() + think_bucket_.size() + sense_bucket_.size() < 100)) {
+        if (child->try_spawn(candidate)) {
             unsigned g = 0, w = 0, ca = 0, co = 0;
             parent->donate_resources(g, w, ca, co);
             child->set_resources(g, w, ca, co);

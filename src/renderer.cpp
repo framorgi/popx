@@ -3,6 +3,8 @@
 #include "common.h"
 
 #include <cmath>
+#include <cstdio>
+#include <iostream>
 
 Renderer::Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world, std::shared_ptr<IConfig> config)
     : gfx_(std::move(gfx)), world_(std::move(world)), config_(std::move(config)) {}
@@ -46,7 +48,7 @@ void Renderer::draw() {
     // draw the cell buffers as quads
     gfx_->draw_quads(map_layer_);
     // draw the feromone buffers as composision of triangles
-    // gfx_->draw_triangles(feromone_layer_);
+    gfx_->draw_triangles(feromone_layer_);
     // draw the entity buffers as composision of triangles
     gfx_->draw_triangles(entity_layer_);
 
