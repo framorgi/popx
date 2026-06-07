@@ -241,3 +241,147 @@ float Brain::sigmoid(float x) const {
     const float ex = std::exp(x);
     return ex / (1.0f + ex);
 }
+
+
+//definendo std::vector<Eigen::VectorXf> activations_; in bran.h
+/*Alla fine del feed-forward:
+activations_ = h;*/
+
+void Brain::hebbian_update(float reward)
+{
+    // ---------------------------------------------------------------------
+    // Learning rate globale.
+    //
+    // Determina quanto rapidamente i pesi possono cambiare.
+    // Valori troppo grandi rendono il comportamento instabile.
+    // In genere conviene partire da numeri molto piccoli.
+    // ---------------------------------------------------------------------
+    constexpr float eta = 0.001f;
+
+    // ---------------------------------------------------------------------
+    // Termine di decadimento.
+    //
+    // Simula il fatto che una sinapsi inutilizzata o poco utile
+    // tende gradualmente a perdere efficacia.
+    //
+    // Inoltre impedisce che tutti i pesi crescano indefinitamente.
+    // ---------------------------------------------------------------------
+    constexpr float decay = 0.0001f;
+
+    // ---------------------------------------------------------------------
+    // Limiti assoluti dei pesi.
+    //
+    // In una rete biologica la forza di una sinapsi non è infinita.
+    // Questo bounding evita divergenze numeriche e saturazioni estreme.
+    // ---------------------------------------------------------------------
+    constexpr float max_weight = 5.0f;
+    constexpr float min_weight = -5.0f;
+
+    const unsigned nl = num_layers_;
+
+    // ---------------------------------------------------------------------
+    // Scorriamo tutte le possibili coppie di layer.
+    //
+    // La rete è feed-forward quindi esistono connessioni soltanto
+    // dai layer più superficiali verso quelli più profondi.
+    // ---------------------------------------------------------------------
+    for (unsigned src = 0; src < nl; ++src)
+    {
+        for (unsigned dst = src + 1; dst < nl; ++dst)
+        {
+            // Recuperiamo la matrice sparsa che contiene tutte
+            // le connessioni dal layer sorgente al layer destinazione.
+            auto& W = M_[src * nl + dst];
+
+            // Nessuna connessione presente.
+            if (W.nonZeros() == 0)
+                continue;
+
+            // -----------------------------------------------------------------
+            // Eigen memorizza le sparse matrix per colonne.
+            //
+            // outerSize() permette di attraversare soltanto gli elementi
+            // realmente esistenti senza visitare celle vuote.
+            // -----------------------------------------------------------------
+            for (int k = 0; k < W.outerSize(); ++k)
+            {
+                for (Eigen::SparseMatrix<float>::InnerIterator it(W, k); it; ++it)
+                {
+                    // ---------------------------------------------------------
+                    // Attività del neurone presinaptico.
+                    //
+                    // Quanto era attivo il neurone che invia il segnale.
+                    // ---------------------------------------------------------
+                    const float pre =
+                        activations_[src](it.col());
+
+                    // ---------------------------------------------------------
+                    // Attività del neurone postsinaptico.
+                    //
+                    // Quanto era attivo il neurone che riceve il segnale.
+                    // ---------------------------------------------------------
+                    const float post =
+                        activations_[dst](it.row());
+
+                    // Peso attuale della sinapsi.
+                    const float w =
+                        it.value();
+
+                    // ---------------------------------------------------------
+                    // Termine Hebbiano.
+                    //
+                    // Se reward > 0:
+                    //   connessioni fra neuroni co-attivi vengono rinforzate.
+                    //
+                    // Se reward < 0:
+                    //   connessioni fra neuroni co-attivi vengono indebolite.
+                    //
+                    // Questo permette di associare gli stati interni
+                    // dell'agente ai risultati ottenuti nell'ambiente.
+                    // ---------------------------------------------------------
+                    const float hebbian_term =
+                        eta * reward * pre * post;
+
+                    // ---------------------------------------------------------
+                    // Decadimento biologico.
+                    //
+                    // Più il peso è grande, maggiore è la forza che lo
+                    // spinge verso zero.
+                    //
+                    // Agisce come una sorta di omeostasi.
+                    // ---------------------------------------------------------
+                    const float decay_term =
+                        decay * w;
+
+                    // ---------------------------------------------------------
+                    // Variazione totale della sinapsi.
+                    //
+                    // Il decadimento viene sottratto perché tende a
+                    // riportare lentamente il peso verso zero.
+                    // ---------------------------------------------------------
+                    const float dw =
+                        hebbian_term - decay_term;
+
+                    // Nuovo peso.
+                    float new_weight =
+                        w + dw;
+
+                    // ---------------------------------------------------------
+                    // Bounding.
+                    //
+                    // Impedisce valori patologici.
+                    // Una sinapsi non può diventare arbitrariamente forte.
+                    // ---------------------------------------------------------
+                    if (new_weight > max_weight)
+                        new_weight = max_weight;
+
+                    if (new_weight < min_weight)
+                        new_weight = min_weight;
+
+                    // Scrittura del nuovo peso.
+                    it.valueRef() = new_weight;
+                }
+            }
+        }
+    }
+}
