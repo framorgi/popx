@@ -34,6 +34,7 @@ Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shar
 }
 void Pop::init() {
     alive_ = true;
+    lazyness_ = random_util_->rnd_float(0.0f, 1.0f);
     glucose_ = 100;
     water_ = 100;
     sensor_values_.assign(brain_->get_size_s(), 0.0f);
@@ -60,12 +61,51 @@ bool Pop::try_spawn(PositionT p) {
     return world->add_entity(shared_from_this());
 }
 
+float Pop::calculate_reward() const {
+    logger_->debug("Calculating reward for Pop at position (" + std::to_string(pos_.x) + ", " + std::to_string(pos_.y) +
+                   ") with age " + std::to_string(age_) + ", energy " + std::to_string(energy_) +
+                   ", and offspring count " + std::to_string(offspring_count_) + ".");
+    // age_score: rewards longevity, encouraging the Pop to survive longer.
+    float age_score = std::min(static_cast<float>(age_) / MaxAge, 1.0f);
+
+    //  energy_score: rewards efficient energy management, encouraging the Pop to maintain higher energy levels.
+    float energy_score = energy_ / MaxEnergy;
+
+    // energy_delta_score: rewards positive changes in energy, encouraging the Pop to take actions that increase its
+    // energy.
+    float energy_delta_score = std::min((energy_ - previous_energy_) / 0.02f, 1.0f);
+
+    //  offspring_score: rewards reproductive success, encouraging the Pop to produce more offspring.
+    float offspring_score = std::min(static_cast<float>(offspring_count_) / 1000.0f, 1.0f);
+
+    float reward = AgeRewardWeight * age_score + EnergyRewardWeight * energy_score +
+                   EnergyDeltaRewardWeight * energy_delta_score + OffspringRewardWeight * offspring_score;
+
+    // Trasforma [0,1] -> [-1,+1]
+    reward = reward * 2.0f - 1.0f;
+    return reward;
+}
+
+void Pop::learn(float reward) {
+    // N.B. The first-run guard is necessary to prevent the Pop from applying a learning update before
+    //  run a brain sweep, which could lead to an activations_ access in hebbian_update() before it's properly
+    //  initialized by feed_forward().
+    if (first_run_) {
+        return; // Skip learning on the first run to allow initial sensing and acting
+    }
+    logger_->debug("Applying learning update for Pop at position (" + std::to_string(pos_.x) + ", " +
+                   std::to_string(pos_.y) + ") with reward " + std::to_string(reward) + ".");
+    brain_->hebbian_update(reward);
+}
+
 void Pop::update() {
     age_++;
     update_physiology();
-
-    if (energy_ <= 0 || age_ > 200000) {
+    if (energy_ <= 0 || age_ > MaxAge) {
+        death_cause_ = energy_ <= 0 ? DeathCause::EnergyDepletion : DeathCause::OldAge;
         die();
+    } else {
+        learn(calculate_reward());
     }
 }
 
@@ -77,19 +117,23 @@ void Pop::despawn() {
     }
 }
 
+// be sure return sensor values in range [0,1]
 void Pop::sense() {
     current_state_ = State::SENSE;
     // reset energy cost for this cycle
     energy_cost_ = 0;
 
+    // lock the world weak pointer to access the world safely
     auto world = world_.lock();
     if (!world)
         return;
 
     const int W = world->get_width();
     const int H = world->get_height();
-    const unsigned ns = brain_->get_size_s();
-    sensor_values_.assign(ns, 0.0f);
+
+    const unsigned sensor_number = brain_->get_size_s();
+
+    sensor_values_.assign(sensor_number, 0.0f);
     const auto connected = brain_->get_connected_sensors();
 
     // ---- helpers -------------------------------------------------------
@@ -134,11 +178,13 @@ void Pop::sense() {
     // gradient: clamp((dir - here) * 0.5 + 0.5, 0, 1) → [0,1] where 1=rising
     auto gradient = [](float here, float dir) -> float { return std::clamp((dir - here) * 0.5f + 0.5f, 0.0f, 1.0f); };
 
-    // ---- per-sensor evaluation -----------------------------------------
+    // Distance to boundaries, normalized to [0,1] with 0.5=center and 1=at boundary.
     const float bx = (W > 1) ? static_cast<float>(std::min(pos_.x, W - 1 - pos_.x)) / (W * 0.5f) : 0.0f;
     const float by = (H > 1) ? static_cast<float>(std::min(pos_.y, H - 1 - pos_.y)) / (H * 0.5f) : 0.0f;
 
-    for (unsigned i = 0; i < ns; ++i) {
+    // ----start  per-sensor evaluation -----------------------------------------
+
+    for (unsigned i = 0; i < sensor_number; ++i) {
         if (i < connected.size() && !connected[i])
             continue;
         float val = 0.0f;
@@ -282,6 +328,7 @@ void Pop::think() {
     current_state_ = State::THINK;
     // sensor_values_ filled by sense() in the current cycle.
     last_action_ = brain_->feed_forward(sensor_values_);
+    first_run_ = false; // Clear the first-run guard after the initial think() to allow learning in subsequent cycles
 }
 
 void Pop::serialize_brain(unsigned generation) const {
@@ -301,46 +348,46 @@ void Pop::act() {
     switch (static_cast<Action>(last_action_)) {
         // ── movement ────────────────────────────────────────────────────────
         case Action::MOVE_FORWARD:
-            p.x += last_direction_.x;
-            p.y += last_direction_.y;
+            p.x += last_direction_.x * (responsiveness_);
+            p.y += last_direction_.y * (responsiveness_);
             try_move(p);
             energy_cost_ += move_cost;
             break;
         case Action::MOVE_LEFT:
-            p.x -= last_direction_.y;
-            p.y += last_direction_.x;
+            p.x -= last_direction_.y * responsiveness_;
+            p.y += last_direction_.x * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
             break;
         case Action::MOVE_RIGHT:
-            p.x += last_direction_.y;
-            p.y -= last_direction_.x;
+            p.x += last_direction_.y * responsiveness_;
+            p.y -= last_direction_.x * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
             break;
         case Action::MOVE_RANDOM:
-            p.x += random_util_->rnd_int(-1, 1);
-            p.y += random_util_->rnd_int(-1, 1);
+            p.x += random_util_->rnd_int(-1, 1) * responsiveness_;
+            p.y += random_util_->rnd_int(-1, 1) * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
             break;
         case Action::MOVE_EAST:
-            p.x += 1;
+            p.x += 1 * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
             break;
         case Action::MOVE_WEST:
-            p.x -= 1;
+            p.x -= 1 * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
             break;
         case Action::MOVE_NORTH:
-            p.y -= 1;
+            p.y -= 1 * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
             break;
         case Action::MOVE_SOUTH:
-            p.y += 1;
+            p.y += 1 * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
             break;
@@ -369,8 +416,9 @@ void Pop::act() {
             }
             break;
         case Action::GET_CALCIUM:
-            if (world)
+            if (world) {
                 calcium_ += world->get_cell(pos_)->take_calcium(2);
+            }
             break;
         // ── internal modulation ──────────────────────────────────────────────
         case Action::SET_OSCILLATOR_PERIOD: {
@@ -379,7 +427,7 @@ void Pop::act() {
             break;
         }
         case Action::SET_RESPONSIVENESS:
-            responsiveness_ = std::clamp(responsiveness_ + 0.1f, 0.25f, 4.0f);
+            responsiveness_ = std::clamp(responsiveness_ + 0.001f, 1.0f, 2.0f);
             break;
         // ── sentinels ────────────────────────────────────────────────────────────
         case Action::NUM_ACTIONS:
@@ -409,7 +457,7 @@ bool Pop::try_move(PositionT p) {
         return false; // World no longer exists
     }
     auto stiff = world->get_elevation(p) - world->get_elevation(pos_);
-    if (stiff < MaxClimbableSlope) {
+    if (stiff < MaxClimbableSlope * (1.0f - lazyness_)) {
         // cache last position for direction calculation
         PositionT old_pos = pos_;
         //  movement logic
@@ -504,9 +552,11 @@ void Pop::update_physiology() {
     if (world) {
         glucose_ += world->get_cell(pos_)->take_glucose(2);
     }
+
     /// Metabolism
-    energy_ -= 0.02f;        // Basal metabolic rate
-    energy_ -= energy_cost_; // Additional cost from actions
+    previous_energy_ = energy_; // update previous energy before applying changes for energy delta calculation in reward
+    energy_ -= 0.02f;           // Basal metabolic rate
+    energy_ -= energy_cost_;    // Additional cost from actions
     // chances of converting reserves to energy
     if (glucose_ > 0) {
         RandomUtility rand;
@@ -515,4 +565,10 @@ void Pop::update_physiology() {
             glucose_ -= 1;   // Consume glucose
         }
     }
+    // clamp max energy to MaxEnergy
+    // energy_ = std::min(energy_, MaxEnergy);
+}
+
+void Pop::increment_offspring_count() {
+    offspring_count_++;
 }

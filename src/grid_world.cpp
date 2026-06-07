@@ -15,11 +15,19 @@ GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger) : width_(w),
 
 void GridWorld::init() {
     RandomUtility random_util;
+
+    /// Generate a random RBF set for temperature
     RBFSet temp_rbf_set = random_util.rnd_rbf_set(10, 5.0, 100.0, 0.0, static_cast<double>(width_), 0.0,
                                                   static_cast<double>(height_), 20.0, 20.0, 20.0, 20.0);
 
+    /// Generate a random RBF set for elevation
     RBFSet elevation_rbf_set = random_util.rnd_symmetric_rbf_set(20, 5.0, 100.0, 0.0, static_cast<double>(width_), 0.0,
                                                                  static_cast<double>(height_), 0.0, 20.0);
+
+    /// Generate a random RBF set for glucose distribution
+    RBFSet glucose_rbf_set = random_util.rnd_rbf_set(35, MaxC6h12o6 / 8, MaxC6h12o6, 0, static_cast<double>(width_),
+                                                     0.0, static_cast<double>(height_), 20.0, 10.0, 5.0, 10.0);
+    ///
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {
             double temp_value =
@@ -28,9 +36,13 @@ void GridWorld::init() {
             double elevation_value =
                 random_util.evaluate_rbf_set(elevation_rbf_set, static_cast<double>(x), static_cast<double>(y));
             cells_[index(x, y)]->set_elevation((elevation_value));
+
+            auto glucose_value = static_cast<unsigned>(
+                random_util.evaluate_rbf_set(glucose_rbf_set, static_cast<double>(x), static_cast<double>(y)));
+            cells_[index(x, y)]->set_glucose((glucose_value));
         }
     }
-    logger_->info("Grid world initialized with temperature field.");
+    logger_->info("Grid world initialized.");
 }
 
 bool GridWorld::is_free(PositionT p) const {

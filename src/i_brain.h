@@ -29,6 +29,8 @@ class IBrain {
     /// @return Index of the highest-activated output, or -1 if no output fires.
     virtual int feed_forward(const std::vector<float>& sensor_values) = 0;
 
+    virtual void hebbian_update(float reward) = 0;
+
     /// @brief Resizes the network and resets all weights.
     virtual void resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned num_hidden) = 0;
 

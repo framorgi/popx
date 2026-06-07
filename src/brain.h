@@ -1,4 +1,5 @@
 #pragma once
+#include "common.h"
 #include "i_brain.h"
 #include "i_config.h"
 
@@ -12,9 +13,26 @@
 class Brain : public IBrain {
   public:
     explicit Brain(std::shared_ptr<IConfig> config);
-
+    //----------------------------------------------------------------------------
+    /// @brief Wires the brain according to the given genome (sets up the connection matrices based on the genome's
+    /// genes).
+    /// @param genome The Genome containing the genes that define the connections and weights of the brain.
+    //----------------------------------------------------------------------------
     void wire(const Genome& genome) override;
+
+    //----------------------------------------------------------------------------
+    /// @brief Performs a feed-forward pass through the neural network to produce an action index based
+    /// on the given sensor values.
+    /// @param sensor_values A vector of float values representing the current sensor inputs to the brain.
+    /// @return An integer representing the index of the action chosen by the brain based on the
     int feed_forward(const std::vector<float>& sensor_values) override;
+
+    //----------------------------------------------------------------------------
+    /// @brief Applies a Hebbian learning update to the brain's weights based on the given reward signal.
+    /// @param reward A float value representing the reward signal used to adjust the synaptic weights
+    //----------------------------------------------------------------------------
+    void hebbian_update(float reward) override;
+
     void resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned num_hidden) override;
     void serialize(const std::string& pop_id, unsigned generation) const override;
 
@@ -36,7 +54,7 @@ class Brain : public IBrain {
     /// Flat connection-matrix storage, indexed by src * num_layers_ + dst.
     /// Only entries with src < dst are populated during wire().
     std::vector<Eigen::SparseMatrix<float>> M_;
-
+    std::vector<Eigen::VectorXf> activations_;
     unsigned size_s_;
     unsigned size_n_;
     unsigned size_y_;

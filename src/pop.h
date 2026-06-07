@@ -14,12 +14,20 @@
 #include <string>
 #include <type_traits>
 
+/// -----------------------------------------------------------------------------
+/// enum class representing every phase of the Pop's lifecycle, used to manage its behavior and state transitions.
+/// -----------------------------------------------------------------------------
 enum class State {
     SENSE,
     THINK,
     ACT
 
 };
+
+///----------------------------------------------------------------------------
+/// @brief The cause of death for this Pop (used for logging and analysis).
+///----------------------------------------------------------------------------
+enum class DeathCause { None, EnergyDepletion, OldAge };
 /// -----------------------------------------------------------------------------
 /// @class Pop
 /// @brief Implements the IAgent interface representing a population entity within the simulation.
@@ -117,7 +125,23 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     ///---------------------------------------------------------------------------
     [[nodiscard]] RenderState get_render_state() const override;
 
+    // ---------------------------------------------------------------------------
+    /// @brief Increments the offspring count for this Pop (called when an offspring is successfully spawned).
+    // ---------------------------------------------------------------------------
+    void increment_offspring_count();
+
+    // ---------------------------------------------------------------------------
+    /// @brief get the cause of death for this Pop (used for logging and analysis).
+    /// @return The cause of death for this Pop.
+    // ---------------------------------------------------------------------------
+    DeathCause get_death_cause() const;
+
   private:
+    ///---------------------------------------------------------------------------
+    /// @brief guard flag to avoid some action at first run
+    ///---------------------------------------------------------------------------
+    bool first_run_ = true;
+
     /// ---------------------------------------------------------------------------
     /// @brief Age of the Pop entity.
     /// ---------------------------------------------------------------------------
@@ -197,7 +221,12 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// ---------------------------------------------------------------------------
     /// @brief Reactivity factor, modified by SET_RESPONSIVENESS.
     /// ---------------------------------------------------------------------------
-    float responsiveness_ = 1.0f;
+    float responsiveness_ = 1;
+
+    /// ---------------------------------------------------------------------------
+    /// @brief Lazyness factor to reduce action frequency
+    /// ---------------------------------------------------------------------------
+    float lazyness_ = 0.0f;
     /// ---------------------------------------------------------------------------
     /// @brief Internal glucose reserve.
     /// ---------------------------------------------------------------------------
@@ -218,6 +247,20 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Energy cost incurred by the Pop's actions in the current cycle.
     /// ---------------------------------------------------------------------------
     float energy_cost_ = 0.0f;
+
+    /// ---------------------------------------------------------------------------
+    /// @brief Previous energy level (used to calculate energy delta for reward).
+    /// ---------------------------------------------------------------------------
+    float previous_energy_ = 0.0f;
+    ///----------------------------------------------------------------------------
+    /// @brief Counter for the number of offspring produced by this Pop
+    ///----------------------------------------------------------------------------
+    int offspring_count_ = 0;
+
+    ///----------------------------------------------------------------------------
+    /// @brief The cause of death for this Pop (used for logging and analysis).
+    ///--------------------------------------------------------------------------
+    DeathCause death_cause_ = DeathCause::None;
     ///---------------------------------------------------------------------------
     /// @brief Updates the last movement direction based on new and old positions.
     /// @param new_pos The new position after movement.
@@ -257,4 +300,15 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief      Update the physiology of the Pop based on energy cost of actions
     ///----------------------------------------------------------------------
     void update_physiology();
+
+    ///----------------------------------------------------------------------
+    /// @brief      Calculate the reward for the current cycle based on the Pop's state and actions
+    /// @return     The calculated reward value
+    ///----------------------------------------------------------------------
+    [[nodiscard]] float calculate_reward() const;
+    // ----------------------------------------------------------------------
+    /// @brief     Apply various learning rules (Hebbian, reinforcement, etc.) to update the brain
+    /// @param     reward The reward value to use for learning
+    ///----------------------------------------------------------------------
+    void learn(float reward);
 };

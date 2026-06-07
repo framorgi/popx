@@ -4,6 +4,7 @@
 constexpr int cell_render_size = 6;  // Size of each cell in pixels when rendering
 constexpr int SEGMENTS = 16;         // Number of segments to approximate a circle for entity rendering
 constexpr int FEROMONE_SEGMENTS = 6; // Number of segments to approximate a circle for feromone rendering
+constexpr int GLUCOSE_SEGMENTS = 3;  // Number of segments to approximate a circle for glucose rendering
 ///--------------------------------------------------------------------------
 /// @brief    Interface for Renderer who is responsible for rendering the simulation.Renderer is a wrapper around a
 /// graphic engine

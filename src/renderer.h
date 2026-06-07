@@ -168,6 +168,11 @@ class Renderer : public IRenderer {
     std::vector<IGraphicEngine::EntityVertex> feromone_layer_;
 
     ///--------------------------------------------------------------------------
+    /// @brief    Buffer for storing vertices representing glucose
+    ///--------------------------------------------------------------------------
+    std::vector<IGraphicEngine::EntityVertex> glucose_layer_;
+
+    ///--------------------------------------------------------------------------
     /// @brief    Width and height of the world
     int world_height_ = 0;
     int world_width_ = 0;

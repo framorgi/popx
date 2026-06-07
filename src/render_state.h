@@ -16,8 +16,11 @@ struct CellVisualData {
     double elevation;
     double humidity;
     bool water;
+    double glucose;
     double feromones_a;
     double feromones_b;
+    double feromones_c;
+    double feromones_d;
 };
 
 struct RenderState {

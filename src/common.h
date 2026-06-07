@@ -2,9 +2,18 @@
 #pragma once
 #include <map>
 
-constexpr int MapSize = 200; // Number of cells along one side of the square map
+constexpr int MapSize = 180; // Number of cells along one side of the square map
 
-constexpr unsigned MaxAge = 1000;
+constexpr unsigned MaxAge = 200000;
+constexpr float MaxEnergy = 400.0f;
+// learning contribution weights
+constexpr float AgeRewardWeight = 0.05f;
+constexpr float EnergyRewardWeight = 0.10f;
+constexpr float EnergyDeltaRewardWeight = 0.20f;
+constexpr float OffspringRewardWeight = 0.55f;
+// learning rate
+constexpr float HebbianLearningRate = 0.01f; // was 0.001f
+
 using PositionT = struct {
     int x;
     int y;
@@ -12,7 +21,7 @@ using PositionT = struct {
 
 constexpr unsigned WaterThreshold = 100;
 constexpr unsigned MaxH2o = 1000;
-constexpr unsigned MaxC6h12o6 = 50;
+constexpr unsigned MaxC6h12o6 = 500;
 constexpr unsigned MaxLipids = 300;
 constexpr unsigned MaxO2 = 1000;
 constexpr unsigned MaxCo2 = 1000;
@@ -37,4 +46,4 @@ constexpr double FeromoneDecayRate = 0.99; // Decay rate per update
 
 enum class Direction { N, NE, E, SE, S, SW, W, NW };
 
-constexpr double MaxClimbableSlope = 3.0; // Maximum elevation difference that can be climbed in one move
+constexpr double MaxClimbableSlope = 6.0; // Maximum elevation difference that can be climbed in one move

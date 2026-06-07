@@ -5,6 +5,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <nlohmann/json.hpp>
 #include <vector>
 
@@ -113,7 +114,7 @@ int Brain::feed_forward(const std::vector<float>& sensor_values) {
     const unsigned nl = num_layers_;
     std::vector<Eigen::VectorXf> h(nl);
 
-    // Layer 0: load sensor inputs
+    // Layer 0: apply sensor inputs
     h[0] = Eigen::VectorXf::Zero(static_cast<int>(size_s_));
     for (unsigned i = 0; i < size_s_ && i < sensor_values.size(); ++i)
         h[0](static_cast<int>(i)) = sensor_values[i];
@@ -130,7 +131,8 @@ int Brain::feed_forward(const std::vector<float>& sensor_values) {
             x(i) = sigmoid(x(i));
         h[dst] = std::move(x);
     }
-
+    // Store activations for potential Hebbian updates after action execution
+    activations_ = h;
     // argmax of the output layer
     const auto& out = h[nl - 1];
     int max_index = -1;
@@ -242,135 +244,112 @@ float Brain::sigmoid(float x) const {
     return ex / (1.0f + ex);
 }
 
-
-//definendo std::vector<Eigen::VectorXf> activations_; in bran.h
-/*Alla fine del feed-forward:
-activations_ = h;*/
-
-void Brain::hebbian_update(float reward)
-{
+void Brain::hebbian_update(float reward) {
     // ---------------------------------------------------------------------
-    // Learning rate globale.
+    // Global  learning rate
     //
-    // Determina quanto rapidamente i pesi possono cambiare.
-    // Valori troppo grandi rendono il comportamento instabile.
-    // In genere conviene partire da numeri molto piccoli.
+    // Defines how much the synaptic weights are adjusted in response to the reward signal.
+    // Too large values make the behavior unstable.
+    // It's generally advisable to start with very small numbers.
     // ---------------------------------------------------------------------
-    constexpr float eta = 0.001f;
+    constexpr float eta = HebbianLearningRate;
 
     // ---------------------------------------------------------------------
-    // Termine di decadimento.
+    // Decay term.
     //
-    // Simula il fatto che una sinapsi inutilizzata o poco utile
-    // tende gradualmente a perdere efficacia.
+    // Simulates the fact that an unused or less useful synapse
+    // gradually loses effectiveness.
     //
-    // Inoltre impedisce che tutti i pesi crescano indefinitamente.
+    // It also prevents all weights from growing indefinitely.
     // ---------------------------------------------------------------------
     constexpr float decay = 0.0001f;
 
     // ---------------------------------------------------------------------
-    // Limiti assoluti dei pesi.
+    // Absolute weight limits.
     //
-    // In una rete biologica la forza di una sinapsi non è infinita.
-    // Questo bounding evita divergenze numeriche e saturazioni estreme.
+    // In a biological network, the strength of a synapse is not infinite.
+    // This bounding prevents numerical divergences and extreme saturations.
+    // those boundaries match the ones used in genetic_lottery() to generate new random weights for new genes.
     // ---------------------------------------------------------------------
-    constexpr float max_weight = 5.0f;
-    constexpr float min_weight = -5.0f;
+    constexpr float max_weight = 4.0f;
+    constexpr float min_weight = -4.0f;
 
     const unsigned nl = num_layers_;
 
     // ---------------------------------------------------------------------
-    // Scorriamo tutte le possibili coppie di layer.
+    // Iterate over all possible layer pairs.
     //
-    // La rete è feed-forward quindi esistono connessioni soltanto
-    // dai layer più superficiali verso quelli più profondi.
+    // The network is feed-forward, so connections only exist
+    // from shallower layers to deeper layers.
     // ---------------------------------------------------------------------
-    for (unsigned src = 0; src < nl; ++src)
-    {
-        for (unsigned dst = src + 1; dst < nl; ++dst)
-        {
-            // Recuperiamo la matrice sparsa che contiene tutte
-            // le connessioni dal layer sorgente al layer destinazione.
+    for (unsigned src = 0; src < nl; ++src) {
+        for (unsigned dst = src + 1; dst < nl; ++dst) {
+            // saving the connection matrix for the current layer pair
             auto& W = M_[src * nl + dst];
 
-            // Nessuna connessione presente.
+            // No connections present.
             if (W.nonZeros() == 0)
                 continue;
 
             // -----------------------------------------------------------------
-            // Eigen memorizza le sparse matrix per colonne.
-            //
-            // outerSize() permette di attraversare soltanto gli elementi
-            // realmente esistenti senza visitare celle vuote.
+            // Eigen stores sparse matrices by columns.
+            // outerSize() allows iterating only over the elements
+            // that actually exist without visiting empty cells.
             // -----------------------------------------------------------------
-            for (int k = 0; k < W.outerSize(); ++k)
-            {
-                for (Eigen::SparseMatrix<float>::InnerIterator it(W, k); it; ++it)
-                {
+            for (int k = 0; k < W.outerSize(); ++k) {
+                for (Eigen::SparseMatrix<float>::InnerIterator it(W, k); it; ++it) {
                     // ---------------------------------------------------------
-                    // Attività del neurone presinaptico.
-                    //
-                    // Quanto era attivo il neurone che invia il segnale.
+                    // pre-synaptic activity mangnitude.
                     // ---------------------------------------------------------
-                    const float pre =
-                        activations_[src](it.col());
+                    const float pre = activations_[src](it.col());
+
+                    // Offset, centering the pre value around 0 to allow for negative and positive Hebbian updates
+                    const float pre_centered = pre - 0.5f;
 
                     // ---------------------------------------------------------
-                    // Attività del neurone postsinaptico.
-                    //
-                    // Quanto era attivo il neurone che riceve il segnale.
+                    // Post-synaptic neuron activity.
                     // ---------------------------------------------------------
-                    const float post =
-                        activations_[dst](it.row());
+                    // How active was the neuron receiving the signal.
+                    // ---------------------------------------------------------
+                    const float post = activations_[dst](it.row());
+                    // Offset, centering the post value around 0 to allow for negative and positive Heb
+                    float post_centered = post - 0.5f;
 
-                    // Peso attuale della sinapsi.
-                    const float w =
-                        it.value();
-
-                    // ---------------------------------------------------------
-                    // Termine Hebbiano.
-                    //
-                    // Se reward > 0:
-                    //   connessioni fra neuroni co-attivi vengono rinforzate.
-                    //
-                    // Se reward < 0:
-                    //   connessioni fra neuroni co-attivi vengono indebolite.
-                    //
-                    // Questo permette di associare gli stati interni
-                    // dell'agente ai risultati ottenuti nell'ambiente.
-                    // ---------------------------------------------------------
-                    const float hebbian_term =
-                        eta * reward * pre * post;
+                    // Current synapse weight.
+                    const float w = it.value();
 
                     // ---------------------------------------------------------
-                    // Decadimento biologico.
+                    // Hebbian term.
                     //
-                    // Più il peso è grande, maggiore è la forza che lo
-                    // spinge verso zero.
+                    // If reward > 0:
+                    //   connections between co-active neurons are strengthened.
                     //
-                    // Agisce come una sorta di omeostasi.
+                    // If reward < 0:
+                    //   connections between co-active neurons are weakened.
                     // ---------------------------------------------------------
-                    const float decay_term =
-                        decay * w;
+                    const float hebbian_term = eta * reward * pre_centered * post_centered;
 
                     // ---------------------------------------------------------
-                    // Variazione totale della sinapsi.
-                    //
-                    // Il decadimento viene sottratto perché tende a
-                    // riportare lentamente il peso verso zero.
+                    // Apply Biological decay term.
                     // ---------------------------------------------------------
-                    const float dw =
-                        hebbian_term - decay_term;
+                    const float decay_term = decay * w;
 
-                    // Nuovo peso.
-                    float new_weight =
-                        w + dw;
+                    // ---------------------------------------------------------
+                    // Total synaptic change.
+                    //
+                    // The decay is subtracted because it tends to
+                    // slowly bring the weight back towards zero.
+                    // ---------------------------------------------------------
+                    const float dw = hebbian_term - decay_term;
+
+                    // New weight.
+                    float new_weight = w + dw;
 
                     // ---------------------------------------------------------
                     // Bounding.
                     //
-                    // Impedisce valori patologici.
-                    // Una sinapsi non può diventare arbitrariamente forte.
+                    // Prevents pathological values.
+                    // A synapse cannot become arbitrarily strong.
                     // ---------------------------------------------------------
                     if (new_weight > max_weight)
                         new_weight = max_weight;
@@ -378,7 +357,7 @@ void Brain::hebbian_update(float reward)
                     if (new_weight < min_weight)
                         new_weight = min_weight;
 
-                    // Scrittura del nuovo peso.
+                    // Writing the new weight.
                     it.valueRef() = new_weight;
                 }
             }

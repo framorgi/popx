@@ -143,6 +143,10 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
             else
                 act_bucket_.push_back(child);
 
+            logger_->info("Incrementing offspring count for parent at (" + std::to_string(pp.x) + "," +
+                          std::to_string(pp.y) + ").");
+            parent->increment_offspring_count();
+
             logger_->info("Offspring spawned at (" + std::to_string(candidate.x) + "," + std::to_string(candidate.y) +
                           ") from parent at (" + std::to_string(pp.x) + "," + std::to_string(pp.y) + ").");
             return;
