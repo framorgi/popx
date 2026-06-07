@@ -54,7 +54,7 @@ void Renderer::draw() {
     entity_layer_.reserve(static_cast<std::size_t>(start_population_) * SEGMENTS * 3);
 
     feromone_layer_.clear();
-    feromone_layer_.reserve(world_width_ * world_height_ * SEGMENTS * 3); // assume 10% cells have feromones
+    feromone_layer_.reserve(world_width_ * world_height_ * FEROMONE_SEGMENTS * 3); // assume 10% cells have feromones
     // update entities and cell buffers
     // before drawing every layer i loop once through the world to get all the cells and entities render data needed to
     // draw
@@ -138,9 +138,9 @@ void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
             float radius = cell_render_size * intensity / 1.7f;
 
             // foreach segment
-            for (int i = 0; i < SEGMENTS; ++i) {
-                float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
-                float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
+            for (int i = 0; i < FEROMONE_SEGMENTS; ++i) {
+                float a0 = (i / static_cast<float>(FEROMONE_SEGMENTS)) * 2.f * PI;
+                float a1 = ((i + 1) / static_cast<float>(FEROMONE_SEGMENTS)) * 2.f * PI;
 
                 Vec2 center{cx, cy};
                 Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
