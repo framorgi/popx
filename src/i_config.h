@@ -18,7 +18,7 @@ class IConfig {
     virtual const std::string& get_nnets_dir() const = 0;
 
     // --- Simulation parameters -----------------------------------------------
-    virtual unsigned get_population() const = 0;
+    virtual unsigned get_start_population() const = 0;
     virtual unsigned get_genome_min_length() const = 0;
     virtual unsigned get_genome_max_length() const = 0;
     virtual unsigned get_steps_per_generation() const = 0;

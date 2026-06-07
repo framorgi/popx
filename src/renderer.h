@@ -171,5 +171,5 @@ class Renderer : public IRenderer {
     /// @brief    Width and height of the world
     int world_height_ = 0;
     int world_width_ = 0;
-    int population_ = 0;
+    int start_population_ = 0;
 };

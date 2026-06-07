@@ -55,7 +55,7 @@ unsigned Config::get_brain_num_hidden_layers() const {
 const std::string& Config::get_nnets_dir() const {
     return params_.nnets_dir;
 }
-unsigned Config::get_population() const {
+unsigned Config::get_start_population() const {
     return params_.population;
 }
 unsigned Config::get_genome_min_length() const {

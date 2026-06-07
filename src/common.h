@@ -2,7 +2,7 @@
 #pragma once
 #include <map>
 
-constexpr int MapSize = 160; // Number of cells along one side of the square map
+constexpr int MapSize = 200; // Number of cells along one side of the square map
 
 constexpr unsigned MaxAge = 1000;
 using PositionT = struct {

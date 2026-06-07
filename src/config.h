@@ -49,7 +49,7 @@ class Config : public IConfig {
     unsigned get_brain_size_y() const override;
     unsigned get_brain_num_hidden_layers() const override;
     const std::string& get_nnets_dir() const override;
-    unsigned get_population() const override;
+    unsigned get_start_population() const override;
     unsigned get_genome_min_length() const override;
     unsigned get_genome_max_length() const override;
     unsigned get_steps_per_generation() const override;

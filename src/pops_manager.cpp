@@ -7,15 +7,15 @@
 PopsManager::PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger,
                          std::shared_ptr<IConfig> config)
     : world_(std::move(world)), logger_(std::move(logger)), config_(std::move(config)) {
-    sense_bucket_.reserve(config_->get_population());
-    think_bucket_.reserve(config_->get_population());
-    act_bucket_.reserve(config_->get_population());
+    sense_bucket_.reserve(config_->get_start_population());
+    think_bucket_.reserve(config_->get_start_population());
+    act_bucket_.reserve(config_->get_start_population());
 }
 
 bool PopsManager::spawn_population() {
     // Example: Spawn a new pop agent and add it to the population
     std::shared_ptr<RandomUtility> random_util = std::make_shared<RandomUtility>();
-    for (int i = 0; i < config_->get_population(); ++i) {
+    for (int i = 0; i < config_->get_start_population(); ++i) {
         std::shared_ptr<Pop> new_pop = std::make_shared<Pop>(world_, logger_, config_);
         pops_.push_back(new_pop);
         int phase = rand() % 3;

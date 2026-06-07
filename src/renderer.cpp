@@ -16,7 +16,7 @@ void Renderer::init() {
                         cell_render_size * world_->get_height());
     world_height_ = world_->get_height();
     world_width_ = world_->get_width();
-    population_ = static_cast<int>(config_->get_population());
+    start_population_ = static_cast<int>(config_->get_start_population());
     int total_size = world_width_ * world_height_;
     map_layer_.resize(total_size); // Preallocate buffer for the entire map
 
@@ -24,9 +24,23 @@ void Renderer::init() {
     for (int y = 0; y < world_height_; ++y) {
         for (int x = 0; x < world_width_; ++x) {
             int index = y * world_width_ + x;
+            auto cell = world_->get_cell(index);
+            auto rs = cell->get_render_state();
+            Color final_color = Color(0, 0, 0); // Default color
+            if (auto cell_data = std::get_if<CellVisualData>(&rs.payload)) {
+                // Determine cell color based on temperature
+                Color temperature_color = evaluate_temperature_color(cell->get_temperature());
+                // Determine ground color based on elevation
+                double elevation = cell_data->elevation;
+                Color ground_color = evaluate_ground_color(elevation);
+
+                // Blend temperature and ground colors and finally apply highlighting based on elevation
+                final_color = apply_highlighting(blend_colors(ground_color, temperature_color, 0.1), elevation);
+            }
+
             map_layer_[index] = IGraphicEngine::Quad{
                 Vec2{static_cast<float>(x * cell_render_size), static_cast<float>(y * cell_render_size)},
-                Vec2{static_cast<float>(cell_render_size), static_cast<float>(cell_render_size)}, Color(0, 0, 0)};
+                Vec2{static_cast<float>(cell_render_size), static_cast<float>(cell_render_size)}, final_color};
         }
     }
 }
@@ -37,7 +51,7 @@ void Renderer::draw() {
     // clear entity buffer every frame for now. Entity size can change very quickly so we need to redraw them all but
     // this section can be optimized later
     entity_layer_.clear();
-    entity_layer_.reserve(static_cast<std::size_t>(population_) * SEGMENTS * 3);
+    entity_layer_.reserve(static_cast<std::size_t>(start_population_) * SEGMENTS * 3);
 
     feromone_layer_.clear();
     feromone_layer_.reserve(world_width_ * world_height_ * SEGMENTS * 3); // assume 10% cells have feromones
@@ -113,23 +127,6 @@ void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
     // get payload data
 
     if (auto cell_data = std::get_if<CellVisualData>(&rs.payload)) {
-        // get the relative quad from the map layer buffer
-        auto& q = map_layer_[idx];
-
-        Rect rect{Vec2{static_cast<float>(x * cell_render_size), static_cast<float>(y * cell_render_size)},
-                  Vec2{static_cast<float>(cell_render_size), static_cast<float>(cell_render_size)}};
-        // Determine cell color based on temperature
-        Color temperature_color = evaluate_temperature_color(cell->get_temperature());
-        // Determine ground color based on elevation
-        double elevation = cell_data->elevation;
-        Color ground_color = evaluate_ground_color(elevation);
-
-        // Blend temperature and ground colors and finally apoply highlighting based on elevation
-        Color final_color = apply_highlighting(blend_colors(ground_color, temperature_color, 0.1), elevation);
-
-        // Store the final color in the cell for future reference
-        q.color = final_color;
-
         if (cell_data->feromones_a != 0.0) {
             // Add feromone representation to the feromone layer
             double intensity = cell_data->feromones_a;
