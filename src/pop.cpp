@@ -47,9 +47,11 @@ void Pop::die() {
 
     auto world = world_.lock();
     if (world) {
-        world->get_cell(pos_)->give_glucose(MaxC6h12o6 / 2); // Return remaining glucose to the cell
+        world->get_cell(pos_)->give_glucose(MaxC6h12o6); // Return remaining glucose to the cell
     }
     alive_ = false;
+    // remove serialized brain file for this pop
+    brain_->remove_serialization(pop_id_);
 }
 
 bool Pop::try_spawn(PositionT p) {

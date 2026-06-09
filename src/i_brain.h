@@ -39,6 +39,9 @@ class IBrain {
     /// @param generation  Simulation generation number stored in the metadata.
     virtual void serialize(const std::string& pop_id, unsigned generation) const = 0;
 
+    /// @brief Removes the serialized brain file for a given pop_id.
+    virtual void remove_serialization(const std::string& pop_id) = 0;
+
     virtual unsigned get_size_s() const = 0;
     virtual unsigned get_size_n() const = 0;
     virtual unsigned get_size_y() const = 0;

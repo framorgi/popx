@@ -155,6 +155,12 @@ void Brain::resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned n
     allocate();
 }
 
+void Brain::remove_serialization(const std::string& pop_id) {
+    const std::string dir = config_->get_nnets_dir();
+    const std::string filename = dir + pop_id + "_g" + std::to_string(0) + ".json";
+    std::filesystem::remove(filename);
+}
+
 void Brain::serialize(const std::string& pop_id, unsigned generation) const {
     using json = nlohmann::json;
 
