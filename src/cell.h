@@ -32,7 +32,7 @@ class Cell : public ICell {
 
     [[nodiscard]] RenderState get_render_state() const override;
 
-    void set_feromone(FeromoneT type, int value) override;
+    void set_feromone(FeromoneT type, float value) override;
 
     [[nodiscard]] FeromoneMapT get_feromone_map() const override;
 

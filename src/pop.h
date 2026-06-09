@@ -280,7 +280,7 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @param pos The position to check for feromone strength.
     /// @return The strength of the specified feromone type at the given position.
     ///---------------------------------------------------------------------------
-    [[nodiscard]] int get_feromone_strength(FeromoneT type, PositionT pos) const;
+    [[nodiscard]] float get_feromone_strength(FeromoneT type, PositionT pos) const;
 
     ///----------------------------------------------------------------------
     /// @brief      Get the temperature at a given position

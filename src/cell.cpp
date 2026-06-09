@@ -62,7 +62,7 @@ void Cell::set_humidity(double humidity) {
     return static_cast<double>(humidity_);
 }
 
-void Cell::set_feromone(FeromoneT type, int value) {
+void Cell::set_feromone(FeromoneT type, float value) {
     feromones_[type] += value;
 
     if (feromones_[type] < 0) {
@@ -141,9 +141,9 @@ RenderState Cell::get_render_state() const {
 
 void Cell::decay_feromones() {
     for (auto& [type, value] : feromones_) {
-        value = static_cast<int>(value * FeromoneDecayRate);
-        if (value < 1) {
-            value = 0; // Threshold to zero
+        value = static_cast<float>(value * FeromoneDecayRate);
+        if (value < 0.01f) {
+            value = 0.0f; // Threshold to zero
         }
     }
 }

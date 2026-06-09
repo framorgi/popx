@@ -34,8 +34,8 @@ bool PopsManager::spawn_population() {
             int h = random_util->rnd_int(0, world_->get_height());
             logger_->debug("Spawning agent at random position (" + std::to_string(w) + ", " + std::to_string(h) + ").");
             while (!(pop->try_spawn(PositionT{w, h}))) {
-                logger_->warning("Position (" + std::to_string(w) + ", " + std::to_string(h) +
-                                 ") is occupied. Retrying...");
+                logger_->debug("Position (" + std::to_string(w) + ", " + std::to_string(h) +
+                               ") is occupied. Retrying...");
                 w = random_util->rnd_int(0, world_->get_width());
                 h = random_util->rnd_int(0, world_->get_height());
             }
@@ -109,10 +109,20 @@ void PopsManager::update_cycle() {
     for (auto& pop : pops_) {
         if (pop->wants_to_reproduce()) {
             reproducers.push_back(pop);
+        } else {
+            if (pops_.size() < MinPopulationAllowed && reproducers.size() < (MinPopulationAllowed - pops_.size()))
+
+            {
+                logger_->warning("Population is critically low (" + std::to_string(pops_.size()) +
+                                 " agents). Forcing reproduction of agent at position (" +
+                                 std::to_string(pop->get_position().x) + ", " + std::to_string(pop->get_position().y) +
+                                 ").");
+                reproducers.push_back(pop);
+            }
         }
     }
     for (auto& parent : reproducers) {
-        if (pops_.size() < 50)
+        if (pops_.size() < MaxPopulationAllowed)
             try_reproduce(parent);
     }
 

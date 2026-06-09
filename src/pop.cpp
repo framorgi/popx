@@ -47,7 +47,7 @@ void Pop::die() {
 
     auto world = world_.lock();
     if (world) {
-        world->get_cell(pos_)->give_glucose(glucose_); // Return remaining glucose to the cell
+        world->get_cell(pos_)->give_glucose(MaxC6h12o6 / 2); // Return remaining glucose to the cell
     }
     alive_ = false;
 }
@@ -466,7 +466,7 @@ bool Pop::try_move(PositionT p) {
             update_last_direction(pos_, old_pos);
             return true;
         }
-        logger_->warning("Move to position (" + std::to_string(p.x) + ", " + std::to_string(p.y) + ") failed.");
+        logger_->debug("Move to position (" + std::to_string(p.x) + ", " + std::to_string(p.y) + ") failed.");
     }
     return false;
 }
@@ -538,12 +538,12 @@ void Pop::emit_feromone(FeromoneT type, int intensity) {
 
     world->set_feromone(pos_, type, intensity);
 }
-[[nodiscard]] int Pop::get_feromone_strength(FeromoneT type, PositionT pos) const {
+[[nodiscard]] float Pop::get_feromone_strength(FeromoneT type, PositionT pos) const {
     auto world = world_.lock();
     if (!world) {
         return 0; // World no longer exists
     }
-    int strength = world->get_feromone_strength(type, pos);
+    float strength = world->get_feromone_strength(type, pos);
     return strength;
 }
 

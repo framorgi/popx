@@ -116,10 +116,10 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
             Vec2 center{cx, cy};
             Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
             Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
-
-            entity_layer_.push_back({center, rs.color});
-            entity_layer_.push_back({p0, rs.color});
-            entity_layer_.push_back({p1, rs.color});
+            Color early_color = Color(255, 255, 255, 255); // white for early age
+            entity_layer_.push_back({center, pop->age > 1 ? rs.color : early_color});
+            entity_layer_.push_back({p0, pop->age > 1 ? rs.color : early_color});
+            entity_layer_.push_back({p1, pop->age > 1 ? rs.color : early_color});
         }
     }
 }

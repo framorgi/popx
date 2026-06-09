@@ -29,7 +29,7 @@ class ICell {
 
     virtual void set_glucose(unsigned glucose) = 0;
 
-    virtual void set_feromone(FeromoneT type, int value) = 0;
+    virtual void set_feromone(FeromoneT type, float value) = 0;
     [[nodiscard]] virtual FeromoneMapT get_feromone_map() const = 0;
 
     // --- Chemical resources ---------------------------------------------------
