@@ -132,12 +132,12 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     ///----------------------------------------------------------------------------
     /// @brief Halves the parent's internal reserves and writes the donated amounts to the out params.
     ///----------------------------------------------------------------------------
-    void donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_carbon);
+    void donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_co2);
 
     ///----------------------------------------------------------------------------
     /// @brief Sets internal reserves directly (used to initialise offspring with parent donation).
     ///----------------------------------------------------------------------------
-    void set_resources(unsigned glucose, unsigned water, unsigned calcium, unsigned carbon);
+    void set_resources(unsigned glucose, unsigned water, unsigned calcium, unsigned co2);
 
     ///---------------------------------------------------------------------------
     /// @brief Gets the render state of the Pop for visualization.
@@ -264,10 +264,6 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Internal calcium reserve.
     /// ---------------------------------------------------------------------------
     unsigned calcium_ = 0;
-    /// ---------------------------------------------------------------------------
-    /// @brief Internal carbon reserve  .
-    /// ---------------------------------------------------------------------------
-    unsigned carbon_ = 0;
     /// ---------------------------------------------------------------------------
     /// @brief Energy cost incurred by the Pop's actions in the current cycle.
     /// ---------------------------------------------------------------------------

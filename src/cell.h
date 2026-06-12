@@ -45,11 +45,15 @@ class Cell : public ICell {
     unsigned int take_glucose(unsigned int amount) override;
     unsigned int give_glucose(unsigned int amount) override;
     unsigned int take_water(unsigned int amount) override;
+    unsigned int give_water(unsigned int amount) override;
     unsigned int take_calcium(unsigned int amount) override;
+    unsigned int give_calcium(unsigned int amount) override;
     unsigned int take_o2(unsigned int amount) override;
     unsigned int give_o2(unsigned int amount) override;
     unsigned int take_co2(unsigned int amount) override;
     unsigned int give_co2(unsigned int amount) override;
+    unsigned int take_lipids(unsigned int amount) override;
+    unsigned int give_lipids(unsigned int amount) override;
     void update() override;
 
   private:

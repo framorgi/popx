@@ -76,7 +76,13 @@ void Pop::die() {
 
     auto world = world_.lock();
     if (world) {
-        world->get_cell(pos_)->give_glucose(MaxC6h12o6); // Return remaining glucose to the cell
+        auto cell = world->get_cell(pos_);
+        cell->give_glucose(glucose_);
+        cell->give_water(water_);
+        cell->give_o2(o2_);
+        cell->give_co2(co2_);
+        cell->give_calcium(calcium_);
+        cell->give_lipids(lipids_);
     }
     alive_ = false;
     // remove serialized brain file for this pop
@@ -560,22 +566,22 @@ PhyT Pop::make_offspring_phy() const {
     return offspring;
 }
 
-void Pop::donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_carbon) {
+void Pop::donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_co2) {
     out_glucose = glucose_ / 2;
     out_water = water_ / 2;
     out_calcium = calcium_ / 2;
-    out_carbon = carbon_ / 2;
+    out_co2 = co2_ / 2;
     glucose_ -= out_glucose;
     water_ -= out_water;
     calcium_ -= out_calcium;
-    carbon_ -= out_carbon;
+    co2_ -= out_co2;
 }
 
-void Pop::set_resources(unsigned glucose, unsigned water, unsigned calcium, unsigned carbon) {
+void Pop::set_resources(unsigned glucose, unsigned water, unsigned calcium, unsigned co2) {
     glucose_ = glucose;
     water_ = water;
     calcium_ = calcium;
-    carbon_ = carbon;
+    co2_ = co2;
 }
 
 void Pop::update_last_direction(PositionT new_pos, PositionT old_pos) {
@@ -609,6 +615,10 @@ void Pop::update_physiology() {
 
     // Auto-take resources from current cell
     glucose_ += world->get_cell(pos_)->take_glucose(2);
+    water_ += world->get_cell(pos_)->take_water(2);
+    calcium_ += world->get_cell(pos_)->take_calcium(1);
+    co2_ += world->get_cell(pos_)->take_co2(1);
+    lipids_ += world->get_cell(pos_)->take_lipids(1);
     o2_ += world->get_cell(pos_)->take_o2(2);
 
     // Biological reactions

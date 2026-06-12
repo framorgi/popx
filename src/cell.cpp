@@ -114,10 +114,20 @@ unsigned int Cell::take_water(unsigned int amount) {
     return taken;
 }
 
+unsigned int Cell::give_water(unsigned int amount) {
+    organics_.h2o = std::min(organics_.h2o + amount, MaxH2o);
+    return amount;
+}
+
 unsigned int Cell::take_calcium(unsigned int amount) {
     const unsigned int taken = std::min(amount, organics_.caco3);
     organics_.caco3 -= taken;
     return taken;
+}
+
+unsigned int Cell::give_calcium(unsigned int amount) {
+    organics_.caco3 = std::min(organics_.caco3 + amount, MaxCaco3);
+    return amount;
 }
 
 unsigned int Cell::take_o2(unsigned int amount) {
@@ -140,6 +150,17 @@ unsigned int Cell::take_co2(unsigned int amount) {
 unsigned int Cell::give_co2(unsigned int amount) {
     organics_.co2 = std::min(organics_.co2 + amount, MaxCo2);
     return amount;
+}
+
+unsigned int Cell::give_lipids(unsigned int amount) {
+    organics_.lipids = std::min(organics_.lipids + amount, MaxLipids);
+    return amount;
+}
+
+unsigned int Cell::take_lipids(unsigned int amount) {
+    const unsigned int taken = std::min(amount, organics_.lipids);
+    organics_.lipids -= taken;
+    return taken;
 }
 
 RenderState Cell::get_render_state() const {

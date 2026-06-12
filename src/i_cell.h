@@ -41,10 +41,14 @@ class ICell {
     virtual unsigned take_glucose(unsigned amount) = 0;
     virtual unsigned give_glucose(unsigned amount) = 0;
     virtual unsigned take_water(unsigned amount) = 0;
+    virtual unsigned give_water(unsigned amount) = 0;
     virtual unsigned take_calcium(unsigned amount) = 0;
+    virtual unsigned give_calcium(unsigned amount) = 0;
     virtual unsigned take_o2(unsigned amount) = 0;
     virtual unsigned give_o2(unsigned amount) = 0;
     virtual unsigned take_co2(unsigned amount) = 0;
     virtual unsigned give_co2(unsigned amount) = 0;
+    virtual unsigned take_lipids(unsigned amount) = 0;
+    virtual unsigned give_lipids(unsigned amount) = 0;
     virtual void update() = 0;
 };

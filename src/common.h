@@ -2,7 +2,7 @@
 #pragma once
 #include <map>
 
-constexpr int MapSize = 180; // Number of cells along one side of the square map
+constexpr int MapSize = 120; // Number of cells along one side of the square map
 
 constexpr unsigned MaxAge = 200000;
 constexpr float MaxEnergy = 400.0f;

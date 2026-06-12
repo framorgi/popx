@@ -141,9 +141,9 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
     for (int i = 0; i < 8; ++i) {
         PositionT candidate{pp.x + dx[i], pp.y + dy[i]};
         if (child->try_spawn(candidate)) {
-            unsigned g = 0, w = 0, ca = 0, co = 0;
-            parent->donate_resources(g, w, ca, co);
-            child->set_resources(g, w, ca, co);
+            unsigned g = 0, w = 0, ca = 0, co2 = 0;
+            parent->donate_resources(g, w, ca, co2);
+            child->set_resources(g, w, ca, co2);
 
             pops_.push_back(child);
             const int phase = rand() % 3;
