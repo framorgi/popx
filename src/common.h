@@ -2,9 +2,19 @@
 #pragma once
 #include <map>
 
-constexpr int MapSize = 200; // Number of cells along one side of the square map
+constexpr int MapSize = 120; // Number of cells along one side of the square map
 
-constexpr unsigned MaxAge = 1000;
+constexpr unsigned MaxAge = 200000;
+constexpr float MaxEnergy = 400.0f;
+constexpr unsigned MinPopulationAllowed = 20;
+constexpr unsigned MaxPopulationAllowed = 70;
+// learning contribution weights
+constexpr float AgeRewardWeight = 0.05f;
+constexpr float EnergyRewardWeight = 0;
+constexpr float EnergyDeltaRewardWeight = 0.35f;
+constexpr float OffspringRewardWeight = 0.60; // learning rate
+constexpr float HebbianLearningRate = 0.06f;  // was 0.001f
+
 using PositionT = struct {
     int x;
     int y;
@@ -12,7 +22,9 @@ using PositionT = struct {
 
 constexpr unsigned WaterThreshold = 100;
 constexpr unsigned MaxH2o = 1000;
-constexpr unsigned MaxC6h12o6 = 50;
+constexpr unsigned MaxC6h12o6 = 500;
+constexpr unsigned GlucoseRegenInterval = 400; // ticks between each glucose increment
+constexpr unsigned GlucoseRegenAmount = 1;     // units of glucose added per interval
 constexpr unsigned MaxLipids = 300;
 constexpr unsigned MaxO2 = 1000;
 constexpr unsigned MaxCo2 = 1000;
@@ -31,10 +43,10 @@ using OrganicsT = struct {
 };
 
 using FeromoneT = enum { FOOD_FEROMONE, DANGER_FEROMONE, MATE_FEROMONE, HOME_FEROMONE };
-using FeromoneMapT = std::map<FeromoneT, int>;
+using FeromoneMapT = std::map<FeromoneT, float>;
 
-constexpr double FeromoneDecayRate = 0.99; // Decay rate per update
+constexpr float FeromoneDecayRate = 0.99f; // Decay rate per update
 
 enum class Direction { N, NE, E, SE, S, SW, W, NW };
 
-constexpr double MaxClimbableSlope = 3.0; // Maximum elevation difference that can be climbed in one move
+constexpr double MaxClimbableSlope = 6.0; // Maximum elevation difference that can be climbed in one move

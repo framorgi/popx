@@ -117,7 +117,7 @@ class GridWorld : public IWorld {
     /// @param    type The type of feromone
     /// @param    value The value to set
     ///----------------------------------------------------------------------
-    void set_feromone(PositionT p, FeromoneT type, int value) override;
+    void set_feromone(PositionT p, FeromoneT type, float value) override;
 
     //--------------------------------------------------------------------------
     /// @brief      Get the strength of a specific feromone type at a given position
@@ -127,7 +127,7 @@ class GridWorld : public IWorld {
     ///
     /// @return     feromone strength at the given position
     //--------------------------------------------------------------------------
-    [[nodiscard]] int get_feromone_strength(FeromoneT type, PositionT pos) const override;
+    [[nodiscard]] float get_feromone_strength(FeromoneT type, PositionT pos) const override;
 
     ///----------------------------------------------------------------------
     /// @brief      Get the temperature at a given position

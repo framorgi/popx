@@ -36,6 +36,21 @@ class IConfig {
     virtual const std::string& get_log_dir() const = 0;
     virtual const std::string& get_image_dir() const = 0;
 
+    // --- Physiology ----------------------------------------------------------
+    virtual unsigned get_phy_init_mitochondrions_max() const = 0;
+    virtual unsigned get_phy_init_chloroplasts_max() const = 0;
+    virtual unsigned get_phy_init_sensitiveness_max() const = 0;
+    virtual unsigned get_phy_adipose_stock_max() const = 0;
+    virtual unsigned get_phy_min_chloroplasts() const = 0;
+    virtual unsigned get_phy_max_chloroplasts_ref() const = 0;
+    virtual double get_phy_energy_per_respiration() const = 0;
+    virtual double get_phy_heat_per_respiration() const = 0;
+    virtual double get_phy_alpha_min() const = 0;
+    virtual double get_phy_alpha_max() const = 0;
+    virtual double get_phy_max_lipids_ref() const = 0;
+    virtual double get_phy_init_temperature() const = 0;
+    virtual double get_phy_photo_min_elevation() const = 0;
+
     // --- Runtime reload -------------------------------------------------------
     /// Re-reads the INI file. Parameters annotated with @N only activate from
     /// generation N onwards (same convention as the legacy param system).

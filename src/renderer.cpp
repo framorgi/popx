@@ -55,12 +55,18 @@ void Renderer::draw() {
 
     feromone_layer_.clear();
     feromone_layer_.reserve(world_width_ * world_height_ * FEROMONE_SEGMENTS * 3); // assume 10% cells have feromones
+
+    glucose_layer_.clear();
+    glucose_layer_.reserve(world_width_ * world_height_ * GLUCOSE_SEGMENTS * 3); // assume 10% cells have glucose
+
     // update entities and cell buffers
     // before drawing every layer i loop once through the world to get all the cells and entities render data needed to
     // draw
     update_world();
     // draw the cell buffers as quads
     gfx_->draw_quads(map_layer_);
+    // draw the glucose buffers as composision of triangles
+    gfx_->draw_triangles(glucose_layer_);
     // draw the feromone buffers as composision of triangles
     gfx_->draw_triangles(feromone_layer_);
     // draw the entity buffers as composision of triangles
@@ -101,19 +107,30 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
         float cx = cell_render_size * pos.x + cell_render_size * rs.size / 2;
         float cy = cell_render_size * pos.y + cell_render_size * rs.size / 2;
         float radius = cell_render_size * rs.size / 2;
+        Color early_color = Color(255, 255, 255, 255);
+        Color col = pop->age > 1 ? rs.color : early_color;
 
-        // foreach segment
-        for (int i = 0; i < SEGMENTS; ++i) {
-            float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
-            float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
+        if (pop->is_photosynthetic) {
+            // Equilateral triangle pointing up
+            Vec2 p0{cx, cy - radius};
+            Vec2 p1{cx - radius * 1.1f, cy + radius * 0.5f};
+            Vec2 p2{cx + radius * 1.1f, cy + radius * 0.5f};
+            entity_layer_.push_back({p0, col});
+            entity_layer_.push_back({p1, col});
+            entity_layer_.push_back({p2, col});
+        } else {
+            // Circle approximation
+            for (int i = 0; i < SEGMENTS; ++i) {
+                float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
+                float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
 
-            Vec2 center{cx, cy};
-            Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
-            Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
-
-            entity_layer_.push_back({center, rs.color});
-            entity_layer_.push_back({p0, rs.color});
-            entity_layer_.push_back({p1, rs.color});
+                Vec2 center{cx, cy};
+                Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
+                Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+                entity_layer_.push_back({center, col});
+                entity_layer_.push_back({p0, col});
+                entity_layer_.push_back({p1, col});
+            }
         }
     }
 }
@@ -128,7 +145,7 @@ void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
 
     if (auto cell_data = std::get_if<CellVisualData>(&rs.payload)) {
         if (cell_data->feromones_a != 0.0) {
-            // Add feromone representation to the feromone layer
+            // Add feromone  A representation to the feromone layer
             double intensity = cell_data->feromones_a;
             Color feromone_color =
                 Color(255, 0, 100, static_cast<uint8_t>(intensity * 255)); // Red with alpha based on intensity
@@ -149,6 +166,102 @@ void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
                 feromone_layer_.push_back({center, feromone_color});
                 feromone_layer_.push_back({p0, feromone_color});
                 feromone_layer_.push_back({p1, feromone_color});
+            }
+        }
+        if (cell_data->feromones_b != 0.0) {
+            // Add feromone B representation to the feromone layer
+            double intensity = cell_data->feromones_b;
+            Color feromone_color =
+                Color(55, 240, 200, static_cast<uint8_t>(intensity * 255)); // Red with alpha based on intensity
+
+            float cx = cell_render_size * static_cast<float>(x) + cell_render_size;
+            float cy = cell_render_size * static_cast<float>(y) + cell_render_size;
+            float radius = cell_render_size * intensity / 1.7f;
+
+            // foreach segment
+            for (int i = 0; i < FEROMONE_SEGMENTS; ++i) {
+                float a0 = (i / static_cast<float>(FEROMONE_SEGMENTS)) * 2.f * PI;
+                float a1 = ((i + 1) / static_cast<float>(FEROMONE_SEGMENTS)) * 2.f * PI;
+
+                Vec2 center{cx, cy};
+                Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
+                Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+
+                feromone_layer_.push_back({center, feromone_color});
+                feromone_layer_.push_back({p0, feromone_color});
+                feromone_layer_.push_back({p1, feromone_color});
+            }
+        }
+        if (cell_data->feromones_c != 0.0) {
+            // Add feromone C representation to the feromone layer
+            double intensity = cell_data->feromones_c;
+            Color feromone_color =
+                Color(55, 220, 0, static_cast<uint8_t>(intensity * 255)); // Red with alpha based on intensity
+
+            float cx = cell_render_size * static_cast<float>(x) + cell_render_size;
+            float cy = cell_render_size * static_cast<float>(y) + cell_render_size;
+            float radius = cell_render_size * intensity / 1.7f;
+
+            // foreach segment
+            for (int i = 0; i < FEROMONE_SEGMENTS; ++i) {
+                float a0 = (i / static_cast<float>(FEROMONE_SEGMENTS)) * 2.f * PI;
+                float a1 = ((i + 1) / static_cast<float>(FEROMONE_SEGMENTS)) * 2.f * PI;
+
+                Vec2 center{cx, cy};
+                Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
+                Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+
+                feromone_layer_.push_back({center, feromone_color});
+                feromone_layer_.push_back({p0, feromone_color});
+                feromone_layer_.push_back({p1, feromone_color});
+            }
+        }
+        if (cell_data->feromones_d != 0.0) {
+            // Add feromone D representation to the feromone layer
+            double intensity = cell_data->feromones_d;
+            Color feromone_color =
+                Color(0, 10, 100, static_cast<uint8_t>(intensity * 255)); // Red with alpha based on intensity
+
+            float cx = cell_render_size * static_cast<float>(x) + cell_render_size;
+            float cy = cell_render_size * static_cast<float>(y) + cell_render_size;
+            float radius = cell_render_size * intensity / 1.7f;
+
+            // foreach segment
+            for (int i = 0; i < FEROMONE_SEGMENTS; ++i) {
+                float a0 = (i / static_cast<float>(FEROMONE_SEGMENTS)) * 2.f * PI;
+                float a1 = ((i + 1) / static_cast<float>(FEROMONE_SEGMENTS)) * 2.f * PI;
+
+                Vec2 center{cx, cy};
+                Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
+                Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+
+                feromone_layer_.push_back({center, feromone_color});
+                feromone_layer_.push_back({p0, feromone_color});
+                feromone_layer_.push_back({p1, feromone_color});
+            }
+        }
+        if (cell_data->glucose != 0.0) {
+            // Add glucose representation to the glucose layer
+            double intensity = cell_data->glucose;
+            Color glucose_color =
+                Color(0, 0, 0, static_cast<uint8_t>(intensity * 255)); // Red with alpha based on intensity
+
+            float cx = cell_render_size * static_cast<float>(x) + cell_render_size;
+            float cy = cell_render_size * static_cast<float>(y) + cell_render_size;
+            float radius = cell_render_size * intensity * 0.24f;
+
+            // foreach segment
+            for (int i = 0; i < GLUCOSE_SEGMENTS; ++i) {
+                float a0 = (i / static_cast<float>(GLUCOSE_SEGMENTS)) * 2.f * PI;
+                float a1 = ((i + 1) / static_cast<float>(GLUCOSE_SEGMENTS)) * 2.f * PI;
+
+                Vec2 center{cx, cy};
+                Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
+                Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+
+                glucose_layer_.push_back({center, glucose_color});
+                glucose_layer_.push_back({p0, glucose_color});
+                glucose_layer_.push_back({p1, glucose_color});
             }
         }
     }

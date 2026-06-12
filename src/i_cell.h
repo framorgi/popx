@@ -27,7 +27,9 @@ class ICell {
     virtual void set_humidity(double humidity) = 0;
     [[nodiscard]] virtual double get_humidity() const = 0;
 
-    virtual void set_feromone(FeromoneT type, int value) = 0;
+    virtual void set_glucose(unsigned glucose) = 0;
+
+    virtual void set_feromone(FeromoneT type, float value) = 0;
     [[nodiscard]] virtual FeromoneMapT get_feromone_map() const = 0;
 
     // --- Chemical resources ---------------------------------------------------
@@ -39,6 +41,14 @@ class ICell {
     virtual unsigned take_glucose(unsigned amount) = 0;
     virtual unsigned give_glucose(unsigned amount) = 0;
     virtual unsigned take_water(unsigned amount) = 0;
+    virtual unsigned give_water(unsigned amount) = 0;
     virtual unsigned take_calcium(unsigned amount) = 0;
+    virtual unsigned give_calcium(unsigned amount) = 0;
+    virtual unsigned take_o2(unsigned amount) = 0;
+    virtual unsigned give_o2(unsigned amount) = 0;
+    virtual unsigned take_co2(unsigned amount) = 0;
+    virtual unsigned give_co2(unsigned amount) = 0;
+    virtual unsigned take_lipids(unsigned amount) = 0;
+    virtual unsigned give_lipids(unsigned amount) = 0;
     virtual void update() = 0;
 };

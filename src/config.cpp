@@ -95,6 +95,46 @@ const std::string& Config::get_image_dir() const {
     return params_.image_dir;
 }
 
+unsigned Config::get_phy_init_mitochondrions_max() const {
+    return params_.phy_init_mitochondrions_max;
+}
+unsigned Config::get_phy_init_chloroplasts_max() const {
+    return params_.phy_init_chloroplasts_max;
+}
+unsigned Config::get_phy_init_sensitiveness_max() const {
+    return params_.phy_init_sensitiveness_max;
+}
+unsigned Config::get_phy_adipose_stock_max() const {
+    return params_.phy_adipose_stock_max;
+}
+unsigned Config::get_phy_min_chloroplasts() const {
+    return params_.phy_min_chloroplasts;
+}
+unsigned Config::get_phy_max_chloroplasts_ref() const {
+    return params_.phy_max_chloroplasts_ref;
+}
+double Config::get_phy_energy_per_respiration() const {
+    return params_.phy_energy_per_respiration;
+}
+double Config::get_phy_heat_per_respiration() const {
+    return params_.phy_heat_per_respiration;
+}
+double Config::get_phy_alpha_min() const {
+    return params_.phy_alpha_min;
+}
+double Config::get_phy_alpha_max() const {
+    return params_.phy_alpha_max;
+}
+double Config::get_phy_max_lipids_ref() const {
+    return params_.phy_max_lipids_ref;
+}
+double Config::get_phy_init_temperature() const {
+    return params_.phy_init_temperature;
+}
+double Config::get_phy_photo_min_elevation() const {
+    return params_.phy_photo_min_elevation;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -239,6 +279,62 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
     if (name == "image_dir") {
         params_.image_dir = value;
         resolve_dir(params_.image_dir);
+        return;
+    }
+
+    // Physiology (unsigned)
+    if (name == "phy_init_mitochondrions_max" && is_u && uval > 0) {
+        params_.phy_init_mitochondrions_max = uval;
+        return;
+    }
+    if (name == "phy_init_chloroplasts_max" && is_u) {
+        params_.phy_init_chloroplasts_max = uval;
+        return;
+    }
+    if (name == "phy_init_sensitiveness_max" && is_u && uval > 0) {
+        params_.phy_init_sensitiveness_max = uval;
+        return;
+    }
+    if (name == "phy_adipose_stock_max" && is_u && uval > 0) {
+        params_.phy_adipose_stock_max = uval;
+        return;
+    }
+    if (name == "phy_min_chloroplasts" && is_u) {
+        params_.phy_min_chloroplasts = uval;
+        return;
+    }
+    if (name == "phy_max_chloroplasts_ref" && is_u && uval > 0) {
+        params_.phy_max_chloroplasts_ref = uval;
+        return;
+    }
+
+    // Physiology (double) — reuse is_d/dval already computed above
+    if (name == "phy_energy_per_respiration" && is_d && dval >= 0.0) {
+        params_.phy_energy_per_respiration = dval;
+        return;
+    }
+    if (name == "phy_heat_per_respiration" && is_d && dval >= 0.0) {
+        params_.phy_heat_per_respiration = dval;
+        return;
+    }
+    if (name == "phy_alpha_min" && is_d && dval >= 0.0) {
+        params_.phy_alpha_min = dval;
+        return;
+    }
+    if (name == "phy_alpha_max" && is_d && dval >= 0.0) {
+        params_.phy_alpha_max = dval;
+        return;
+    }
+    if (name == "phy_max_lipids_ref" && is_d && dval > 0.0) {
+        params_.phy_max_lipids_ref = dval;
+        return;
+    }
+    if (name == "phy_init_temperature" && is_d) {
+        params_.phy_init_temperature = dval;
+        return;
+    }
+    if (name == "phy_photo_min_elevation" && is_d && dval >= 0.0) {
+        params_.phy_photo_min_elevation = dval;
         return;
     }
 

@@ -14,12 +14,28 @@
 #include <string>
 #include <type_traits>
 
+/// -----------------------------------------------------------------------------
+/// enum class representing every phase of the Pop's lifecycle, used to manage its behavior and state transitions.
+/// -----------------------------------------------------------------------------
 enum class State {
     SENSE,
     THINK,
     ACT
 
 };
+
+///----------------------------------------------------------------------------
+/// @brief The cause of death for this Pop (used for logging and analysis).
+///----------------------------------------------------------------------------
+enum class DeathCause { None, EnergyDepletion, OldAge };
+/// @brief Physical traits of a Pop entity (set at birth, inherited/mutated).
+struct PhyT {
+    unsigned mitochondrions;    ///< aerobic respiration capacity (energy from glucose+O2)
+    unsigned chloroplasts;      ///< photosynthesis capacity (glucose from CO2+H2O)
+    unsigned sensitiveness;     ///< directional scan radius in cells
+    unsigned adipose_stock_max; ///< maximum lipid storage (thermal insulation)
+};
+
 /// -----------------------------------------------------------------------------
 /// @class Pop
 /// @brief Implements the IAgent interface representing a population entity within the simulation.
@@ -36,6 +52,13 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Constructor for offspring: uses a pre-built genome instead of generating a random one.
     ///----------------------------------------------------------------------------
     Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config, Genome genome);
+    ///----------------------------------------------------------------------------
+    /// @brief Constructor for offspring: uses a pre-built genome and inherited physical traits.
+    ///----------------------------------------------------------------------------
+    Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config, Genome genome,
+        PhyT phy);
+
+    ~Pop();
 
     /// @brief Serialises brain weights to JSON with the given generation stamp.
     void serialize_brain(unsigned generation) const;
@@ -102,14 +125,19 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     [[nodiscard]] Genome make_offspring_genome() const;
 
     ///----------------------------------------------------------------------------
+    /// @brief Creates a (possibly mutated) copy of this Pop's physical traits for an offspring.
+    ///----------------------------------------------------------------------------
+    [[nodiscard]] PhyT make_offspring_phy() const;
+
+    ///----------------------------------------------------------------------------
     /// @brief Halves the parent's internal reserves and writes the donated amounts to the out params.
     ///----------------------------------------------------------------------------
-    void donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_carbon);
+    void donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_co2);
 
     ///----------------------------------------------------------------------------
     /// @brief Sets internal reserves directly (used to initialise offspring with parent donation).
     ///----------------------------------------------------------------------------
-    void set_resources(unsigned glucose, unsigned water, unsigned calcium, unsigned carbon);
+    void set_resources(unsigned glucose, unsigned water, unsigned calcium, unsigned co2);
 
     ///---------------------------------------------------------------------------
     /// @brief Gets the render state of the Pop for visualization.
@@ -117,7 +145,28 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     ///---------------------------------------------------------------------------
     [[nodiscard]] RenderState get_render_state() const override;
 
+    // ---------------------------------------------------------------------------
+    /// @brief Increments the offspring count for this Pop (called when an offspring is successfully spawned).
+    // ---------------------------------------------------------------------------
+    void increment_offspring_count();
+
+    // ---------------------------------------------------------------------------
+    /// @brief get the cause of death for this Pop (used for logging and analysis).
+    /// @return The cause of death for this Pop.
+    // ---------------------------------------------------------------------------
+    DeathCause get_death_cause() const;
+
   private:
+    ///----------------------------------------------------------------------------
+    /// @brief guard flag to avoid some action at first run
+    ///---------------------------------------------------------------------------
+    bool first_run_ = true;
+
+    ///----------------------------------------------------------------------------
+    /// @brief When true, init() skips random PhyT assignment (used for offspring with inherited traits).
+    ///----------------------------------------------------------------------------
+    bool inherit_phy_ = false;
+
     /// ---------------------------------------------------------------------------
     /// @brief Age of the Pop entity.
     /// ---------------------------------------------------------------------------
@@ -197,7 +246,12 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// ---------------------------------------------------------------------------
     /// @brief Reactivity factor, modified by SET_RESPONSIVENESS.
     /// ---------------------------------------------------------------------------
-    float responsiveness_ = 1.0f;
+    float responsiveness_ = 1;
+
+    /// ---------------------------------------------------------------------------
+    /// @brief Lazyness factor to reduce action frequency
+    /// ---------------------------------------------------------------------------
+    float lazyness_ = 0.0f;
     /// ---------------------------------------------------------------------------
     /// @brief Internal glucose reserve.
     /// ---------------------------------------------------------------------------
@@ -211,13 +265,48 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// ---------------------------------------------------------------------------
     unsigned calcium_ = 0;
     /// ---------------------------------------------------------------------------
-    /// @brief Internal carbon reserve  .
-    /// ---------------------------------------------------------------------------
-    unsigned carbon_ = 0;
-    /// ---------------------------------------------------------------------------
     /// @brief Energy cost incurred by the Pop's actions in the current cycle.
     /// ---------------------------------------------------------------------------
     float energy_cost_ = 0.0f;
+
+    /// ---------------------------------------------------------------------------
+    /// @brief Previous energy level (used to calculate energy delta for reward).
+    /// ---------------------------------------------------------------------------
+    float previous_energy_ = 0.0f;
+    ///----------------------------------------------------------------------------
+    /// @brief Counter for the number of offspring produced by this Pop
+    ///----------------------------------------------------------------------------
+    int offspring_count_ = 0;
+
+    ///----------------------------------------------------------------------------
+    /// @brief The cause of death for this Pop (used for logging and analysis).
+    ///--------------------------------------------------------------------------
+    DeathCause death_cause_ = DeathCause::None;
+
+    /// ---------------------------------------------------------------------------
+    /// @brief Physical traits (mitochondria, chloroplasts, lipid capacity).
+    /// ---------------------------------------------------------------------------
+    PhyT phy_;
+    /// ---------------------------------------------------------------------------
+    /// @brief Internal body temperature (Celsius).
+    /// ---------------------------------------------------------------------------
+    double temperature_;
+    /// ---------------------------------------------------------------------------
+    /// @brief Internal O2 reserve.
+    /// ---------------------------------------------------------------------------
+    unsigned o2_ = 0;
+    /// ---------------------------------------------------------------------------
+    /// @brief Internal CO2 reserve.
+    /// ---------------------------------------------------------------------------
+    unsigned co2_ = 0;
+    /// ---------------------------------------------------------------------------
+    /// @brief Lipid (fat) reserve — increases thermal insulation.
+    /// ---------------------------------------------------------------------------
+    unsigned lipids_ = 0;
+    /// ---------------------------------------------------------------------------
+    /// @brief Metabolism heat produced this physiology step (reset each cycle).
+    /// ---------------------------------------------------------------------------
+    float metabolism_heat_ = 0.0f;
     ///---------------------------------------------------------------------------
     /// @brief Updates the last movement direction based on new and old positions.
     /// @param new_pos The new position after movement.
@@ -237,7 +326,7 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @param pos The position to check for feromone strength.
     /// @return The strength of the specified feromone type at the given position.
     ///---------------------------------------------------------------------------
-    [[nodiscard]] int get_feromone_strength(FeromoneT type, PositionT pos) const;
+    [[nodiscard]] float get_feromone_strength(FeromoneT type, PositionT pos) const;
 
     ///----------------------------------------------------------------------
     /// @brief      Get the temperature at a given position
@@ -257,4 +346,32 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief      Update the physiology of the Pop based on energy cost of actions
     ///----------------------------------------------------------------------
     void update_physiology();
+
+    ///----------------------------------------------------------------------
+    /// @brief Run photosynthesis: CO2 + H2O -> C6H12O6 + O2
+    ///----------------------------------------------------------------------
+    void run_chloroplasts();
+    ///----------------------------------------------------------------------
+    /// @brief Run cellular respiration: C6H12O6 + O2 -> energy + CO2
+    ///----------------------------------------------------------------------
+    void run_mitochondrions();
+    ///----------------------------------------------------------------------
+    /// @brief Update body temperature via thermal exchange with environment.
+    ///----------------------------------------------------------------------
+    void update_temperature();
+    ///----------------------------------------------------------------------
+    /// @brief Compute thermal exchange coefficient alpha based on lipid reserves.
+    ///----------------------------------------------------------------------
+    [[nodiscard]] double compute_alpha() const;
+
+    ///----------------------------------------------------------------------
+    /// @brief      Calculate the reward for the current cycle based on the Pop's state and actions
+    /// @return     The calculated reward value
+    ///----------------------------------------------------------------------
+    [[nodiscard]] float calculate_reward() const;
+    // ----------------------------------------------------------------------
+    /// @brief     Apply various learning rules (Hebbian, reinforcement, etc.) to update the brain
+    /// @param     reward The reward value to use for learning
+    ///----------------------------------------------------------------------
+    void learn(float reward);
 };

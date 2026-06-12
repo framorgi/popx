@@ -29,6 +29,8 @@ class IBrain {
     /// @return Index of the highest-activated output, or -1 if no output fires.
     virtual int feed_forward(const std::vector<float>& sensor_values) = 0;
 
+    virtual void hebbian_update(float reward) = 0;
+
     /// @brief Resizes the network and resets all weights.
     virtual void resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned num_hidden) = 0;
 
@@ -36,6 +38,9 @@ class IBrain {
     /// @param pop_id      Identifier embedded in the filename and JSON metadata.
     /// @param generation  Simulation generation number stored in the metadata.
     virtual void serialize(const std::string& pop_id, unsigned generation) const = 0;
+
+    /// @brief Removes the serialized brain file for a given pop_id.
+    virtual bool remove_serialization(const std::string& pop_id) = 0;
 
     virtual unsigned get_size_s() const = 0;
     virtual unsigned get_size_n() const = 0;

@@ -32,18 +32,28 @@ class Cell : public ICell {
 
     [[nodiscard]] RenderState get_render_state() const override;
 
-    void set_feromone(FeromoneT type, int value) override;
+    void set_feromone(FeromoneT type, float value) override;
 
     [[nodiscard]] FeromoneMapT get_feromone_map() const override;
 
-    [[nodiscard]] unsigned get_glucose() const override;
-    [[nodiscard]] unsigned get_water() const override;
-    [[nodiscard]] unsigned get_calcium() const override;
-    [[nodiscard]] unsigned get_carbon() const override;
-    unsigned take_glucose(unsigned amount) override;
-    unsigned give_glucose(unsigned amount) override;
-    unsigned take_water(unsigned amount) override;
-    unsigned take_calcium(unsigned amount) override;
+    void set_glucose(unsigned int glucose) override;
+
+    [[nodiscard]] unsigned int get_glucose() const override;
+    [[nodiscard]] unsigned int get_water() const override;
+    [[nodiscard]] unsigned int get_calcium() const override;
+    [[nodiscard]] unsigned int get_carbon() const override;
+    unsigned int take_glucose(unsigned int amount) override;
+    unsigned int give_glucose(unsigned int amount) override;
+    unsigned int take_water(unsigned int amount) override;
+    unsigned int give_water(unsigned int amount) override;
+    unsigned int take_calcium(unsigned int amount) override;
+    unsigned int give_calcium(unsigned int amount) override;
+    unsigned int take_o2(unsigned int amount) override;
+    unsigned int give_o2(unsigned int amount) override;
+    unsigned int take_co2(unsigned int amount) override;
+    unsigned int give_co2(unsigned int amount) override;
+    unsigned int take_lipids(unsigned int amount) override;
+    unsigned int give_lipids(unsigned int amount) override;
     void update() override;
 
   private:
@@ -51,6 +61,11 @@ class Cell : public ICell {
     // Helper method to decay feromones over time
     ///----------------------------------------------
     void decay_feromones();
+
+    ///----------------------------------------------
+    // Helper method to regenerate glucose over time
+    ///----------------------------------------------
+    void regen_glucose();
 
     ///----------------------------------------------
     // Occupant entity in the cell
@@ -91,4 +106,9 @@ class Cell : public ICell {
     /// Flag to indicate if the cell is reserved for future use
     ///----------------------------------------------
     bool reserved_;
+
+    ///----------------------------------------------
+    /// Tick counter for glucose regeneration timing
+    ///----------------------------------------------
+    unsigned regen_tick_;
 };

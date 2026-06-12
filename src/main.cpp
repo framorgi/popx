@@ -25,7 +25,7 @@ int main(int /*argc*/, char* argv[]) {
     // Create Logger
     std::shared_ptr<ConsoleLogger> app_logger = std::make_shared<ConsoleLogger>();
     app_logger->set_level(
-        LogLevel::Error); // Set log level to Error (you can change this to Debug, Info, Warning as needed)
+        LogLevel::Warning); // Set log level to Warning (you can change this to Debug, Info, Warning as needed)
     // Create SimulationWorld
     std::shared_ptr<GridWorld> app_grid_simulation_world = std::make_shared<GridWorld>(MapSize, MapSize, app_logger);
 

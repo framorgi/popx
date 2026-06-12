@@ -34,8 +34,8 @@ bool PopsManager::spawn_population() {
             int h = random_util->rnd_int(0, world_->get_height());
             logger_->debug("Spawning agent at random position (" + std::to_string(w) + ", " + std::to_string(h) + ").");
             while (!(pop->try_spawn(PositionT{w, h}))) {
-                logger_->warning("Position (" + std::to_string(w) + ", " + std::to_string(h) +
-                                 ") is occupied. Retrying...");
+                logger_->debug("Position (" + std::to_string(w) + ", " + std::to_string(h) +
+                               ") is occupied. Retrying...");
                 w = random_util->rnd_int(0, world_->get_width());
                 h = random_util->rnd_int(0, world_->get_height());
             }
@@ -109,10 +109,20 @@ void PopsManager::update_cycle() {
     for (auto& pop : pops_) {
         if (pop->wants_to_reproduce()) {
             reproducers.push_back(pop);
+        } else {
+            if (pops_.size() < MinPopulationAllowed && reproducers.size() < (MinPopulationAllowed - pops_.size()))
+
+            {
+                logger_->warning("Population is critically low (" + std::to_string(pops_.size()) +
+                                 " agents). Forcing reproduction of agent at position (" +
+                                 std::to_string(pop->get_position().x) + ", " + std::to_string(pop->get_position().y) +
+                                 ").");
+                reproducers.push_back(pop);
+            }
         }
     }
     for (auto& parent : reproducers) {
-        if (pops_.size() < 50)
+        if (pops_.size() < MaxPopulationAllowed)
             try_reproduce(parent);
     }
 
@@ -120,7 +130,8 @@ void PopsManager::update_cycle() {
 }
 
 void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
-    auto child = std::make_shared<Pop>(world_, logger_, config_, parent->make_offspring_genome());
+    auto child =
+        std::make_shared<Pop>(world_, logger_, config_, parent->make_offspring_genome(), parent->make_offspring_phy());
 
     // Try all 8 adjacent cells (cardinal first, then diagonal)
     const int dx[] = {0, 1, 0, -1, 1, 1, -1, -1};
@@ -130,9 +141,9 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
     for (int i = 0; i < 8; ++i) {
         PositionT candidate{pp.x + dx[i], pp.y + dy[i]};
         if (child->try_spawn(candidate)) {
-            unsigned g = 0, w = 0, ca = 0, co = 0;
-            parent->donate_resources(g, w, ca, co);
-            child->set_resources(g, w, ca, co);
+            unsigned g = 0, w = 0, ca = 0, co2 = 0;
+            parent->donate_resources(g, w, ca, co2);
+            child->set_resources(g, w, ca, co2);
 
             pops_.push_back(child);
             const int phase = rand() % 3;
@@ -142,6 +153,10 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
                 think_bucket_.push_back(child);
             else
                 act_bucket_.push_back(child);
+
+            logger_->info("Incrementing offspring count for parent at (" + std::to_string(pp.x) + "," +
+                          std::to_string(pp.y) + ").");
+            parent->increment_offspring_count();
 
             logger_->info("Offspring spawned at (" + std::to_string(candidate.x) + "," + std::to_string(candidate.y) +
                           ") from parent at (" + std::to_string(pp.x) + "," + std::to_string(pp.y) + ").");

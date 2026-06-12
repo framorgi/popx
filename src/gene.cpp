@@ -40,6 +40,7 @@ int16_t Gene::get_weight() const {
 // Generate a random weight
 void Gene::genetic_lottery() {
     RandomUtility rand;
+    // weight range: [-4.0, +4.0]
     weight_ = rand.rnd_int(0, 0xffff) - 0x8000;
     source_type_ = rand.rnd_int(0, 7);
     source_num_ = rand.rnd_int(0, 31);

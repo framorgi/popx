@@ -5,6 +5,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <nlohmann/json.hpp>
 #include <vector>
 
@@ -113,7 +114,7 @@ int Brain::feed_forward(const std::vector<float>& sensor_values) {
     const unsigned nl = num_layers_;
     std::vector<Eigen::VectorXf> h(nl);
 
-    // Layer 0: load sensor inputs
+    // Layer 0: apply sensor inputs
     h[0] = Eigen::VectorXf::Zero(static_cast<int>(size_s_));
     for (unsigned i = 0; i < size_s_ && i < sensor_values.size(); ++i)
         h[0](static_cast<int>(i)) = sensor_values[i];
@@ -130,7 +131,8 @@ int Brain::feed_forward(const std::vector<float>& sensor_values) {
             x(i) = sigmoid(x(i));
         h[dst] = std::move(x);
     }
-
+    // Store activations for potential Hebbian updates after action execution
+    activations_ = h;
     // argmax of the output layer
     const auto& out = h[nl - 1];
     int max_index = -1;
@@ -151,6 +153,20 @@ void Brain::resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned n
     num_hidden_ = num_hidden;
     num_layers_ = num_hidden_ + 2;
     allocate();
+}
+
+bool Brain::remove_serialization(const std::string& pop_id) {
+    const std::string dir = config_->get_nnets_dir();
+    if (!std::filesystem::exists(dir))
+        return false;
+    bool any_removed = false;
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+        const std::string fname = entry.path().filename().string();
+        if (fname.rfind(pop_id + "_g", 0) == 0) {
+            any_removed |= std::filesystem::remove(entry.path());
+        }
+    }
+    return any_removed;
 }
 
 void Brain::serialize(const std::string& pop_id, unsigned generation) const {
@@ -240,4 +256,125 @@ float Brain::sigmoid(float x) const {
         return 1.0f / (1.0f + std::exp(-x));
     const float ex = std::exp(x);
     return ex / (1.0f + ex);
+}
+
+void Brain::hebbian_update(float reward) {
+    // ---------------------------------------------------------------------
+    // Global  learning rate
+    //
+    // Defines how much the synaptic weights are adjusted in response to the reward signal.
+    // Too large values make the behavior unstable.
+    // It's generally advisable to start with very small numbers.
+    // ---------------------------------------------------------------------
+    constexpr float eta = HebbianLearningRate;
+
+    // ---------------------------------------------------------------------
+    // Decay term.
+    //
+    // Simulates the fact that an unused or less useful synapse
+    // gradually loses effectiveness.
+    //
+    // It also prevents all weights from growing indefinitely.
+    // ---------------------------------------------------------------------
+    constexpr float decay = 0.0001f;
+
+    // ---------------------------------------------------------------------
+    // Absolute weight limits.
+    //
+    // In a biological network, the strength of a synapse is not infinite.
+    // This bounding prevents numerical divergences and extreme saturations.
+    // those boundaries match the ones used in genetic_lottery() to generate new random weights for new genes.
+    // ---------------------------------------------------------------------
+    constexpr float max_weight = 4.0f;
+    constexpr float min_weight = -4.0f;
+
+    const unsigned nl = num_layers_;
+
+    // ---------------------------------------------------------------------
+    // Iterate over all possible layer pairs.
+    //
+    // The network is feed-forward, so connections only exist
+    // from shallower layers to deeper layers.
+    // ---------------------------------------------------------------------
+    for (unsigned src = 0; src < nl; ++src) {
+        for (unsigned dst = src + 1; dst < nl; ++dst) {
+            // saving the connection matrix for the current layer pair
+            auto& W = M_[src * nl + dst];
+
+            // No connections present.
+            if (W.nonZeros() == 0)
+                continue;
+
+            // -----------------------------------------------------------------
+            // Eigen stores sparse matrices by columns.
+            // outerSize() allows iterating only over the elements
+            // that actually exist without visiting empty cells.
+            // -----------------------------------------------------------------
+            for (int k = 0; k < W.outerSize(); ++k) {
+                for (Eigen::SparseMatrix<float>::InnerIterator it(W, k); it; ++it) {
+                    // ---------------------------------------------------------
+                    // pre-synaptic activity mangnitude.
+                    // ---------------------------------------------------------
+                    const float pre = activations_[src](it.col());
+
+                    // Offset, centering the pre value around 0 to allow for negative and positive Hebbian updates
+                    const float pre_centered = pre - 0.5f;
+
+                    // ---------------------------------------------------------
+                    // Post-synaptic neuron activity.
+                    // ---------------------------------------------------------
+                    // How active was the neuron receiving the signal.
+                    // ---------------------------------------------------------
+                    const float post = activations_[dst](it.row());
+                    // Offset, centering the post value around 0 to allow for negative and positive Heb
+                    float post_centered = post - 0.5f;
+
+                    // Current synapse weight.
+                    const float w = it.value();
+
+                    // ---------------------------------------------------------
+                    // Hebbian term.
+                    //
+                    // If reward > 0:
+                    //   connections between co-active neurons are strengthened.
+                    //
+                    // If reward < 0:
+                    //   connections between co-active neurons are weakened.
+                    // ---------------------------------------------------------
+                    const float hebbian_term = eta * reward * pre_centered * post_centered;
+
+                    // ---------------------------------------------------------
+                    // Apply Biological decay term.
+                    // ---------------------------------------------------------
+                    const float decay_term = decay * w;
+
+                    // ---------------------------------------------------------
+                    // Total synaptic change.
+                    //
+                    // The decay is subtracted because it tends to
+                    // slowly bring the weight back towards zero.
+                    // ---------------------------------------------------------
+                    const float dw = hebbian_term - decay_term;
+
+                    // New weight.
+                    float new_weight = w + dw;
+
+                    // ---------------------------------------------------------
+                    // Bounding.
+                    //
+                    // Prevents pathological values.
+                    // A synapse cannot become arbitrarily strong.
+                    // ---------------------------------------------------------
+                    if (new_weight > max_weight)
+                        new_weight = max_weight;
+
+                    if (new_weight < min_weight)
+                        new_weight = min_weight;
+
+                    // Writing the new weight.
+                    it.valueRef() = new_weight;
+                }
+            }
+        }
+    }
 }

@@ -15,11 +15,19 @@ GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger) : width_(w),
 
 void GridWorld::init() {
     RandomUtility random_util;
+
+    /// Generate a random RBF set for temperature
     RBFSet temp_rbf_set = random_util.rnd_rbf_set(10, 5.0, 100.0, 0.0, static_cast<double>(width_), 0.0,
                                                   static_cast<double>(height_), 20.0, 20.0, 20.0, 20.0);
 
+    /// Generate a random RBF set for elevation
     RBFSet elevation_rbf_set = random_util.rnd_symmetric_rbf_set(20, 5.0, 100.0, 0.0, static_cast<double>(width_), 0.0,
                                                                  static_cast<double>(height_), 0.0, 20.0);
+
+    /// Generate a random RBF set for glucose distribution
+    RBFSet glucose_rbf_set = random_util.rnd_rbf_set(35, MaxC6h12o6 / 8, MaxC6h12o6, 0, static_cast<double>(width_),
+                                                     0.0, static_cast<double>(height_), 20.0, 10.0, 5.0, 10.0);
+    ///
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {
             double temp_value =
@@ -28,14 +36,18 @@ void GridWorld::init() {
             double elevation_value =
                 random_util.evaluate_rbf_set(elevation_rbf_set, static_cast<double>(x), static_cast<double>(y));
             cells_[index(x, y)]->set_elevation((elevation_value));
+
+            auto glucose_value = static_cast<unsigned>(
+                random_util.evaluate_rbf_set(glucose_rbf_set, static_cast<double>(x), static_cast<double>(y)));
+            cells_[index(x, y)]->set_glucose((glucose_value));
         }
     }
-    logger_->info("Grid world initialized with temperature field.");
+    logger_->info("Grid world initialized.");
 }
 
 bool GridWorld::is_free(PositionT p) const {
     if (!in_bounds(p.x, p.y)) {
-        logger_->warning("Position (" + std::to_string(p.x) + "," + std::to_string(p.y) + ") is out of bounds.");
+        logger_->debug("Position (" + std::to_string(p.x) + "," + std::to_string(p.y) + ") is out of bounds.");
         return false;
     }
 
@@ -51,8 +63,8 @@ bool GridWorld::is_free(PositionT p) const {
 
 bool GridWorld::move_entity(std::shared_ptr<IEntity> entity, PositionT new_pos) {
     if (!is_free(new_pos)) {
-        logger_->warning("Failed to move entity to occupied position (" + std::to_string(new_pos.x) + "," +
-                         std::to_string(new_pos.y) + ")");
+        logger_->debug("Failed to move entity to occupied position (" + std::to_string(new_pos.x) + "," +
+                       std::to_string(new_pos.y) + ")");
         return false;
     }
 
@@ -85,12 +97,12 @@ bool GridWorld::add_entity(std::shared_ptr<IEntity> e) {
     logger_->debug("Adding entity to grid world at position (" + std::to_string(pos.x) + "," + std::to_string(pos.y) +
                    ")");
     if (!is_free(pos)) {
-        logger_->warning("Cannot add entity - position already occupied!");
+        logger_->debug("Cannot add entity - position already occupied!");
         return false;
     }
     cells_[index(pos.x, pos.y)]->set_occupant(e);
-    logger_->info("Entity successfully added to position (" + std::to_string(pos.x) + "," + std::to_string(pos.y) +
-                  ")");
+    logger_->debug("Entity successfully added to position (" + std::to_string(pos.x) + "," + std::to_string(pos.y) +
+                   ")");
     return true;
 }
 
@@ -132,18 +144,18 @@ double GridWorld::get_feromone_magnitude(PositionT p, FeromoneT type) const {
     }
 }
 
-void GridWorld::set_feromone(PositionT p, FeromoneT type, int value) {
+void GridWorld::set_feromone(PositionT p, FeromoneT type, float value) {
     if (!in_bounds(p.x, p.y)) {
-        logger_->warning("Cannot set feromone - position out of bounds!");
+        logger_->debug("Cannot set feromone - position out of bounds!");
         return;
     }
     auto cell = cells_[index(p.x, p.y)];
     cell->set_feromone(type, value);
 }
 
-[[nodiscard]] int GridWorld::get_feromone_strength(FeromoneT type, PositionT pos) const {
+[[nodiscard]] float GridWorld::get_feromone_strength(FeromoneT type, PositionT pos) const {
     if (!in_bounds(pos.x, pos.y)) {
-        return 0; // Out of bounds
+        return 0.0f; // Out of bounds
     }
     auto cell = cells_[index(pos.x, pos.y)];
     FeromoneMapT fm = cell->get_feromone_map();

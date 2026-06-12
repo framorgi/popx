@@ -7,7 +7,7 @@
 #include <algorithm>
 
 Cell::Cell(std::weak_ptr<IEntity> occupant)
-    : occupant_(std::move(occupant)), temperature_(20.0f), humidity_(50.0f), elevation_(0.0f)
+    : occupant_(std::move(occupant)), temperature_(20.0f), humidity_(50.0f), elevation_(0.0f), regen_tick_(0)
 
 {
     // Initialize organics with random values
@@ -39,6 +39,11 @@ void Cell::set_occupant(std::weak_ptr<IEntity> occupant) {
 void Cell::set_temperature(double temperature) {
     temperature_ = static_cast<float>(temperature);
 }
+
+void Cell::set_glucose(unsigned int glucose) {
+    organics_.c6h12o6 = std::min(glucose, MaxC6h12o6);
+}
+
 [[nodiscard]] double Cell::get_temperature() const {
     return static_cast<double>(temperature_);
 }
@@ -57,7 +62,7 @@ void Cell::set_humidity(double humidity) {
     return static_cast<double>(humidity_);
 }
 
-void Cell::set_feromone(FeromoneT type, int value) {
+void Cell::set_feromone(FeromoneT type, float value) {
     feromones_[type] += value;
 
     if (feromones_[type] < 0) {
@@ -72,40 +77,89 @@ void Cell::set_feromone(FeromoneT type, int value) {
     return feromones_;
 }
 
-unsigned Cell::get_glucose() const {
+unsigned int Cell::get_glucose() const {
     return organics_.c6h12o6;
 }
-unsigned Cell::get_water() const {
+unsigned int Cell::get_water() const {
     return organics_.h2o;
 }
-unsigned Cell::get_calcium() const {
+unsigned int Cell::get_calcium() const {
     return organics_.caco3;
 }
-unsigned Cell::get_carbon() const {
+unsigned int Cell::get_carbon() const {
     return organics_.lipids;
 }
 
-unsigned Cell::take_glucose(unsigned amount) {
-    const unsigned taken = std::min(amount, organics_.c6h12o6);
+unsigned int Cell::take_glucose(unsigned int amount) {
+    const unsigned int taken = std::min(amount, organics_.c6h12o6);
     organics_.c6h12o6 -= taken;
+    if (organics_.c6h12o6 > MaxC6h12o6) {
+        organics_.c6h12o6 = MaxC6h12o6; // Ensure we don't go negative
+    }
     return taken;
 }
 
-unsigned Cell::give_glucose(unsigned amount) {
-    const unsigned given = std::min(amount, organics_.c6h12o6);
+unsigned int Cell::give_glucose(unsigned int amount) {
+    const unsigned int given = std::min(amount, organics_.c6h12o6);
     organics_.c6h12o6 += given;
+    if (organics_.c6h12o6 > MaxC6h12o6) {
+        organics_.c6h12o6 = MaxC6h12o6; // Ensure we don't exceed max capacity
+    }
     return given;
 }
 
-unsigned Cell::take_water(unsigned amount) {
-    const unsigned taken = std::min(amount, organics_.h2o);
+unsigned int Cell::take_water(unsigned int amount) {
+    const unsigned int taken = std::min(amount, organics_.h2o);
     organics_.h2o -= taken;
     return taken;
 }
 
-unsigned Cell::take_calcium(unsigned amount) {
-    const unsigned taken = std::min(amount, organics_.caco3);
+unsigned int Cell::give_water(unsigned int amount) {
+    organics_.h2o = std::min(organics_.h2o + amount, MaxH2o);
+    return amount;
+}
+
+unsigned int Cell::take_calcium(unsigned int amount) {
+    const unsigned int taken = std::min(amount, organics_.caco3);
     organics_.caco3 -= taken;
+    return taken;
+}
+
+unsigned int Cell::give_calcium(unsigned int amount) {
+    organics_.caco3 = std::min(organics_.caco3 + amount, MaxCaco3);
+    return amount;
+}
+
+unsigned int Cell::take_o2(unsigned int amount) {
+    const unsigned int taken = std::min(amount, organics_.o2);
+    organics_.o2 -= taken;
+    return taken;
+}
+
+unsigned int Cell::give_o2(unsigned int amount) {
+    organics_.o2 = std::min(organics_.o2 + amount, MaxO2);
+    return amount;
+}
+
+unsigned int Cell::take_co2(unsigned int amount) {
+    const unsigned int taken = std::min(amount, organics_.co2);
+    organics_.co2 -= taken;
+    return taken;
+}
+
+unsigned int Cell::give_co2(unsigned int amount) {
+    organics_.co2 = std::min(organics_.co2 + amount, MaxCo2);
+    return amount;
+}
+
+unsigned int Cell::give_lipids(unsigned int amount) {
+    organics_.lipids = std::min(organics_.lipids + amount, MaxLipids);
+    return amount;
+}
+
+unsigned int Cell::take_lipids(unsigned int amount) {
+    const unsigned int taken = std::min(amount, organics_.lipids);
+    organics_.lipids -= taken;
     return taken;
 }
 
@@ -118,8 +172,11 @@ RenderState Cell::get_render_state() const {
                                    elevation_,
                                    humidity_,
                                    organics_.h2o > WaterThreshold, // water presence based on threshold
+                                   static_cast<double>(organics_.c6h12o6) / MaxC6h12o6,
+                                   static_cast<double>(feromones_.at(FeromoneT::DANGER_FEROMONE)) / MaxFeromones,
                                    static_cast<double>(feromones_.at(FeromoneT::FOOD_FEROMONE)) / MaxFeromones,
-                                   static_cast<double>(feromones_.at(FeromoneT::DANGER_FEROMONE)) / MaxFeromones};
+                                   static_cast<double>(feromones_.at(FeromoneT::MATE_FEROMONE)) / MaxFeromones,
+                                   static_cast<double>(feromones_.at(FeromoneT::HOME_FEROMONE)) / MaxFeromones};
     state.shape = RenderShape::Circle; //  shape
 
     return state;
@@ -127,13 +184,21 @@ RenderState Cell::get_render_state() const {
 
 void Cell::decay_feromones() {
     for (auto& [type, value] : feromones_) {
-        value = static_cast<int>(value * FeromoneDecayRate);
-        if (value < 1) {
-            value = 0; // Threshold to zero
+        value = static_cast<float>(value * FeromoneDecayRate);
+        if (value < 0.01f) {
+            value = 0.0f; // Threshold to zero
         }
+    }
+}
+
+void Cell::regen_glucose() {
+    if (++regen_tick_ >= GlucoseRegenInterval) {
+        regen_tick_ = 0;
+        organics_.c6h12o6 = std::min(organics_.c6h12o6 + GlucoseRegenAmount, MaxC6h12o6);
     }
 }
 
 void Cell::update() {
     decay_feromones();
+    regen_glucose();
 }
