@@ -35,7 +35,7 @@ class Brain : public IBrain {
 
     void resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned num_hidden) override;
     void serialize(const std::string& pop_id, unsigned generation) const override;
-    void remove_serialization(const std::string& pop_id) override;
+    bool remove_serialization(const std::string& pop_id) override;
     unsigned get_size_s() const override;
     unsigned get_size_n() const override;
     unsigned get_size_y() const override;

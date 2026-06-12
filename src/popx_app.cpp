@@ -45,6 +45,16 @@ void PopXApp::run() {
             sf::sleep(sf::milliseconds(16) - frame_time);
 
         // std::this_thread::sleep_for(std::chrono::milliseconds(1)); // Approx ~60 FPS
+
+        // catch pause  keyboard event
+        //  if (renderer_->is_key_pressed(sf::Keyboard::P)) {
+        //      logger_->info("App loop - paused ");
+        //      while (!renderer_->is_key_pressed(sf::Keyboard::P)) {
+        //          renderer_->poll_event();
+        //          sf::sleep(sf::milliseconds(100));
+        //      }
+        //      logger_->info("App loop - resumed ");
+        //  }
     }
 }
 void PopXApp::stop() {

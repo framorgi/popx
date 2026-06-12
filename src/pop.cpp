@@ -51,7 +51,9 @@ void Pop::die() {
     }
     alive_ = false;
     // remove serialized brain file for this pop
-    brain_->remove_serialization(pop_id_);
+    if (!brain_->remove_serialization(pop_id_)) {
+        logger_->error("Failed to remove serialized brain file for Pop with ID: " + pop_id_);
+    }
 }
 
 bool Pop::try_spawn(PositionT p) {

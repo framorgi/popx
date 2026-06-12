@@ -24,6 +24,9 @@ void SfmlGraphicEngine::poll_event() {
             window_.close();
             logger_->info("Window closed by user.");
         }
+        if (event.type == sf::Event::KeyPressed) {
+            logger_->info("Key pressed: " + std::to_string(event.key.code));
+        }
     }
 }
 void SfmlGraphicEngine::draw_circle(const Circle& circle, const Color& color) {
