@@ -107,19 +107,30 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
         float cx = cell_render_size * pos.x + cell_render_size * rs.size / 2;
         float cy = cell_render_size * pos.y + cell_render_size * rs.size / 2;
         float radius = cell_render_size * rs.size / 2;
+        Color early_color = Color(255, 255, 255, 255);
+        Color col = pop->age > 1 ? rs.color : early_color;
 
-        // foreach segment
-        for (int i = 0; i < SEGMENTS; ++i) {
-            float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
-            float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
+        if (pop->is_photosynthetic) {
+            // Equilateral triangle pointing up
+            Vec2 p0{cx, cy - radius};
+            Vec2 p1{cx - radius * 1.1f, cy + radius * 0.5f};
+            Vec2 p2{cx + radius * 1.1f, cy + radius * 0.5f};
+            entity_layer_.push_back({p0, col});
+            entity_layer_.push_back({p1, col});
+            entity_layer_.push_back({p2, col});
+        } else {
+            // Circle approximation
+            for (int i = 0; i < SEGMENTS; ++i) {
+                float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
+                float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
 
-            Vec2 center{cx, cy};
-            Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
-            Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
-            Color early_color = Color(255, 255, 255, 255); // white for early age
-            entity_layer_.push_back({center, pop->age > 1 ? rs.color : early_color});
-            entity_layer_.push_back({p0, pop->age > 1 ? rs.color : early_color});
-            entity_layer_.push_back({p1, pop->age > 1 ? rs.color : early_color});
+                Vec2 center{cx, cy};
+                Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
+                Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+                entity_layer_.push_back({center, col});
+                entity_layer_.push_back({p0, col});
+                entity_layer_.push_back({p1, col});
+            }
         }
     }
 }

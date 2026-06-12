@@ -37,6 +37,18 @@ void Pop::init() {
     lazyness_ = random_util_->rnd_float(0.0f, 1.0f);
     glucose_ = 100;
     water_ = 100;
+    o2_ = 20;
+    co2_ = 0;
+    lipids_ = 20;
+    metabolism_heat_ = 0.0f;
+    temperature_ = config_->get_phy_init_temperature();
+    phy_.mitochondrions =
+        static_cast<unsigned>(random_util_->rnd_int(1, static_cast<int>(config_->get_phy_init_mitochondrions_max())));
+    phy_.chloroplasts =
+        static_cast<unsigned>(random_util_->rnd_int(0, static_cast<int>(config_->get_phy_init_chloroplasts_max())));
+    phy_.sensitiveness =
+        static_cast<unsigned>(random_util_->rnd_int(1, static_cast<int>(config_->get_phy_init_sensitiveness_max())));
+    phy_.adipose_stock_max = config_->get_phy_adipose_stock_max();
     sensor_values_.assign(brain_->get_size_s(), 0.0f);
     brain_->wire(genome_);
     brain_->serialize(pop_id_, 0);
@@ -496,10 +508,11 @@ RenderState Pop::get_render_state() const {
     }
     RenderState state;
     state.position = Vec2{static_cast<float>(pos_.x), static_cast<float>(pos_.y)};
-    state.color = c;                                                //  Black if dead
-    state.size = size;                                              //  size
-    state.payload = PopVisualData{energy_ / 100.0f, age_ / 100.0f}; // Example payload
-    state.shape = RenderShape::Circle;                              //  shape
+    state.color = c;   //  Black if dead
+    state.size = size; //  size
+    state.payload =
+        PopVisualData{energy_ / 100.0f, age_ / 100.0f, phy_.chloroplasts >= config_->get_phy_min_chloroplasts()};
+    state.shape = RenderShape::Circle; //  shape
     return state;
 }
 
@@ -552,25 +565,89 @@ void Pop::emit_feromone(FeromoneT type, int intensity) {
 }
 
 void Pop::update_physiology() {
-    auto world = world_.lock();
-    if (world) {
-        glucose_ += world->get_cell(pos_)->take_glucose(2);
-    }
+    metabolism_heat_ = 0.0f;
 
-    /// Metabolism
-    previous_energy_ = energy_; // update previous energy before applying changes for energy delta calculation in reward
-    energy_ -= 0.02f;           // Basal metabolic rate
-    energy_ -= energy_cost_;    // Additional cost from actions
-    // chances of converting reserves to energy
-    if (glucose_ > 0) {
-        RandomUtility rand;
-        if (rand.rnd_double(0.0, 1.0) < 0.5) {
-            energy_ += 0.2f; // Energy gain from glucose
-            glucose_ -= 1;   // Consume glucose
-        }
+    auto world = world_.lock();
+    if (!world)
+        return;
+
+    // Auto-take resources from current cell
+    glucose_ += world->get_cell(pos_)->take_glucose(2);
+    o2_ += world->get_cell(pos_)->take_o2(2);
+
+    // Biological reactions
+    run_chloroplasts();
+    run_mitochondrions();
+    update_temperature();
+
+    // Metabolism cost
+    previous_energy_ = energy_;
+    energy_ -= 0.02f;        // Basal metabolic rate
+    energy_ -= energy_cost_; // Additional cost from actions
+}
+
+void Pop::run_chloroplasts() {
+    if (phy_.chloroplasts < config_->get_phy_min_chloroplasts() || co2_ == 0 || water_ == 0)
+        return;
+
+    auto world = world_.lock();
+    if (!world)
+        return;
+
+    // Light condition: cell elevation must exceed threshold
+    const double elev = world->get_elevation(pos_);
+    if (elev < config_->get_phy_photo_min_elevation())
+        return;
+
+    // Probability scales linearly with chloroplast count
+    const double prob = std::min(
+        static_cast<double>(phy_.chloroplasts) / static_cast<double>(config_->get_phy_max_chloroplasts_ref()), 1.0);
+    if (random_util_->rnd_double(0.0, 1.0) >= prob)
+        return;
+
+    // CO2 + H2O -> C6H12O6 + O2
+    co2_--;
+    water_--;
+    glucose_++;
+    world->get_cell(pos_)->give_o2(1);
+}
+
+void Pop::run_mitochondrions() {
+    unsigned co2_produced = 0;
+    for (unsigned i = 0; i < phy_.mitochondrions; ++i) {
+        if (glucose_ == 0 || o2_ == 0)
+            break;
+        // C6H12O6 + O2 -> energy + CO2 + heat
+        glucose_--;
+        o2_--;
+        energy_ += static_cast<float>(config_->get_phy_energy_per_respiration());
+        metabolism_heat_ += static_cast<float>(config_->get_phy_heat_per_respiration());
+        co2_++;
+        co2_produced++;
     }
-    // clamp max energy to MaxEnergy
-    // energy_ = std::min(energy_, MaxEnergy);
+    // Release produced CO2 into the cell
+    if (co2_produced > 0) {
+        auto world = world_.lock();
+        if (world)
+            world->get_cell(pos_)->give_co2(co2_produced);
+    }
+}
+
+void Pop::update_temperature() {
+    auto world = world_.lock();
+    if (!world)
+        return;
+    const double env_temp = world->get_temperature(pos_);
+    const double alpha = compute_alpha();
+    temperature_ += alpha * (env_temp - temperature_) + static_cast<double>(metabolism_heat_);
+}
+
+double Pop::compute_alpha() const {
+    const double alpha_min = config_->get_phy_alpha_min();
+    const double alpha_max = config_->get_phy_alpha_max();
+    const double max_lipids = config_->get_phy_max_lipids_ref();
+    const double lipid_frac = std::min(static_cast<double>(lipids_) / max_lipids, 1.0);
+    return std::clamp(alpha_max - (alpha_max - alpha_min) * lipid_frac, alpha_min, alpha_max);
 }
 
 void Pop::increment_offspring_count() {

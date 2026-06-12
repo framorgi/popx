@@ -28,6 +28,14 @@ enum class State {
 /// @brief The cause of death for this Pop (used for logging and analysis).
 ///----------------------------------------------------------------------------
 enum class DeathCause { None, EnergyDepletion, OldAge };
+/// @brief Physical traits of a Pop entity (set at birth, inherited/mutated).
+struct PhyT {
+    unsigned mitochondrions;    ///< aerobic respiration capacity (energy from glucose+O2)
+    unsigned chloroplasts;      ///< photosynthesis capacity (glucose from CO2+H2O)
+    unsigned sensitiveness;     ///< directional scan radius in cells
+    unsigned adipose_stock_max; ///< maximum lipid storage (thermal insulation)
+};
+
 /// -----------------------------------------------------------------------------
 /// @class Pop
 /// @brief Implements the IAgent interface representing a population entity within the simulation.
@@ -261,6 +269,31 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief The cause of death for this Pop (used for logging and analysis).
     ///--------------------------------------------------------------------------
     DeathCause death_cause_ = DeathCause::None;
+
+    /// ---------------------------------------------------------------------------
+    /// @brief Physical traits (mitochondria, chloroplasts, lipid capacity).
+    /// ---------------------------------------------------------------------------
+    PhyT phy_;
+    /// ---------------------------------------------------------------------------
+    /// @brief Internal body temperature (Celsius).
+    /// ---------------------------------------------------------------------------
+    double temperature_;
+    /// ---------------------------------------------------------------------------
+    /// @brief Internal O2 reserve.
+    /// ---------------------------------------------------------------------------
+    unsigned o2_ = 0;
+    /// ---------------------------------------------------------------------------
+    /// @brief Internal CO2 reserve.
+    /// ---------------------------------------------------------------------------
+    unsigned co2_ = 0;
+    /// ---------------------------------------------------------------------------
+    /// @brief Lipid (fat) reserve — increases thermal insulation.
+    /// ---------------------------------------------------------------------------
+    unsigned lipids_ = 0;
+    /// ---------------------------------------------------------------------------
+    /// @brief Metabolism heat produced this physiology step (reset each cycle).
+    /// ---------------------------------------------------------------------------
+    float metabolism_heat_ = 0.0f;
     ///---------------------------------------------------------------------------
     /// @brief Updates the last movement direction based on new and old positions.
     /// @param new_pos The new position after movement.
@@ -300,6 +333,23 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief      Update the physiology of the Pop based on energy cost of actions
     ///----------------------------------------------------------------------
     void update_physiology();
+
+    ///----------------------------------------------------------------------
+    /// @brief Run photosynthesis: CO2 + H2O -> C6H12O6 + O2
+    ///----------------------------------------------------------------------
+    void run_chloroplasts();
+    ///----------------------------------------------------------------------
+    /// @brief Run cellular respiration: C6H12O6 + O2 -> energy + CO2
+    ///----------------------------------------------------------------------
+    void run_mitochondrions();
+    ///----------------------------------------------------------------------
+    /// @brief Update body temperature via thermal exchange with environment.
+    ///----------------------------------------------------------------------
+    void update_temperature();
+    ///----------------------------------------------------------------------
+    /// @brief Compute thermal exchange coefficient alpha based on lipid reserves.
+    ///----------------------------------------------------------------------
+    [[nodiscard]] double compute_alpha() const;
 
     ///----------------------------------------------------------------------
     /// @brief      Calculate the reward for the current cycle based on the Pop's state and actions

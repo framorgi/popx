@@ -35,6 +35,21 @@ struct ConfigParams {
 
     // Internal
     unsigned param_change_generation = 0;
+
+    // Physiology
+    unsigned phy_init_mitochondrions_max = 3;
+    unsigned phy_init_chloroplasts_max = 2;
+    unsigned phy_init_sensitiveness_max = 6;
+    unsigned phy_adipose_stock_max = 80;
+    unsigned phy_min_chloroplasts = 1;
+    unsigned phy_max_chloroplasts_ref = 3;
+    double phy_energy_per_respiration = 0.2;
+    double phy_heat_per_respiration = 0.3;
+    double phy_alpha_min = 0.01;
+    double phy_alpha_max = 0.5;
+    double phy_max_lipids_ref = 80.0;
+    double phy_init_temperature = 25.0;
+    double phy_photo_min_elevation = 30.0;
 };
 
 /// @brief Concrete implementation of IConfig backed by a key=value INI file.
@@ -62,6 +77,20 @@ class Config : public IConfig {
     bool get_choose_parents_by_fitness() const override;
     const std::string& get_log_dir() const override;
     const std::string& get_image_dir() const override;
+
+    unsigned get_phy_init_mitochondrions_max() const override;
+    unsigned get_phy_init_chloroplasts_max() const override;
+    unsigned get_phy_init_sensitiveness_max() const override;
+    unsigned get_phy_adipose_stock_max() const override;
+    unsigned get_phy_min_chloroplasts() const override;
+    unsigned get_phy_max_chloroplasts_ref() const override;
+    double get_phy_energy_per_respiration() const override;
+    double get_phy_heat_per_respiration() const override;
+    double get_phy_alpha_min() const override;
+    double get_phy_alpha_max() const override;
+    double get_phy_max_lipids_ref() const override;
+    double get_phy_init_temperature() const override;
+    double get_phy_photo_min_elevation() const override;
 
     void update_from_file(unsigned generation) override;
 

@@ -10,6 +10,7 @@ enum class RenderShape { Circle, Segment, Square, Triangle };
 struct PopVisualData {
     float energy;
     float age;
+    bool is_photosynthetic; ///< true when chloroplasts >= min threshold -> render as triangle
 };
 struct CellVisualData {
     double temperature;
