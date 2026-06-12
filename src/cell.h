@@ -59,6 +59,11 @@ class Cell : public ICell {
     void decay_feromones();
 
     ///----------------------------------------------
+    // Helper method to regenerate glucose over time
+    ///----------------------------------------------
+    void regen_glucose();
+
+    ///----------------------------------------------
     // Occupant entity in the cell
     ///----------------------------------------------
     std::weak_ptr<IEntity>
@@ -97,4 +102,9 @@ class Cell : public ICell {
     /// Flag to indicate if the cell is reserved for future use
     ///----------------------------------------------
     bool reserved_;
+
+    ///----------------------------------------------
+    /// Tick counter for glucose regeneration timing
+    ///----------------------------------------------
+    unsigned regen_tick_;
 };

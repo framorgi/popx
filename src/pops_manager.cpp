@@ -130,7 +130,8 @@ void PopsManager::update_cycle() {
 }
 
 void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
-    auto child = std::make_shared<Pop>(world_, logger_, config_, parent->make_offspring_genome());
+    auto child =
+        std::make_shared<Pop>(world_, logger_, config_, parent->make_offspring_genome(), parent->make_offspring_phy());
 
     // Try all 8 adjacent cells (cardinal first, then diagonal)
     const int dx[] = {0, 1, 0, -1, 1, 1, -1, -1};

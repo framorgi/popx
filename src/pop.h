@@ -52,6 +52,11 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Constructor for offspring: uses a pre-built genome instead of generating a random one.
     ///----------------------------------------------------------------------------
     Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config, Genome genome);
+    ///----------------------------------------------------------------------------
+    /// @brief Constructor for offspring: uses a pre-built genome and inherited physical traits.
+    ///----------------------------------------------------------------------------
+    Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config, Genome genome,
+        PhyT phy);
 
     ~Pop();
 
@@ -120,6 +125,11 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     [[nodiscard]] Genome make_offspring_genome() const;
 
     ///----------------------------------------------------------------------------
+    /// @brief Creates a (possibly mutated) copy of this Pop's physical traits for an offspring.
+    ///----------------------------------------------------------------------------
+    [[nodiscard]] PhyT make_offspring_phy() const;
+
+    ///----------------------------------------------------------------------------
     /// @brief Halves the parent's internal reserves and writes the donated amounts to the out params.
     ///----------------------------------------------------------------------------
     void donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_carbon);
@@ -147,10 +157,15 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     DeathCause get_death_cause() const;
 
   private:
-    ///---------------------------------------------------------------------------
+    ///----------------------------------------------------------------------------
     /// @brief guard flag to avoid some action at first run
     ///---------------------------------------------------------------------------
     bool first_run_ = true;
+
+    ///----------------------------------------------------------------------------
+    /// @brief When true, init() skips random PhyT assignment (used for offspring with inherited traits).
+    ///----------------------------------------------------------------------------
+    bool inherit_phy_ = false;
 
     /// ---------------------------------------------------------------------------
     /// @brief Age of the Pop entity.

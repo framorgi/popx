@@ -7,7 +7,7 @@
 #include <algorithm>
 
 Cell::Cell(std::weak_ptr<IEntity> occupant)
-    : occupant_(std::move(occupant)), temperature_(20.0f), humidity_(50.0f), elevation_(0.0f)
+    : occupant_(std::move(occupant)), temperature_(20.0f), humidity_(50.0f), elevation_(0.0f), regen_tick_(0)
 
 {
     // Initialize organics with random values
@@ -170,6 +170,14 @@ void Cell::decay_feromones() {
     }
 }
 
+void Cell::regen_glucose() {
+    if (++regen_tick_ >= GlucoseRegenInterval) {
+        regen_tick_ = 0;
+        organics_.c6h12o6 = std::min(organics_.c6h12o6 + GlucoseRegenAmount, MaxC6h12o6);
+    }
+}
+
 void Cell::update() {
     decay_feromones();
+    regen_glucose();
 }

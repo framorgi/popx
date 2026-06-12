@@ -32,11 +32,22 @@ Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shar
     pop_id_ = "pop_" + std::to_string(s_pop_counter++);
     init();
 }
+
+Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config, Genome genome,
+         PhyT phy)
+    : genome_(std::move(genome)), phy_(phy), world_(std::move(world)), logger_(std::move(logger)),
+      config_(std::move(config)), brain_(std::make_unique<Brain>(config_)), pos_{0, 0}, age_(0), energy_(100.0f),
+      last_direction_{0, 0}, random_util_(std::make_shared<RandomUtility>()) {
+    pop_id_ = "pop_" + std::to_string(s_pop_counter++);
+    inherit_phy_ = true;
+    init();
+}
 Pop::~Pop() {
     brain_->remove_serialization(pop_id_);
 }
 
 void Pop::init() {
+    const bool inherit_phy = inherit_phy_;
     alive_ = true;
     lazyness_ = random_util_->rnd_float(0.0f, 1.0f);
     glucose_ = 100;
@@ -46,13 +57,15 @@ void Pop::init() {
     lipids_ = 20;
     metabolism_heat_ = 0.0f;
     temperature_ = config_->get_phy_init_temperature();
-    phy_.mitochondrions =
-        static_cast<unsigned>(random_util_->rnd_int(1, static_cast<int>(config_->get_phy_init_mitochondrions_max())));
-    phy_.chloroplasts =
-        static_cast<unsigned>(random_util_->rnd_int(0, static_cast<int>(config_->get_phy_init_chloroplasts_max())));
-    phy_.sensitiveness =
-        static_cast<unsigned>(random_util_->rnd_int(1, static_cast<int>(config_->get_phy_init_sensitiveness_max())));
-    phy_.adipose_stock_max = config_->get_phy_adipose_stock_max();
+    if (!inherit_phy) {
+        phy_.mitochondrions = static_cast<unsigned>(
+            random_util_->rnd_int(1, static_cast<int>(config_->get_phy_init_mitochondrions_max())));
+        phy_.chloroplasts =
+            static_cast<unsigned>(random_util_->rnd_int(0, static_cast<int>(config_->get_phy_init_chloroplasts_max())));
+        phy_.sensitiveness = static_cast<unsigned>(
+            random_util_->rnd_int(1, static_cast<int>(config_->get_phy_init_sensitiveness_max())));
+        phy_.adipose_stock_max = config_->get_phy_adipose_stock_max();
+    }
     sensor_values_.assign(brain_->get_size_s(), 0.0f);
     brain_->wire(genome_);
     brain_->serialize(pop_id_, 0);
@@ -526,6 +539,25 @@ bool Pop::wants_to_reproduce() const {
 
 Genome Pop::make_offspring_genome() const {
     return genome_.mutated(config_->get_point_mutation_rate());
+}
+
+PhyT Pop::make_offspring_phy() const {
+    PhyT offspring = phy_;
+    const double rate = config_->get_point_mutation_rate();
+    RandomUtility rand;
+    auto mutate_unsigned = [&](unsigned val, unsigned min_val, unsigned max_val) -> unsigned {
+        if (rand.rnd_double(0.0, 1.0) < rate) {
+            int delta = rand.rnd_int(0, 1) == 0 ? -1 : 1;
+            int result = static_cast<int>(val) + delta;
+            return static_cast<unsigned>(std::clamp(result, static_cast<int>(min_val), static_cast<int>(max_val)));
+        }
+        return val;
+    };
+    offspring.mitochondrions = mutate_unsigned(offspring.mitochondrions, 1, config_->get_phy_init_mitochondrions_max());
+    offspring.chloroplasts = mutate_unsigned(offspring.chloroplasts, 0, config_->get_phy_init_chloroplasts_max());
+    offspring.sensitiveness = mutate_unsigned(offspring.sensitiveness, 1, config_->get_phy_init_sensitiveness_max());
+    offspring.adipose_stock_max = mutate_unsigned(offspring.adipose_stock_max, 1, config_->get_phy_adipose_stock_max());
+    return offspring;
 }
 
 void Pop::donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_carbon) {
