@@ -32,6 +32,10 @@ Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shar
     pop_id_ = "pop_" + std::to_string(s_pop_counter++);
     init();
 }
+Pop::~Pop() {
+    brain_->remove_serialization(pop_id_);
+}
+
 void Pop::init() {
     alive_ = true;
     lazyness_ = random_util_->rnd_float(0.0f, 1.0f);

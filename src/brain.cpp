@@ -157,8 +157,16 @@ void Brain::resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned n
 
 bool Brain::remove_serialization(const std::string& pop_id) {
     const std::string dir = config_->get_nnets_dir();
-    const std::string filename = dir + pop_id + "_g" + std::to_string(0) + ".json";
-    return std::filesystem::remove(filename);
+    if (!std::filesystem::exists(dir))
+        return false;
+    bool any_removed = false;
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
+        const std::string fname = entry.path().filename().string();
+        if (fname.rfind(pop_id + "_g", 0) == 0) {
+            any_removed |= std::filesystem::remove(entry.path());
+        }
+    }
+    return any_removed;
 }
 
 void Brain::serialize(const std::string& pop_id, unsigned generation) const {

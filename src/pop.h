@@ -53,6 +53,8 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     ///----------------------------------------------------------------------------
     Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config, Genome genome);
 
+    ~Pop();
+
     /// @brief Serialises brain weights to JSON with the given generation stamp.
     void serialize_brain(unsigned generation) const;
     ///---------------------------------------------------------------------------
