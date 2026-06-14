@@ -86,18 +86,34 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
         float cy = cell_render_size * pos.y + cell_render_size * rs.size / 2;
         float radius = cell_render_size * rs.size / 2;
 
-        // foreach segment
-        for (int i = 0; i < SEGMENTS; ++i) {
-            float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
-            float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
+        if (pop->is_photosynthetic) {
+            // draw simple triangle for photosynthetic entities
+            for (int i = 0; i < 3; ++i) {
+                float a0 = (i / static_cast<float>(3)) * 2.f * PI;
+                float a1 = ((i + 1) / static_cast<float>(3)) * 2.f * PI;
 
-            Vec2 center{cx, cy};
-            Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
-            Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+                Vec2 center{cx, cy - radius};
+                Vec2 p0{cx + radius, cy + radius};
+                Vec2 p1{cx - radius, cy + radius};
 
-            entity_layer_.push_back({center, rs.color});
-            entity_layer_.push_back({p0, rs.color});
-            entity_layer_.push_back({p1, rs.color});
+                entity_layer_.push_back({center, rs.color});
+                entity_layer_.push_back({p0, rs.color});
+                entity_layer_.push_back({p1, rs.color});
+            }
+        } else {
+            // foreach segment
+            for (int i = 0; i < SEGMENTS; ++i) {
+                float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
+                float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
+
+                Vec2 center{cx, cy};
+                Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
+                Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+
+                entity_layer_.push_back({center, rs.color});
+                entity_layer_.push_back({p0, rs.color});
+                entity_layer_.push_back({p1, rs.color});
+            }
         }
     }
 }
