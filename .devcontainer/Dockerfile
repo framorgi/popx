@@ -57,7 +57,8 @@ RUN apt update && apt install -y \
     lldb \
     python3-pip\
     libusb-1.0-0-dev\
-    libsfml-dev
+    libsfml-dev \
+    libgl1-mesa-dev
 
 
 # Install CodeChecker

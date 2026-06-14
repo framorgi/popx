@@ -10,6 +10,9 @@ Usage:
 Keyboard controls (when the window is focused):
     →  or  l   Next network
     ←  or  h   Previous network
+    ↑  or  k   Highlight next connection
+    ↓  or  j   Highlight previous connection
+    f           Toggle incomplete-connection filter
     q           Quit
 """
 
@@ -122,10 +125,25 @@ def _entries_to_coo(entries, nrows: int, ncols: int):
 # Drawing
 # ---------------------------------------------------------------------------
 
-def _draw(ax, fig, data: dict, index: int, total: int):
+_SUBPLOT_KW = dict(left=0.18, right=0.82, top=0.91, bottom=0.04)
+
+def _draw(ax, fig, data: dict, index: int, total: int,
+          filter_incomplete: bool = False, highlight_conn_idx=None):
     ax.clear()
     ax.axis("off")
     ax.set_facecolor("lavenderblush")
+    # Lock layout so suptitle text changes never cause a window resize.
+    fig.subplots_adjust(**_SUBPLOT_KW)
+
+    # ── filter-mode banner (drawn in axes-normalised coordinates) ─────────
+    if filter_incomplete:
+        ax.text(
+            0.5, 0.995,
+            "  ▶  FILTER ON — showing only connections that reach an output  ◀  ",
+            ha="center", va="top", transform=ax.transAxes,
+            fontsize=10, fontweight="bold", color="white", clip_on=False,
+            bbox=dict(boxstyle="round,pad=0.25", facecolor="steelblue", alpha=0.88),
+        )
 
     size_s     = data.get("sizeS", 0)
     size_n     = data.get("sizeN", 0)
@@ -197,6 +215,38 @@ def _draw(ax, fig, data: dict, index: int, total: int):
                 edge_colors.append((1.0, 0.0, 0.0, alpha) if v < 0
                                    else (0.0, 0.75, 0.0, alpha))
 
+    # ── compute productive set: only nodes on COMPLETE sensor→output paths ──
+    # A node is useful iff it is both reachable FROM a sensor AND can reach an
+    # output.  This excludes dead-end hidden chains and sensor-side stubs.
+    _sensor_nodes = {n for n, d in G.nodes(data=True) if d["layer"] == 0}
+    _out_nodes    = {n for n, d in G.nodes(data=True)
+                     if d["layer"] == num_hidden + 1}
+    _can_reach_output = set(_out_nodes)
+    for _on in _out_nodes:
+        _can_reach_output |= nx.ancestors(G, _on)
+    _reachable_from_sensor = set(_sensor_nodes)
+    for _sn in _sensor_nodes:
+        _reachable_from_sensor |= nx.descendants(G, _sn)
+    _productive = _can_reach_output & _reachable_from_sensor
+    useful_edge_count = sum(1 for u, v in G.edges()
+                            if u in _productive and v in _productive)
+    total_edge_count  = G.number_of_edges()
+
+    # ── filter: keep only nodes/edges on complete sensor→output paths ──────
+    if filter_incomplete:
+        G.remove_edges_from([(u, v) for u, v in list(G.edges())
+                              if u not in _productive or v not in _productive])
+        G.remove_nodes_from([n for n in list(G.nodes()) if n not in _productive])
+        # Rebuild style lists to match the filtered edge set
+        edge_widths.clear()
+        edge_colors.clear()
+        for _u, _v, _d in G.edges(data=True):
+            _w = _d.get("weight", 0.0)
+            _a = float(np.clip(abs(_w), 0.15, 1.0))
+            edge_widths.append(float(np.clip(abs(_w) * 2.5, 0.3, 3.0)))
+            edge_colors.append((1.0, 0.0, 0.0, _a) if _w < 0
+                               else (0.0, 0.75, 0.0, _a))
+
     # ── prune disconnected SENSOR and OUTPUT nodes; keep ALL hidden nodes ────
     # This ensures every hidden layer column is always rendered, even if silent.
     endpoints = {u for u, _ in G.edges()} | {v for _, v in G.edges()}
@@ -205,6 +255,38 @@ def _draw(ax, fig, data: dict, index: int, total: int):
         L  = nd["layer"]
         if (L == 0 or L == num_hidden + 1) and node not in endpoints:
             G.remove_node(node)
+
+    # ── apply per-connection / per-path highlight (↑/↓ scrolling) ────────
+    n_drawn_edges = len(edge_widths)
+    if filter_incomplete:
+        # Build an ordered edge→index map that matches edge_widths/edge_colors.
+        _edge_index = {(u, v): i for i, (u, v) in enumerate(G.edges())}
+        # Enumerate all simple sensor→output paths in the filtered graph.
+        _useful_paths: list = []
+        for _sn in sorted(_sensor_nodes & set(G.nodes())):
+            for _tn in sorted(_out_nodes & set(G.nodes())):
+                for _p in nx.all_simple_paths(G, _sn, _tn, cutoff=num_layers + 1):
+                    _useful_paths.append(_p)
+        n_highlight_items = len(_useful_paths)
+        if highlight_conn_idx is not None and n_highlight_items > 0:
+            hi      = highlight_conn_idx % n_highlight_items
+            hi_path = _useful_paths[hi]
+            hi_set  = {_edge_index[(hi_path[k], hi_path[k + 1])]
+                       for k in range(len(hi_path) - 1)
+                       if (hi_path[k], hi_path[k + 1]) in _edge_index}
+            edge_colors = [(r, g, b, a) if i in hi_set else (r, g, b, 0.04)
+                           for i, (r, g, b, a) in enumerate(edge_colors)]
+            edge_widths = [w if i in hi_set else 0.3
+                           for i, w in enumerate(edge_widths)]
+    else:
+        _useful_paths     = []
+        n_highlight_items = n_drawn_edges
+        if highlight_conn_idx is not None and n_drawn_edges > 0:
+            h = highlight_conn_idx % n_drawn_edges
+            edge_colors = [(r, g, b, 0.04) if i != h else (r, g, b, a)
+                           for i, (r, g, b, a) in enumerate(edge_colors)]
+            edge_widths = [0.3 if i != h else w
+                           for i, w in enumerate(edge_widths)]
 
     # ── layout: fixed column per layer, each column spaced independently ────
     # Build per-layer node lists; guarantee every layer 0..num_layers-1 exists.
@@ -231,11 +313,13 @@ def _draw(ax, fig, data: dict, index: int, total: int):
                 ha="center", va="center", transform=ax.transAxes, fontsize=11)
         fig.suptitle(
             f"Network {index+1}/{total}   |   pop:{pop_id}   |   gen:{generation}"
-            f"\n[← / →] navigate    [q] quit",
+            f"  {'[filter: ON]' if filter_incomplete else ''}"
+            f"   useful: {useful_edge_count}/{total_edge_count}"
+            f"\n[← / →] navigate    [↑ / ↓] highlight connection    [f] filter    [q] quit",
             fontsize=10,
         )
         fig.canvas.draw_idle()
-        return
+        return n_highlight_items
 
     # ── node / font sizing ─────────────────────────────────────────────────
     max_col = max(len(v) for v in by_layer.values())  # tallest column
@@ -303,12 +387,21 @@ def _draw(ax, fig, data: dict, index: int, total: int):
     ax.set_xlim(-0.30, 1.30)
     ax.set_ylim(-0.06, 1.15)
 
+    if filter_incomplete and n_highlight_items > 0 and highlight_conn_idx is not None:
+        conn_info = f"   path {(highlight_conn_idx % n_highlight_items) + 1}/{n_highlight_items}"
+    elif not filter_incomplete and n_drawn_edges > 0 and highlight_conn_idx is not None:
+        conn_info = f"   conn {(highlight_conn_idx % n_drawn_edges) + 1}/{n_drawn_edges}"
+    else:
+        conn_info = ""
     fig.suptitle(
         f"Network {index+1}/{total}   |   pop:{pop_id}   |   generation:{generation}"
-        f"\n[← / →] navigate    [q] quit",
+        f"  {'[filter: ON]' if filter_incomplete else ''}"
+        f"   useful: {useful_edge_count}/{total_edge_count}{conn_info}"
+        f"\n[← / →] navigate    [↑ / ↓] {'path' if filter_incomplete else 'conn'}    [f] filter    [q] quit",
         fontsize=10,
     )
     fig.canvas.draw_idle()
+    return n_highlight_items
 
 
 
@@ -319,30 +412,56 @@ def _draw(ax, fig, data: dict, index: int, total: int):
 class NetworkViewer:
     def __init__(self, nnets_dir: str):
         self._snapshots = _load_all(nnets_dir)
-        self._idx = 0
+        self._idx        = 0
+        self._filter     = False
+        self._conn_idx   = None   # None = no highlight
+        self._conn_total = 0
+        plt.rcParams["figure.autolayout"] = False
         self._fig, self._ax = plt.subplots(figsize=(16, 9))
         self._fig.patch.set_facecolor("lightblue")
-        # Maximize the window (works with Qt5Agg backend)
+        self._fig.subplots_adjust(**_SUBPLOT_KW)
+        # Full-screen window — called once; never called again so no resize on redraws.
         try:
-            plt.get_current_fig_manager().window.showMaximized()
+            plt.get_current_fig_manager().window.showFullScreen()
         except Exception:
             pass
         self._fig.canvas.mpl_connect("key_press_event", self._on_key)
         self._refresh()
 
     def _refresh(self):
-        _draw(self._ax, self._fig,
-              self._snapshots[self._idx][1],
-              self._idx,
-              len(self._snapshots))
+        self._conn_total = _draw(
+            self._ax, self._fig,
+            self._snapshots[self._idx][1],
+            self._idx,
+            len(self._snapshots),
+            filter_incomplete=self._filter,
+            highlight_conn_idx=self._conn_idx,
+        )
 
     def _on_key(self, event):
         if event.key in ("right", "l"):
-            self._idx = (self._idx + 1) % len(self._snapshots)
+            self._idx      = (self._idx + 1) % len(self._snapshots)
+            self._conn_idx = None
             self._refresh()
         elif event.key in ("left", "h"):
-            self._idx = (self._idx - 1) % len(self._snapshots)
+            self._idx      = (self._idx - 1) % len(self._snapshots)
+            self._conn_idx = None
             self._refresh()
+        elif event.key == "f":
+            self._filter = not self._filter
+            # Preserve _conn_idx so scrolling continues in filtered mode.
+            # _conn_total is refreshed by _refresh(); modulo keeps idx in range.
+            self._refresh()
+        elif event.key in ("up", "k"):
+            if self._conn_total > 0:
+                self._conn_idx = (0 if self._conn_idx is None
+                                  else (self._conn_idx + 1) % self._conn_total)
+                self._refresh()
+        elif event.key in ("down", "j"):
+            if self._conn_total > 0:
+                self._conn_idx = (self._conn_total - 1 if self._conn_idx is None
+                                  else (self._conn_idx - 1) % self._conn_total)
+                self._refresh()
         elif event.key == "q":
             plt.close(self._fig)
 

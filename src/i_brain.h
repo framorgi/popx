@@ -1,8 +1,19 @@
 #pragma once
 #include "genome.h"
 
+#include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
+
+struct BrainConnectionActivity {
+    unsigned from_layer = 0;
+    unsigned from_neuron = 0;
+    unsigned to_layer = 0;
+    unsigned to_neuron = 0;
+    float weight = 0.0f;
+    float activity_score = 0.0f;
+};
 
 /// @brief Pure interface for a feed-forward neural network brain.
 ///
@@ -31,6 +42,10 @@ class IBrain {
 
     virtual void hebbian_update(float reward) = 0;
 
+    /// @brief Returns the genome rebuilt from the current learned weights plus preserved silent genes.
+    /// Returns nullptr if hebbian_inheritance is disabled or wire() has not yet been called.
+    virtual std::shared_ptr<const Genome> get_learned_genome() const = 0;
+
     /// @brief Resizes the network and resets all weights.
     virtual void resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned num_hidden) = 0;
 
@@ -46,6 +61,10 @@ class IBrain {
     virtual unsigned get_size_n() const = 0;
     virtual unsigned get_size_y() const = 0;
     virtual unsigned get_num_hidden() const = 0;
+
+    virtual std::size_t get_total_connections() const = 0;
+    virtual std::size_t get_useful_connection_count(float epsilon) const = 0;
+    virtual std::vector<BrainConnectionActivity> get_top_active_connections(float epsilon, std::size_t limit) const = 0;
     /// Returns true[i] iff sensor index i has at least one outgoing connection.
     virtual std::vector<bool> get_connected_sensors() const = 0;
 };

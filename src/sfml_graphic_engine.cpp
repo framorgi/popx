@@ -1,6 +1,13 @@
 #include "sfml_graphic_engine.h"
 
+#include <imgui-SFML.h>
+#include <imgui.h>
+
 SfmlGraphicEngine::SfmlGraphicEngine(std::shared_ptr<ILogger> logger) : logger_(std::move(logger)) {}
+
+SfmlGraphicEngine::~SfmlGraphicEngine() {
+    ImGui::SFML::Shutdown();
+}
 
 void SfmlGraphicEngine::create_window(std::string title, int width, int height) {
     window_.create(sf::VideoMode(width, height), title);
@@ -20,6 +27,7 @@ bool SfmlGraphicEngine::is_open() const {
 void SfmlGraphicEngine::poll_event() {
     sf::Event event;
     while (window_.pollEvent(event)) {
+        ImGui::SFML::ProcessEvent(window_, event);
         if (event.type == sf::Event::Closed) {
             window_.close();
             logger_->info("Window closed by user.");
@@ -132,4 +140,16 @@ void SfmlGraphicEngine::draw_quads(const std::vector<Quad>& quads) {
     }
 
     window_.draw(quad_vertices_);
+}
+
+void SfmlGraphicEngine::imgui_init() {
+    [[maybe_unused]] bool ok = ImGui::SFML::Init(window_);
+}
+
+void SfmlGraphicEngine::imgui_new_frame(float dt_seconds) {
+    ImGui::SFML::Update(window_, sf::seconds(dt_seconds));
+}
+
+void SfmlGraphicEngine::imgui_render() {
+    ImGui::SFML::Render(window_);
 }

@@ -50,5 +50,9 @@ class ICell {
     virtual unsigned give_co2(unsigned amount) = 0;
     virtual unsigned take_lipids(unsigned amount) = 0;
     virtual unsigned give_lipids(unsigned amount) = 0;
+
+    /// @brief Return all organic compounds currently in this cell (read-only aggregate).
+    [[nodiscard]] virtual OrganicsT get_organics() const = 0;
+
     virtual void update() = 0;
 };

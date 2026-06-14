@@ -37,6 +37,14 @@ void Config::set_defaults() {
 }
 
 // ---------------------------------------------------------------------------
+// IConfig setters
+//---------------------------------------------------------------------------
+
+void Config::set_point_mutation_rate(double rate) {
+    params_.point_mutation_rate = rate;
+}
+
+// ---------------------------------------------------------------------------
 // IConfig getters
 // ---------------------------------------------------------------------------
 
@@ -88,6 +96,9 @@ bool Config::get_sexual_reproduction() const {
 bool Config::get_choose_parents_by_fitness() const {
     return params_.choose_parents_by_fitness;
 }
+bool Config::get_hebbian_inheritance() const {
+    return params_.hebbian_inheritance;
+}
 const std::string& Config::get_log_dir() const {
     return params_.log_dir;
 }
@@ -133,6 +144,22 @@ double Config::get_phy_init_temperature() const {
 }
 double Config::get_phy_photo_min_elevation() const {
     return params_.phy_photo_min_elevation;
+}
+
+bool Config::get_newgen_enabled() const {
+    return params_.newgen_enabled;
+}
+
+unsigned Config::get_newgen_interval_ticks() const {
+    return params_.newgen_interval_ticks;
+}
+
+double Config::get_newgen_survival_ratio() const {
+    return params_.newgen_survival_ratio;
+}
+
+unsigned Config::get_newgen_min_survivors() const {
+    return params_.newgen_min_survivors;
 }
 
 // ---------------------------------------------------------------------------
@@ -264,6 +291,10 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
         params_.choose_parents_by_fitness = to_bool(value);
         return;
     }
+    if (name == "hebbian_inheritance" && is_b) {
+        params_.hebbian_inheritance = to_bool(value);
+        return;
+    }
 
     // Directories (resolve relative paths against the INI file location)
     if (name == "nnets_dir") {
@@ -335,6 +366,24 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
     }
     if (name == "phy_photo_min_elevation" && is_d && dval >= 0.0) {
         params_.phy_photo_min_elevation = dval;
+        return;
+    }
+
+    // New generation controls
+    if (name == "newgen_enabled" && is_b) {
+        params_.newgen_enabled = to_bool(value);
+        return;
+    }
+    if (name == "newgen_interval_ticks" && is_u && uval > 0) {
+        params_.newgen_interval_ticks = uval;
+        return;
+    }
+    if (name == "newgen_survival_ratio" && is_d && dval > 0.0 && dval <= 1.0) {
+        params_.newgen_survival_ratio = dval;
+        return;
+    }
+    if (name == "newgen_min_survivors" && is_u && uval > 0) {
+        params_.newgen_min_survivors = uval;
         return;
     }
 

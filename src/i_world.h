@@ -121,4 +121,10 @@ class IWorld {
     /// @return     elevation at the given position
     ///----------------------------------------------------------------------
     [[nodiscard]] virtual double get_elevation(PositionT pos) const = 0;
+
+    ///----------------------------------------------------------------------
+    /// @brief Sum the organics across all cells (used by the Stats collector).
+    /// @return Aggregate OrganicsT across the entire world.
+    ///----------------------------------------------------------------------
+    [[nodiscard]] virtual OrganicsT get_total_organics() const = 0;
 };

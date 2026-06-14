@@ -4,6 +4,7 @@
 #include "i_config.h"
 
 #include <Eigen/Sparse>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -32,6 +33,7 @@ class Brain : public IBrain {
     /// @param reward A float value representing the reward signal used to adjust the synaptic weights
     //----------------------------------------------------------------------------
     void hebbian_update(float reward) override;
+    std::shared_ptr<const Genome> get_learned_genome() const override;
 
     void resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned num_hidden) override;
     void serialize(const std::string& pop_id, unsigned generation) const override;
@@ -40,10 +42,15 @@ class Brain : public IBrain {
     unsigned get_size_n() const override;
     unsigned get_size_y() const override;
     unsigned get_num_hidden() const override;
+    std::size_t get_total_connections() const override;
+    std::size_t get_useful_connection_count(float epsilon) const override;
+    std::vector<BrainConnectionActivity> get_top_active_connections(float epsilon, std::size_t limit) const override;
     std::vector<bool> get_connected_sensors() const override;
 
   private:
     void allocate();
+    /// Rebuilds learned_genome_ from the current weight matrices M_ plus silent_genes_.
+    void rebuild_genome_from_weights();
     /// Returns the neuron count for layer k:
     ///   k == 0             → size_s_ (sensors)
     ///   k == num_layers_-1 → size_y_ (outputs)
@@ -55,6 +62,10 @@ class Brain : public IBrain {
     /// Only entries with src < dst are populated during wire().
     std::vector<Eigen::SparseMatrix<float>> M_;
     std::vector<Eigen::VectorXf> activations_;
+    /// Genome rebuilt from learned weights after each hebbian_update() (if hebbian_inheritance is enabled).
+    std::shared_ptr<Genome> learned_genome_;
+    /// Genes rejected during wire() due to neuron-index overflow; preserved so mutations can reactivate them.
+    std::vector<Gene> silent_genes_;
     unsigned size_s_;
     unsigned size_n_;
     unsigned size_y_;

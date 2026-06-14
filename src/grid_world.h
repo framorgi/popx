@@ -143,6 +143,11 @@ class GridWorld : public IWorld {
     ///----------------------------------------------------------------------
     [[nodiscard]] double get_elevation(PositionT pos) const override;
 
+    ///----------------------------------------------------------------------
+    /// @brief Sum organics across all cells.
+    ///----------------------------------------------------------------------
+    [[nodiscard]] OrganicsT get_total_organics() const override;
+
   private:
     ///----------------------------------------------------------------------
     /// @brief    Check if coordinates are within the bounds of the grid

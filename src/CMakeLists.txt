@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.14.0)
 
 file(GLOB SOURCES_CPP_FILES "*.cpp")
 
-find_package(SFML 2.5 COMPONENTS graphics window system REQUIRED)
-
 find_package(TBB REQUIRED)
 
 add_executable(${PROJECT_NAME} ${SOURCES_CPP_FILES})
@@ -18,6 +16,7 @@ target_link_libraries(${PROJECT_NAME}
         Eigen3::Eigen
         nlohmann_json::nlohmann_json
         TBB::tbb
+        ImGui-SFML::ImGui-SFML
 )
 
 # std::filesystem needs explicit linking on GCC < 9

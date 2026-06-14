@@ -1,4 +1,6 @@
 #pragma once
+#include "render_flags.h"
+
 #include <memory>
 
 constexpr int cell_render_size = 8;  // Size of each cell in pixels when rendering
@@ -42,4 +44,21 @@ class IRenderer {
     /// @brief    Polls for window events
     ///--------------------------------------------------------------------------
     virtual void poll_event() = 0;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Apply render layer flags (which layers are visible)
+    ///--------------------------------------------------------------------------
+    virtual void set_render_flags(const RenderFlags& flags) = 0;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Initialise Dear ImGui (call once after the window is ready).
+    ///           Delegated to the underlying IGraphicEngine.
+    ///--------------------------------------------------------------------------
+    virtual void imgui_init() = 0;
+
+    ///--------------------------------------------------------------------------
+    /// @brief    Present the finished frame to the screen.
+    ///           Must be called AFTER gui->render() so ImGui draws appear on top.
+    ///--------------------------------------------------------------------------
+    virtual void present() = 0;
 };
