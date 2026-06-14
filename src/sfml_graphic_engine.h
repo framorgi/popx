@@ -7,6 +7,7 @@
 class SfmlGraphicEngine : public IGraphicEngine {
   public:
     SfmlGraphicEngine(std::shared_ptr<ILogger> logger);
+    ~SfmlGraphicEngine() override;
 
     // --------------------------
     // Gestione finestra / frame
@@ -16,7 +17,6 @@ class SfmlGraphicEngine : public IGraphicEngine {
     void display() override;
     bool is_open() const override;
     void poll_event() override;
-    ;
 
     // --------------------------
     // Primitive di disegno
@@ -33,40 +33,20 @@ class SfmlGraphicEngine : public IGraphicEngine {
     void draw_text(const std::string& text, const Vec2& pos, int size, const Color& color = Color(255, 255, 255),
                    const std::string& fontName = "") override;
 
-    ///--------------------------------------------------------------------------
-    /// @brief    Draws a buffer of quads
-    /// @param    quads Vector of quads to draw
-    ///--------------------------------------------------------------------------
     void draw_quads(const std::vector<Quad>& quads) override;
-
-    ///--------------------------------------------------------------------------
-    /// @brief    Draws a buffer of triangles representing entities
-    /// @param    vertices Vector of entity vertices to draw
-    ///--------------------------------------------------------------------------
     void draw_triangles(const std::vector<EntityVertex>& vertices) override;
 
+    // --------------------------
+    // ImGui integration
+    // --------------------------
+    void imgui_init() override;
+    void imgui_new_frame(float dt_seconds) override;
+    void imgui_render() override;
+
   private:
-    ///--------------------------------------------------------------------------
-    /// @brief    Shared pointer to the logger instance
-    ///--------------------------------------------------------------------------
     std::shared_ptr<ILogger> logger_;
-    ///--------------------------------------------------------------------------
-    /// @brief    SFML Render window instance
-    ///--------------------------------------------------------------------------
     sf::RenderWindow window_;
-
-    ///--------------------------------------------------------------------------
-    /// @brief    Vertex array for drawing map quads
-    ///--------------------------------------------------------------------------
     sf::VertexArray quad_vertices_;
-
-    ///--------------------------------------------------------------------------
-    /// @brief    Persistent vertex array for drawing entity triangles
-    ///--------------------------------------------------------------------------
     sf::VertexArray triangle_vertices_;
-
-    ///--------------------------------------------------------------------------
-    /// @brief    Flag indicating if the engine has been initialized and the map buffer created
-    ///--------------------------------------------------------------------------
     bool initialized_ = false;
 };

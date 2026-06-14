@@ -16,7 +16,7 @@ class IConfig {
 
     // --- I/O directories -----------------------------------------------------
     virtual const std::string& get_nnets_dir() const = 0;
-
+    virtual void set_point_mutation_rate(double rate) = 0;
     // --- Simulation parameters -----------------------------------------------
     virtual unsigned get_start_population() const = 0;
     virtual unsigned get_genome_min_length() const = 0;
@@ -31,6 +31,7 @@ class IConfig {
     virtual double get_deletion_ratio() const = 0;
     virtual bool get_sexual_reproduction() const = 0;
     virtual bool get_choose_parents_by_fitness() const = 0;
+    virtual bool get_hebbian_inheritance() const = 0;
 
     // --- Additional I/O directories ------------------------------------------
     virtual const std::string& get_log_dir() const = 0;
@@ -50,6 +51,12 @@ class IConfig {
     virtual double get_phy_max_lipids_ref() const = 0;
     virtual double get_phy_init_temperature() const = 0;
     virtual double get_phy_photo_min_elevation() const = 0;
+
+    // --- New generation controls ---------------------------------------------
+    virtual bool get_newgen_enabled() const = 0;
+    virtual unsigned get_newgen_interval_ticks() const = 0;
+    virtual double get_newgen_survival_ratio() const = 0;
+    virtual unsigned get_newgen_min_survivors() const = 0;
 
     // --- Runtime reload -------------------------------------------------------
     /// Re-reads the INI file. Parameters annotated with @N only activate from

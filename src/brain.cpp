@@ -1,6 +1,7 @@
 #include "brain.h"
 
 #include <Eigen/Dense>
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -46,6 +47,10 @@ unsigned Brain::layer_size(unsigned k) const {
 // ---------------------------------------------------------------------------
 
 void Brain::wire(const Genome& genome) {
+    // Reset Hebbian-learning state; will be repopulated on the next hebbian_update().
+    learned_genome_ = nullptr;
+    silent_genes_.clear();
+
     using Triplet = Eigen::Triplet<float>;
 
     const unsigned nl = num_layers_;
@@ -86,13 +91,19 @@ void Brain::wire(const Genome& genome) {
         // Using modulo would create a coverage bias:  e.g. with sizeY=19 and
         // a 5-bit num field (0-31), indices 0-12 would be selected twice as
         // often as 13-18.  Rejection keeps the distribution uniform.
+        // Index-overflow genes are preserved as silent genes: they may become
+        // active in future generations if layer sizes grow via structural mutation.
         const unsigned raw_src = g.get_source_num();
-        if (raw_src >= layer_size(src_layer))
+        if (raw_src >= layer_size(src_layer)) {
+            silent_genes_.push_back(g);
             continue;
+        }
 
         const unsigned raw_snk = g.get_sink_num();
-        if (raw_snk >= layer_size(dst_layer))
+        if (raw_snk >= layer_size(dst_layer)) {
+            silent_genes_.push_back(g);
             continue;
+        }
 
         const int src_neuron = static_cast<int>(raw_src);
         const int dst_neuron = static_cast<int>(raw_snk);
@@ -230,6 +241,85 @@ unsigned Brain::get_size_y() const {
 }
 unsigned Brain::get_num_hidden() const {
     return num_hidden_;
+}
+
+std::size_t Brain::get_total_connections() const {
+    std::size_t total = 0;
+    const unsigned nl = num_layers_;
+    for (unsigned src = 0; src < nl; ++src) {
+        for (unsigned dst = src + 1; dst < nl; ++dst) {
+            total += static_cast<std::size_t>(M_[src * nl + dst].nonZeros());
+        }
+    }
+    return total;
+}
+
+std::size_t Brain::get_useful_connection_count(float epsilon) const {
+    std::size_t useful = 0;
+    const unsigned nl = num_layers_;
+    const bool has_activations = activations_.size() == nl;
+    for (unsigned src = 0; src < nl; ++src) {
+        for (unsigned dst = src + 1; dst < nl; ++dst) {
+            const auto& M = M_[src * nl + dst];
+            if (M.nonZeros() == 0) {
+                continue;
+            }
+            for (int k = 0; k < M.outerSize(); ++k) {
+                for (Eigen::SparseMatrix<float>::InnerIterator it(M, k); it; ++it) {
+                    float score = 0.0f;
+                    if (has_activations) {
+                        score = std::abs(it.value() * activations_[src](it.col()) * activations_[dst](it.row()));
+                    }
+                    if (score >= epsilon) {
+                        ++useful;
+                    }
+                }
+            }
+        }
+    }
+    return useful;
+}
+
+std::vector<BrainConnectionActivity> Brain::get_top_active_connections(float epsilon, std::size_t limit) const {
+    std::vector<BrainConnectionActivity> all;
+    if (limit == 0) {
+        return all;
+    }
+
+    const unsigned nl = num_layers_;
+    const bool has_activations = activations_.size() == nl;
+    if (!has_activations) {
+        return all;
+    }
+
+    for (unsigned src = 0; src < nl; ++src) {
+        for (unsigned dst = src + 1; dst < nl; ++dst) {
+            const auto& M = M_[src * nl + dst];
+            if (M.nonZeros() == 0) {
+                continue;
+            }
+            for (int k = 0; k < M.outerSize(); ++k) {
+                for (Eigen::SparseMatrix<float>::InnerIterator it(M, k); it; ++it) {
+                    const float score =
+                        std::abs(it.value() * activations_[src](it.col()) * activations_[dst](it.row()));
+                    if (score < epsilon) {
+                        continue;
+                    }
+                    all.push_back(BrainConnectionActivity{src, static_cast<unsigned>(it.col()), dst,
+                                                          static_cast<unsigned>(it.row()), it.value(), score});
+                }
+            }
+        }
+    }
+
+    std::sort(all.begin(), all.end(), [](const BrainConnectionActivity& a, const BrainConnectionActivity& b) {
+        return a.activity_score > b.activity_score;
+    });
+
+    if (all.size() > limit) {
+        all.resize(limit);
+    }
+    return all;
 }
 
 std::vector<bool> Brain::get_connected_sensors() const {
@@ -377,4 +467,48 @@ void Brain::hebbian_update(float reward) {
             }
         }
     }
+
+    // Rebuild genome from learned weights so offspring can inherit the current synaptic state.
+    if (config_->get_hebbian_inheritance())
+        rebuild_genome_from_weights();
+}
+
+std::shared_ptr<const Genome> Brain::get_learned_genome() const {
+    return learned_genome_;
+}
+
+void Brain::rebuild_genome_from_weights() {
+    const unsigned nl = num_layers_;
+    auto genome = std::make_shared<Genome>(0);
+
+    // For every active synapse, create one gene encoding the current learned weight.
+    for (unsigned src = 0; src < nl; ++src) {
+        for (unsigned dst = src + 1; dst < nl; ++dst) {
+            const auto& W = M_[src * nl + dst];
+            if (W.nonZeros() == 0)
+                continue;
+
+            // Gene sink_type encoding: hidden layers use their layer index, output layer always encodes as 7.
+            const uint16_t sink_type = (dst == nl - 1) ? 7u : static_cast<uint16_t>(dst);
+
+            for (int k = 0; k < W.outerSize(); ++k) {
+                for (Eigen::SparseMatrix<float>::InnerIterator it(W, k); it; ++it) {
+                    // Convert learned float weight back to the int16_t representation used by Gene.
+                    // Scale factor 8192.0f matches Gene::get_weight_as_float() which divides by 8192.
+                    const float clamped = std::clamp(it.value() * 8192.0f, -32768.0f, 32767.0f);
+                    const int16_t w_int = static_cast<int16_t>(clamped);
+
+                    genome->add_gene(Gene(static_cast<uint16_t>(src), static_cast<uint16_t>(it.col()), sink_type,
+                                          static_cast<uint16_t>(it.row()), w_int));
+                }
+            }
+        }
+    }
+
+    // Append silent genes (index-overflow rejections from wire()).
+    // These are carried forward unchanged so mutations can reactivate them if layer sizes grow.
+    for (const Gene& g : silent_genes_)
+        genome->add_gene(g);
+
+    learned_genome_ = std::move(genome);
 }

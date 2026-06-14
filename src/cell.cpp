@@ -26,6 +26,9 @@ Cell::Cell(std::weak_ptr<IEntity> occupant)
     feromones_[FeromoneT::DANGER_FEROMONE] = 0;
     feromones_[FeromoneT::MATE_FEROMONE] = 0;
     feromones_[FeromoneT::HOME_FEROMONE] = 0;
+
+    // Randomize regen phase so cells do not all regenerate glucose at the same tick.
+    regen_tick_ = static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(GlucoseRegenInterval) - 1));
 }
 
 void Cell::set_occupant(std::weak_ptr<IEntity> occupant) {

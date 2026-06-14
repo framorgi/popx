@@ -13,7 +13,7 @@
 namespace {
 std::atomic<unsigned> s_pop_counter{0};
 }
-constexpr float move_cost = 0.1f;
+constexpr float move_cost = 0.03f;
 
 Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config)
     : genome_(Genome(RandomUtility().rnd_int(static_cast<int>(config->get_genome_min_length()),
@@ -57,6 +57,7 @@ void Pop::init() {
     lipids_ = 20;
     metabolism_heat_ = 0.0f;
     temperature_ = config_->get_phy_init_temperature();
+    last_reward_ = 0.0f;
     if (!inherit_phy) {
         phy_.mitochondrions = static_cast<unsigned>(
             random_util_->rnd_int(1, static_cast<int>(config_->get_phy_init_mitochondrions_max())));
@@ -144,7 +145,9 @@ void Pop::update() {
         death_cause_ = energy_ <= 0 ? DeathCause::EnergyDepletion : DeathCause::OldAge;
         die();
     } else {
-        learn(calculate_reward());
+        const float reward = calculate_reward();
+        last_reward_ = reward;
+        learn(reward);
     }
 }
 
@@ -518,6 +521,10 @@ bool Pop::is_alive() {
     return alive_;
 }
 
+Color Pop::get_genetic_color() const {
+    return genome_.get_genetic_color();
+}
+
 RenderState Pop::get_render_state() const {
     Color c = genome_.get_genetic_color();
     float size = 1.0f;
@@ -533,8 +540,7 @@ RenderState Pop::get_render_state() const {
     state.position = Vec2{static_cast<float>(pos_.x), static_cast<float>(pos_.y)};
     state.color = c;   //  Black if dead
     state.size = size; //  size
-    state.payload =
-        PopVisualData{energy_ / 100.0f, age_ / 100.0f, phy_.chloroplasts >= config_->get_phy_min_chloroplasts()};
+    state.payload = PopVisualData{energy_ / 100.0f, age_ / 100.0f, phy_.chloroplasts > phy_.mitochondrions};
     state.shape = RenderShape::Circle; //  shape
     return state;
 }
@@ -544,6 +550,9 @@ bool Pop::wants_to_reproduce() const {
 }
 
 Genome Pop::make_offspring_genome() const {
+    if (config_->get_hebbian_inheritance())
+        if (auto lg = brain_->get_learned_genome())
+            return lg->mutated(config_->get_point_mutation_rate());
     return genome_.mutated(config_->get_point_mutation_rate());
 }
 

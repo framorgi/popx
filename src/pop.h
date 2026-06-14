@@ -9,6 +9,7 @@
 #include "neuron.h"
 #include "random_utility.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -156,6 +157,58 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     // ---------------------------------------------------------------------------
     DeathCause get_death_cause() const;
 
+    // ----- Read-only accessors for GUI / Stats (no simulation side-effects) -----
+    [[nodiscard]] uint32_t get_age() const {
+        return age_;
+    }
+    [[nodiscard]] float get_energy() const {
+        return energy_;
+    }
+    [[nodiscard]] PhyT get_phy() const {
+        return phy_;
+    }
+    [[nodiscard]] Color get_genetic_color() const;
+    [[nodiscard]] int get_offspring_count() const {
+        return offspring_count_;
+    }
+    [[nodiscard]] unsigned get_glucose() const {
+        return glucose_;
+    }
+    [[nodiscard]] unsigned get_water() const {
+        return water_;
+    }
+    [[nodiscard]] unsigned get_o2() const {
+        return o2_;
+    }
+    [[nodiscard]] unsigned get_co2() const {
+        return co2_;
+    }
+    [[nodiscard]] unsigned get_calcium() const {
+        return calcium_;
+    }
+    [[nodiscard]] unsigned get_lipids() const {
+        return lipids_;
+    }
+    [[nodiscard]] double get_body_temperature() const {
+        return temperature_;
+    }
+    [[nodiscard]] float get_learning_score() const {
+        return last_reward_;
+    }
+    [[nodiscard]] std::size_t get_brain_total_connections() const {
+        return brain_ ? brain_->get_total_connections() : 0;
+    }
+    [[nodiscard]] std::size_t get_brain_useful_connections(float epsilon = 0.05f) const {
+        return brain_ ? brain_->get_useful_connection_count(epsilon) : 0;
+    }
+    [[nodiscard]] std::vector<BrainConnectionActivity> get_brain_top_active_connections(float epsilon = 0.05f,
+                                                                                        std::size_t limit = 10) const {
+        return brain_ ? brain_->get_top_active_connections(epsilon, limit) : std::vector<BrainConnectionActivity>{};
+    }
+    [[nodiscard]] const std::string& get_pop_id() const {
+        return pop_id_;
+    }
+
   private:
     ///----------------------------------------------------------------------------
     /// @brief guard flag to avoid some action at first run
@@ -273,6 +326,10 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Previous energy level (used to calculate energy delta for reward).
     /// ---------------------------------------------------------------------------
     float previous_energy_ = 0.0f;
+    /// ---------------------------------------------------------------------------
+    /// @brief Last reward used by learning update (displayed in inspector).
+    /// ---------------------------------------------------------------------------
+    float last_reward_ = 0.0f;
     ///----------------------------------------------------------------------------
     /// @brief Counter for the number of offspring produced by this Pop
     ///----------------------------------------------------------------------------

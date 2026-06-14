@@ -53,4 +53,14 @@ class IGraphicEngine {
     // --------------------------
     virtual void draw_text(const std::string& text, const Vec2& pos, int size,
                            const Color& color = Color(255, 255, 255), const std::string& fontName = "") = 0;
+
+    // --------------------------
+    // ImGui integration
+    // --------------------------
+    /// @brief Initialise Dear ImGui (call once after window creation).
+    virtual void imgui_init() = 0;
+    /// @brief Start a new ImGui frame.  @param dt_seconds elapsed time since last frame.
+    virtual void imgui_new_frame(float dt_seconds) = 0;
+    /// @brief Render ImGui draw commands into the window (call before present/display).
+    virtual void imgui_render() = 0;
 };

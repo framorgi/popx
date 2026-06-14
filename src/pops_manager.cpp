@@ -1,6 +1,7 @@
 #include "pops_manager.h"
 
 #include <algorithm>
+#include <cmath>
 #include <execution>
 #include <utility>
 
@@ -41,6 +42,7 @@ bool PopsManager::spawn_population() {
             }
 
             pop->init();
+            ++total_births_;
             logger_->info("Agent spawned successfully at position (" + std::to_string(w) + ", " + std::to_string(h) +
                           ").");
 
@@ -54,6 +56,7 @@ bool PopsManager::spawn_population() {
 }
 
 void PopsManager::update_cycle() {
+    ++cycle_counter_;
     // 1. SENSE — read-only on world, writes only per-agent sensor_values_ → safe to parallelise
     std::for_each(std::execution::par_unseq, sense_bucket_.begin(), sense_bucket_.end(),
                   [](const std::shared_ptr<Pop>& pop) {
@@ -92,6 +95,8 @@ void PopsManager::update_cycle() {
     for (auto& pop : pops_) {
         if (!pop->is_alive()) {
             world_->remove_entity(pop);
+            ++dead_count_;
+            ++total_deaths_;
         }
     }
 
@@ -103,6 +108,8 @@ void PopsManager::update_cycle() {
     erase_dead(think_bucket_);
     erase_dead(act_bucket_);
     erase_dead(pops_);
+
+    forced_respawn_active_ = pops_.size() < MinPopulationAllowed;
 
     // Reproduction phase: snapshot parents ready to reproduce, then spawn offspring
     std::vector<std::shared_ptr<Pop>> reproducers;
@@ -127,12 +134,26 @@ void PopsManager::update_cycle() {
     }
 
     rotate_buckets();
+
+    if (config_->get_newgen_enabled()) {
+        const unsigned interval = std::max<unsigned>(1, config_->get_newgen_interval_ticks());
+        if (cycle_counter_ % interval == 0) {
+            trigger_new_generation();
+        }
+    }
 }
 
 void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
+    // Temporarily increase mutation rate for offspring creation, then reset to original rate
+    auto old_mutation_rate = config_->get_point_mutation_rate();
+    if (pops_.size() < MinPopulationAllowed) {
+        auto temp_mutation_rate = old_mutation_rate * 10; // Increase mutation rate by 10% for each offspring
+        config_->set_point_mutation_rate(temp_mutation_rate);
+    }
     auto child =
         std::make_shared<Pop>(world_, logger_, config_, parent->make_offspring_genome(), parent->make_offspring_phy());
 
+    config_->set_point_mutation_rate(old_mutation_rate);
     // Try all 8 adjacent cells (cardinal first, then diagonal)
     const int dx[] = {0, 1, 0, -1, 1, 1, -1, -1};
     const int dy[] = {-1, 0, 1, 0, -1, 1, 1, -1};
@@ -157,6 +178,7 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
             logger_->info("Incrementing offspring count for parent at (" + std::to_string(pp.x) + "," +
                           std::to_string(pp.y) + ").");
             parent->increment_offspring_count();
+            ++total_births_;
 
             logger_->info("Offspring spawned at (" + std::to_string(candidate.x) + "," + std::to_string(candidate.y) +
                           ") from parent at (" + std::to_string(pp.x) + "," + std::to_string(pp.y) + ").");
@@ -169,4 +191,149 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
 void PopsManager::rotate_buckets() {
     std::swap(sense_bucket_, think_bucket_);
     std::swap(think_bucket_, act_bucket_);
+}
+
+int PopsManager::get_alive_count() const {
+    return static_cast<int>(pops_.size());
+}
+
+double PopsManager::score_pop_for_newgen(const std::shared_ptr<Pop>& pop) const {
+    if (!pop) {
+        return -1.0;
+    }
+    // Default criterion: offspring count (easy to replace with reward-based score).
+    return static_cast<double>(pop->get_offspring_count()) + 0.01 * static_cast<double>(pop->get_energy());
+}
+
+bool PopsManager::try_spawn_random_position(const std::shared_ptr<Pop>& pop, RandomUtility& random_util) {
+    if (!pop) {
+        return false;
+    }
+    constexpr int max_attempts = 2048;
+    for (int attempt = 0; attempt < max_attempts; ++attempt) {
+        int w = random_util.rnd_int(0, world_->get_width());
+        int h = random_util.rnd_int(0, world_->get_height());
+        if (pop->try_spawn(PositionT{w, h})) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void PopsManager::trigger_new_generation() {
+    if (pops_.empty()) {
+        return;
+    }
+
+    std::vector<std::shared_ptr<Pop>> alive;
+    alive.reserve(pops_.size());
+    for (const auto& pop : pops_) {
+        if (pop && pop->is_alive()) {
+            alive.push_back(pop);
+        }
+    }
+    if (alive.empty()) {
+        return;
+    }
+
+    std::sort(alive.begin(), alive.end(), [&](const std::shared_ptr<Pop>& a, const std::shared_ptr<Pop>& b) {
+        return score_pop_for_newgen(a) > score_pop_for_newgen(b);
+    });
+
+    const auto ratio = std::clamp(config_->get_newgen_survival_ratio(), 0.01, 1.0);
+    const int min_survivors = std::max(1u, config_->get_newgen_min_survivors());
+    int survivors_n = static_cast<int>(std::round(static_cast<double>(alive.size()) * ratio));
+    survivors_n = std::clamp(survivors_n, min_survivors, static_cast<int>(alive.size()));
+
+    std::vector<std::shared_ptr<Pop>> survivors(alive.begin(), alive.begin() + survivors_n);
+
+    for (auto& pop : alive) {
+        world_->remove_entity(pop);
+    }
+
+    const int culled = static_cast<int>(alive.size()) - survivors_n;
+    dead_count_ += culled;
+    total_deaths_ += culled;
+    pops_.clear();
+    sense_bucket_.clear();
+    think_bucket_.clear();
+    act_bucket_.clear();
+
+    RandomUtility random_util;
+    for (auto& pop : survivors) {
+        if (!try_spawn_random_position(pop, random_util)) {
+            continue;
+        }
+        pops_.push_back(pop);
+        const int phase = rand() % 3;
+        if (phase == 0) {
+            sense_bucket_.push_back(pop);
+        } else if (phase == 1) {
+            think_bucket_.push_back(pop);
+        } else {
+            act_bucket_.push_back(pop);
+        }
+    }
+
+    ++generation_count_;
+    for (const auto& pop : pops_) {
+        if (pop) {
+            pop->serialize_brain(generation_count_);
+        }
+    }
+
+    logger_->info("NewGen applied. generation=" + std::to_string(generation_count_) +
+                  " survivors=" + std::to_string(pops_.size()) + " dead_total=" + std::to_string(dead_count_));
+}
+
+void PopsManager::reset_population_state() {
+    for (auto& pop : pops_) {
+        if (pop) {
+            world_->remove_entity(pop);
+        }
+    }
+    pops_.clear();
+    sense_bucket_.clear();
+    think_bucket_.clear();
+    act_bucket_.clear();
+    dead_count_ = 0;
+    total_births_ = 0;
+    total_deaths_ = 0;
+    forced_respawn_active_ = false;
+    generation_count_ = 0;
+    cycle_counter_ = 0;
+}
+
+std::vector<PopSnapshot> PopsManager::get_pops_snapshot() const {
+    std::vector<PopSnapshot> snaps;
+    snaps.reserve(pops_.size());
+    for (const auto& pop : pops_) {
+        if (!pop || !pop->is_alive())
+            continue;
+        PopSnapshot s;
+        s.pop_id = pop->get_pop_id();
+        s.age = pop->get_age();
+        s.energy = pop->get_energy();
+        s.pos = pop->get_position();
+        s.mitochondrions = pop->get_phy().mitochondrions;
+        s.chloroplasts = pop->get_phy().chloroplasts;
+        s.sensitiveness = pop->get_phy().sensitiveness;
+        s.adipose_stock_max = pop->get_phy().adipose_stock_max;
+        s.body_temperature = pop->get_body_temperature();
+        s.glucose = pop->get_glucose();
+        s.water = pop->get_water();
+        s.o2 = pop->get_o2();
+        s.co2 = pop->get_co2();
+        s.calcium = pop->get_calcium();
+        s.lipids = pop->get_lipids();
+        s.learning_score = pop->get_learning_score();
+        s.total_connections = pop->get_brain_total_connections();
+        s.useful_connections = pop->get_brain_useful_connections(0.05f);
+        s.top_active_connections = pop->get_brain_top_active_connections(0.05f, 128);
+        s.genetic_color = pop->get_genetic_color();
+        s.offspring = pop->get_offspring_count();
+        s.is_photosynthetic = pop->get_phy().chloroplasts > pop->get_phy().mitochondrions;
+        snaps.push_back(s);
+    }
+    return snaps;
 }

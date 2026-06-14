@@ -4,15 +4,13 @@
 #include "i_config.h"
 #include "i_entity.h"
 #include "i_graphic_engine.h"
-#include "i_logger.h"
 #include "i_renderer.h"
 #include "i_world.h"
+#include "render_flags.h"
 #include "render_state.h"
 #include "sfml_graphic_engine.h"
 
 #include <array>
-#include <cmath>
-#include <memory>
 
 struct Level {
     double height;
@@ -57,16 +55,11 @@ class Renderer : public IRenderer {
     ///--------------------------------------------------------------------------
     void save_frame() override;
 
-    ///--------------------------------------------------------------------------
-    /// @brief    Checks if the rendering window is open
-    /// @return   True if the window is open, false otherwise
-    ///--------------------------------------------------------------------------
     [[nodiscard]] bool window_open() const override;
-
-    ///--------------------------------------------------------------------------
-    /// @brief    Polls for window events
-    ///--------------------------------------------------------------------------
     void poll_event() override;
+    void set_render_flags(const RenderFlags& flags) override;
+    void imgui_init() override;
+    void present() override;
 
   private:
     ///--------------------------------------------------------------------------
@@ -148,11 +141,6 @@ class Renderer : public IRenderer {
     std::shared_ptr<IConfig> config_;
 
     ///--------------------------------------------------------------------------
-    /// @brief    Shared pointer to the logger instance
-    ///--------------------------------------------------------------------------
-    std::shared_ptr<ILogger> logger_;
-
-    ///--------------------------------------------------------------------------
     /// @brief    Buffer for storing quads representing the map
     ///--------------------------------------------------------------------------
     std::vector<IGraphicEngine::Quad> map_layer_;
@@ -168,13 +156,15 @@ class Renderer : public IRenderer {
     std::vector<IGraphicEngine::EntityVertex> feromone_layer_;
 
     ///--------------------------------------------------------------------------
-    /// @brief    Buffer for storing vertices representing glucose
+    /// @brief    Buffer for selected resource overlay
     ///--------------------------------------------------------------------------
-    std::vector<IGraphicEngine::EntityVertex> glucose_layer_;
+    std::vector<IGraphicEngine::EntityVertex> resource_layer_;
+
+    RenderFlags flags_;
 
     ///--------------------------------------------------------------------------
     /// @brief    Width and height of the world
     int world_height_ = 0;
     int world_width_ = 0;
-    int start_population_ = 0;
+    int population_ = 0;
 };

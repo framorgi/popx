@@ -27,6 +27,7 @@ struct ConfigParams {
     double deletion_ratio = 0.5;
     bool sexual_reproduction = true;
     bool choose_parents_by_fitness = true;
+    bool hebbian_inheritance = false;
 
     // Directories
     std::string nnets_dir = "../data_out/nnets/";
@@ -50,6 +51,12 @@ struct ConfigParams {
     double phy_max_lipids_ref = 80.0;
     double phy_init_temperature = 25.0;
     double phy_photo_min_elevation = 30.0;
+
+    // New generation controls
+    bool newgen_enabled = false;
+    unsigned newgen_interval_ticks = 5000;
+    double newgen_survival_ratio = 0.35;
+    unsigned newgen_min_survivors = 8;
 };
 
 /// @brief Concrete implementation of IConfig backed by a key=value INI file.
@@ -58,7 +65,7 @@ struct ConfigParams {
 class Config : public IConfig {
   public:
     explicit Config(const std::string& filepath);
-
+    void set_point_mutation_rate(double rate) override;
     unsigned get_brain_size_s() const override;
     unsigned get_brain_size_n() const override;
     unsigned get_brain_size_y() const override;
@@ -75,6 +82,7 @@ class Config : public IConfig {
     double get_deletion_ratio() const override;
     bool get_sexual_reproduction() const override;
     bool get_choose_parents_by_fitness() const override;
+    bool get_hebbian_inheritance() const override;
     const std::string& get_log_dir() const override;
     const std::string& get_image_dir() const override;
 
@@ -91,6 +99,11 @@ class Config : public IConfig {
     double get_phy_max_lipids_ref() const override;
     double get_phy_init_temperature() const override;
     double get_phy_photo_min_elevation() const override;
+
+    bool get_newgen_enabled() const override;
+    unsigned get_newgen_interval_ticks() const override;
+    double get_newgen_survival_ratio() const override;
+    unsigned get_newgen_min_survivors() const override;
 
     void update_from_file(unsigned generation) override;
 

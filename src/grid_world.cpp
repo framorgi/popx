@@ -18,7 +18,7 @@ void GridWorld::init() {
 
     /// Generate a random RBF set for temperature
     RBFSet temp_rbf_set = random_util.rnd_rbf_set(10, 5.0, 100.0, 0.0, static_cast<double>(width_), 0.0,
-                                                  static_cast<double>(height_), 20.0, 20.0, 20.0, 20.0);
+                                                  static_cast<double>(height_), 6.0, 20.0, 6.0, 20.0);
 
     /// Generate a random RBF set for elevation
     RBFSet elevation_rbf_set = random_util.rnd_symmetric_rbf_set(20, 5.0, 100.0, 0.0, static_cast<double>(width_), 0.0,
@@ -26,10 +26,11 @@ void GridWorld::init() {
 
     /// Generate a random RBF set for glucose distribution
     RBFSet glucose_rbf_set = random_util.rnd_rbf_set(35, MaxC6h12o6 / 8, MaxC6h12o6, 0, static_cast<double>(width_),
-                                                     0.0, static_cast<double>(height_), 20.0, 10.0, 5.0, 10.0);
+                                                     0.0, static_cast<double>(height_), 5.0, 20.0, 5.0, 10.0);
     ///
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {
+            cells_[index(x, y)]->set_occupant(std::weak_ptr<IEntity>());
             double temp_value =
                 random_util.evaluate_rbf_set(temp_rbf_set, static_cast<double>(x), static_cast<double>(y));
             cells_[index(x, y)]->set_temperature((temp_value));
@@ -188,4 +189,19 @@ void GridWorld::set_feromone(PositionT p, FeromoneT type, float value) {
     }
     auto cell = cells_[index(pos.x, pos.y)];
     return static_cast<int>(cell->get_elevation());
+}
+
+OrganicsT GridWorld::get_total_organics() const {
+    OrganicsT total{};
+    for (const auto& cell : cells_) {
+        const auto o = cell->get_organics();
+        total.c6h12o6 += o.c6h12o6;
+        total.lipids += o.lipids;
+        total.o2 += o.o2;
+        total.co2 += o.co2;
+        total.h2o += o.h2o;
+        total.n2 += o.n2;
+        total.caco3 += o.caco3;
+    }
+    return total;
 }

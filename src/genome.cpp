@@ -39,6 +39,11 @@ Genome Genome::mutated(double point_mutation_rate) const {
 }
 
 void Genome::compute_genetic_color_value() {
+    if (genes_.empty()) {
+        genetic_color_value_ = {0, 0, 0};
+        return;
+    }
+
     uint8_t r = 0;
     uint8_t g = 0;
     uint8_t b = 0;
