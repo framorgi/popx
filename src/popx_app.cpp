@@ -50,9 +50,10 @@ void PopXApp::run() {
 
                 if (stats_ && tick_count_ % stats_interval == 0) {
                     auto dur = std::chrono::duration_cast<std::chrono::microseconds>(tick_t1 - tick_t0);
+                    const auto pops_snapshot = agents_->get_pops_snapshot();
                     stats_->record_tick(tick_count_, agents_->get_generation_count(), agents_->get_alive_count(),
                                         agents_->get_dead_count(), agents_->get_total_births(),
-                                        agents_->get_total_deaths(), world_->get_total_organics(), dur);
+                                        agents_->get_total_deaths(), world_->get_total_organics(), pops_snapshot, dur);
                 }
                 accumulator -= fixed_dt;
             }

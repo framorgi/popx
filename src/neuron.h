@@ -80,10 +80,11 @@ enum class Action {
     GET_H2O,     // 13  absorb 2 units water from current cell
     GET_CALCIUM, // 14  absorb 2 units calcium from current cell
 
-    // ── 15-16: internal modulation ────────────────────────────────────────
-    SET_OSCILLATOR_PERIOD, // 15  scale osc_period_ × 1.1
-    SET_RESPONSIVENESS,    // 16  increase responsiveness_ by 0.1
+    // ── 15-17: internal modulation ────────────────────────────────────────
+    BURN_CALORIES,         // 15  burn energy to produce extra heat
+    SET_OSCILLATOR_PERIOD, // 16  scale osc_period_ × 1.1
+    SET_RESPONSIVENESS,    // 17  increase responsiveness_ by 0.1
 
-    NUM_ACTIONS,  // 17  ← brain output layer size (brain_size_y = 17)
-    KILL_FORWARD, // 18  lethal: kill entity in the forward cell
+    NUM_ACTIONS,  // 18  ← brain output layer size (brain_size_y = 18)
+    KILL_FORWARD, // 19  lethal: kill entity in the forward cell
 };

@@ -13,7 +13,8 @@ class Stats : public IStats {
     void end_session() override;
 
     void record_tick(uint64_t tick, unsigned generation, int alive, int dead, int total_births, int total_deaths,
-                     const OrganicsT& world_organics, std::chrono::microseconds tick_dur) override;
+                     const OrganicsT& world_organics, const std::vector<PopSnapshot>& pops_snapshot,
+                     std::chrono::microseconds tick_dur) override;
 
     void record_frame(std::chrono::microseconds frame_dur) override;
 
@@ -46,5 +47,10 @@ class Stats : public IStats {
     int64_t total_frame_us_ = 0;
     double total_birth_rate_ = 0.0;
     double total_death_rate_ = 0.0;
+    double total_movement_energy_loss_active_ = 0.0;
+    double total_metabolism_energy_loss_active_ = 0.0;
+    double total_reproduction_energy_loss_active_ = 0.0;
+    double total_respiration_energy_gain_active_ = 0.0;
+    double total_thermoregolation_energy_loss_active_ = 0.0;
     std::size_t rate_window_samples_ = 10;
 };

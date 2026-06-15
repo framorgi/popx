@@ -69,8 +69,9 @@ ACTION_LABELS = {
     # 12-14: resource acquisition
     12: "GET_GLUC",    13: "GET_H2O",
     14: "GET_CALC",
-    # 15-16: internal modulation
-    15: "SET_OSC",     16: "SET_RESP",
+    # 15-17: internal modulation
+    15: "BURN_CAL",    16: "SET_OSC",
+    17: "SET_RESP",
 }
 
 

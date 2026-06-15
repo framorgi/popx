@@ -50,6 +50,7 @@ struct ConfigParams {
     double phy_alpha_max = 0.5;
     double phy_max_lipids_ref = 80.0;
     double phy_init_temperature = 25.0;
+    double phy_opt_temperature = 37.0;
     double phy_photo_min_elevation = 30.0;
 
     // New generation controls
@@ -98,6 +99,7 @@ class Config : public IConfig {
     double get_phy_alpha_max() const override;
     double get_phy_max_lipids_ref() const override;
     double get_phy_init_temperature() const override;
+    double get_phy_opt_temperature() const override;
     double get_phy_photo_min_elevation() const override;
 
     bool get_newgen_enabled() const override;

@@ -17,6 +17,11 @@ void Stats::begin_session() {
     total_frame_us_ = 0;
     total_birth_rate_ = 0.0;
     total_death_rate_ = 0.0;
+    total_movement_energy_loss_active_ = 0.0;
+    total_metabolism_energy_loss_active_ = 0.0;
+    total_reproduction_energy_loss_active_ = 0.0;
+    total_respiration_energy_gain_active_ = 0.0;
+    total_thermoregolation_energy_loss_active_ = 0.0;
 }
 
 void Stats::end_session() {
@@ -27,7 +32,8 @@ void Stats::end_session() {
 }
 
 void Stats::record_tick(uint64_t tick, unsigned generation, int alive, int dead, int total_births, int total_deaths,
-                        const OrganicsT& world_organics, std::chrono::microseconds tick_dur) {
+                        const OrganicsT& world_organics, const std::vector<PopSnapshot>& pops_snapshot,
+                        std::chrono::microseconds tick_dur) {
     // Rolling window: when full, drop the oldest quarter to amortise the erase cost.
     if (history_.size() >= kMaxHistory) {
         const std::size_t drop = kMaxHistory / 4;
@@ -45,6 +51,27 @@ void Stats::record_tick(uint64_t tick, unsigned generation, int alive, int dead,
     r.tick_duration_us = tick_dur.count();
     r.frame_duration_us = last_frame_dur_us_;
     r.fps = last_frame_dur_us_ > 0 ? (1'000'000.0 / static_cast<double>(last_frame_dur_us_)) : 0.0;
+
+    if (!pops_snapshot.empty()) {
+        double movement_sum = 0.0;
+        double metabolism_sum = 0.0;
+        double reproduction_sum = 0.0;
+        double respiration_sum = 0.0;
+        double thermoreg_sum = 0.0;
+        for (const auto& pop : pops_snapshot) {
+            movement_sum += pop.total_movement_energy_loss;
+            metabolism_sum += pop.total_metabolism_energy_loss;
+            reproduction_sum += pop.total_reproduction_energy_loss;
+            respiration_sum += pop.total_respiration_energy_gain;
+            thermoreg_sum += pop.total_thermoregolation_energy_loss;
+        }
+        const double denom = static_cast<double>(pops_snapshot.size());
+        r.avg_movement_energy_loss_active = movement_sum / denom;
+        r.avg_metabolism_energy_loss_active = metabolism_sum / denom;
+        r.avg_reproduction_energy_loss_active = reproduction_sum / denom;
+        r.avg_respiration_energy_gain_active = respiration_sum / denom;
+        r.avg_thermoregolation_energy_loss_active = thermoreg_sum / denom;
+    }
 
     if (!history_.empty()) {
         const std::size_t base_idx =
@@ -69,6 +96,11 @@ void Stats::record_tick(uint64_t tick, unsigned generation, int alive, int dead,
     total_tick_us_ += tick_dur.count();
     total_birth_rate_ += r.birth_rate_per_sec;
     total_death_rate_ += r.death_rate_per_sec;
+    total_movement_energy_loss_active_ += r.avg_movement_energy_loss_active;
+    total_metabolism_energy_loss_active_ += r.avg_metabolism_energy_loss_active;
+    total_reproduction_energy_loss_active_ += r.avg_reproduction_energy_loss_active;
+    total_respiration_energy_gain_active_ += r.avg_respiration_energy_gain_active;
+    total_thermoregolation_energy_loss_active_ += r.avg_thermoregolation_energy_loss_active;
 }
 
 void Stats::record_frame(std::chrono::microseconds frame_dur) {
@@ -92,6 +124,13 @@ SessionSummary Stats::get_summary() const {
     s.avg_fps = s.avg_frame_us > 0 ? (1'000'000.0 / static_cast<double>(s.avg_frame_us)) : 0.0;
     s.avg_birth_rate_per_sec = n > 0 ? total_birth_rate_ / static_cast<double>(n) : 0.0;
     s.avg_death_rate_per_sec = n > 0 ? total_death_rate_ / static_cast<double>(n) : 0.0;
+    s.avg_movement_energy_loss_active = n > 0 ? total_movement_energy_loss_active_ / static_cast<double>(n) : 0.0;
+    s.avg_metabolism_energy_loss_active = n > 0 ? total_metabolism_energy_loss_active_ / static_cast<double>(n) : 0.0;
+    s.avg_reproduction_energy_loss_active =
+        n > 0 ? total_reproduction_energy_loss_active_ / static_cast<double>(n) : 0.0;
+    s.avg_respiration_energy_gain_active = n > 0 ? total_respiration_energy_gain_active_ / static_cast<double>(n) : 0.0;
+    s.avg_thermoregolation_energy_loss_active =
+        n > 0 ? total_thermoregolation_energy_loss_active_ / static_cast<double>(n) : 0.0;
     s.last_organics = history_.empty() ? OrganicsT{} : history_.back().world_organics;
     return s;
 }
@@ -127,6 +166,11 @@ bool Stats::save_to_json(const std::string& path) {
                     {"total_deaths", summary.total_deaths},
                     {"avg_birth_rate_per_sec", summary.avg_birth_rate_per_sec},
                     {"avg_death_rate_per_sec", summary.avg_death_rate_per_sec},
+                    {"avg_movement_energy_loss_active", summary.avg_movement_energy_loss_active},
+                    {"avg_metabolism_energy_loss_active", summary.avg_metabolism_energy_loss_active},
+                    {"avg_reproduction_energy_loss_active", summary.avg_reproduction_energy_loss_active},
+                    {"avg_respiration_energy_gain_active", summary.avg_respiration_energy_gain_active},
+                    {"avg_thermoregolation_energy_loss_active", summary.avg_thermoregolation_energy_loss_active},
                     {"rate_window_samples", static_cast<uint64_t>(rate_window_samples_)},
                     {"last_organics", organics_to_json(summary.last_organics)}};
 
@@ -145,6 +189,11 @@ bool Stats::save_to_json(const std::string& path) {
                            {"tick_duration_us", r.tick_duration_us},
                            {"frame_duration_us", r.frame_duration_us},
                            {"fps", r.fps},
+                           {"avg_movement_energy_loss_active", r.avg_movement_energy_loss_active},
+                           {"avg_metabolism_energy_loss_active", r.avg_metabolism_energy_loss_active},
+                           {"avg_reproduction_energy_loss_active", r.avg_reproduction_energy_loss_active},
+                           {"avg_respiration_energy_gain_active", r.avg_respiration_energy_gain_active},
+                           {"avg_thermoregolation_energy_loss_active", r.avg_thermoregolation_energy_loss_active},
                            {"organics", organics_to_json(r.world_organics)}});
     }
     j["records"] = std::move(records);

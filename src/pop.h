@@ -28,7 +28,7 @@ enum class State {
 ///----------------------------------------------------------------------------
 /// @brief The cause of death for this Pop (used for logging and analysis).
 ///----------------------------------------------------------------------------
-enum class DeathCause { None, EnergyDepletion, OldAge };
+enum class DeathCause { None, EnergyDepletion, OldAge, TemperatureOutOfRange };
 /// @brief Physical traits of a Pop entity (set at birth, inherited/mutated).
 struct PhyT {
     unsigned mitochondrions;    ///< aerobic respiration capacity (energy from glucose+O2)
@@ -155,7 +155,9 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief get the cause of death for this Pop (used for logging and analysis).
     /// @return The cause of death for this Pop.
     // ---------------------------------------------------------------------------
-    DeathCause get_death_cause() const;
+    [[nodiscard]] DeathCause get_death_cause() const {
+        return death_cause_;
+    }
 
     // ----- Read-only accessors for GUI / Stats (no simulation side-effects) -----
     [[nodiscard]] uint32_t get_age() const {
@@ -208,6 +210,23 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     [[nodiscard]] const std::string& get_pop_id() const {
         return pop_id_;
     }
+    [[nodiscard]] float get_total_movement_energy_loss() const {
+        return total_movement_energy_loss_;
+    }
+    [[nodiscard]] float get_total_metabolism_energy_loss() const {
+        return total_metabolism_energy_loss_;
+    }
+    [[nodiscard]] float get_total_reproduction_energy_loss() const {
+        return total_reproduction_energy_loss_;
+    }
+    [[nodiscard]] float get_total_respiration_energy_gain() const {
+        return total_respiration_energy_gain_;
+    }
+    [[nodiscard]] float get_total_thermoregolation_energy_loss() const {
+        return total_thermoregolation_energy_loss_;
+    }
+
+    void add_reproduction_energy_loss(float energy_loss);
 
   private:
     ///----------------------------------------------------------------------------
@@ -364,6 +383,30 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Metabolism heat produced this physiology step (reset each cycle).
     /// ---------------------------------------------------------------------------
     float metabolism_heat_ = 0.0f;
+    /// ---------------------------------------------------------------------------
+    /// @brief Additional heat produced by voluntary thermoregulation actions.
+    /// ---------------------------------------------------------------------------
+    float thermoregulation_heat_ = 0.0f;
+    /// ---------------------------------------------------------------------------
+    /// @brief Lifetime cumulative movement energy losses.
+    /// ---------------------------------------------------------------------------
+    float total_movement_energy_loss_ = 0.0f;
+    /// ---------------------------------------------------------------------------
+    /// @brief Lifetime cumulative basal metabolism energy losses.
+    /// ---------------------------------------------------------------------------
+    float total_metabolism_energy_loss_ = 0.0f;
+    /// ---------------------------------------------------------------------------
+    /// @brief Lifetime cumulative reproduction energy losses.
+    /// ---------------------------------------------------------------------------
+    float total_reproduction_energy_loss_ = 0.0f;
+    /// ---------------------------------------------------------------------------
+    /// @brief Lifetime cumulative respiration energy gains.
+    /// ---------------------------------------------------------------------------
+    float total_respiration_energy_gain_ = 0.0f;
+    /// ---------------------------------------------------------------------------
+    /// @brief Lifetime cumulative thermoregulation energy losses.
+    /// ---------------------------------------------------------------------------
+    float total_thermoregolation_energy_loss_ = 0.0f;
     ///---------------------------------------------------------------------------
     /// @brief Updates the last movement direction based on new and old positions.
     /// @param new_pos The new position after movement.
@@ -412,6 +455,10 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Run cellular respiration: C6H12O6 + O2 -> energy + CO2
     ///----------------------------------------------------------------------
     void run_mitochondrions();
+    ///----------------------------------------------------------------------
+    /// @brief Burn calories on demand to produce additional body heat.
+    ///----------------------------------------------------------------------
+    void run_thermoregulation();
     ///----------------------------------------------------------------------
     /// @brief Update body temperature via thermal exchange with environment.
     ///----------------------------------------------------------------------

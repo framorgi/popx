@@ -14,6 +14,9 @@ namespace {
 std::atomic<unsigned> s_pop_counter{0};
 }
 constexpr float move_cost = 0.03f;
+constexpr float basal_metabolism_cost = 0.02f;
+constexpr float thermoregulation_energy_cost = 0.05f;
+constexpr float thermoregulation_heat_gain = 0.5f;
 
 Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config)
     : genome_(Genome(RandomUtility().rnd_int(static_cast<int>(config->get_genome_min_length()),
@@ -56,8 +59,14 @@ void Pop::init() {
     co2_ = 0;
     lipids_ = 20;
     metabolism_heat_ = 0.0f;
+    thermoregulation_heat_ = 0.0f;
     temperature_ = config_->get_phy_init_temperature();
     last_reward_ = 0.0f;
+    total_movement_energy_loss_ = 0.0f;
+    total_metabolism_energy_loss_ = 0.0f;
+    total_reproduction_energy_loss_ = 0.0f;
+    total_respiration_energy_gain_ = 0.0f;
+    total_thermoregolation_energy_loss_ = 0.0f;
     if (!inherit_phy) {
         phy_.mitochondrions = static_cast<unsigned>(
             random_util_->rnd_int(1, static_cast<int>(config_->get_phy_init_mitochondrions_max())));
@@ -106,23 +115,45 @@ float Pop::calculate_reward() const {
                    ") with age " + std::to_string(age_) + ", energy " + std::to_string(energy_) +
                    ", and offspring count " + std::to_string(offspring_count_) + ".");
     // age_score: rewards longevity, encouraging the Pop to survive longer.
-    float age_score = std::min(static_cast<float>(age_) / MaxAge, 1.0f);
+    const float age_score = std::clamp(static_cast<float>(age_) / MaxAge, 0.0f, 1.0f);
 
     //  energy_score: rewards efficient energy management, encouraging the Pop to maintain higher energy levels.
-    float energy_score = energy_ / MaxEnergy;
+    const float energy_score = std::clamp(energy_ / MaxEnergy, 0.0f, 1.0f);
 
-    // energy_delta_score: rewards positive changes in energy, encouraging the Pop to take actions that increase its
-    // energy.
-    float energy_delta_score = std::min((energy_ - previous_energy_) / 0.02f, 1.0f);
+    // Normalise energy delta against the theoretical max per tick to avoid constant saturation.
+    const float max_energy_delta = std::max(
+        static_cast<float>(config_->get_phy_init_mitochondrions_max() * config_->get_phy_energy_per_respiration()),
+        1e-6f);
+    const float energy_delta = energy_ - previous_energy_;
+    const float energy_delta_ratio = std::clamp(energy_delta / max_energy_delta, -1.0f, 1.0f);
+    const float energy_delta_score = energy_delta_ratio * 0.5f + 0.5f;
+
+    const float opt_temp = static_cast<float>(config_->get_phy_opt_temperature());
+    const float temp_distance = std::abs(static_cast<float>(temperature_) - opt_temp);
+    const float temp_score = std::clamp(1.0f - (temp_distance / 32.5f), 0.0f, 1.0f);
 
     //  offspring_score: rewards reproductive success, encouraging the Pop to produce more offspring.
-    float offspring_score = std::min(static_cast<float>(offspring_count_) / 1000.0f, 1.0f);
+    const float offspring_score = std::clamp(static_cast<float>(offspring_count_) / 1000.0f, 0.0f, 1.0f);
 
-    float reward = AgeRewardWeight * age_score + EnergyRewardWeight * energy_score +
-                   EnergyDeltaRewardWeight * energy_delta_score + OffspringRewardWeight * offspring_score;
+    const float base_reward_raw = AgeRewardWeight * age_score + EnergyRewardWeight * energy_score +
+                                  EnergyDeltaRewardWeight * energy_delta_score +
+                                  OffspringRewardWeight * offspring_score;
+    const float reward_raw = std::clamp(base_reward_raw * 0.8f + temp_score * 0.2f, 0.0f, 1.0f);
+
+    if (!std::isfinite(reward_raw)) {
+        logger_->warning("Non-finite reward_raw detected for Pop " + pop_id_ + ". Forcing reward to -1.");
+        return -1.0f;
+    }
+
+    if (age_ % 1000 == 0 && std::abs(energy_delta_ratio) > 0.98f) {
+        logger_->warning("Reward delta component near saturation for Pop " + pop_id_ +
+                         " (delta=" + std::to_string(energy_delta) + ", max_delta=" + std::to_string(max_energy_delta) +
+                         ", ratio=" + std::to_string(energy_delta_ratio) + ").");
+    }
 
     // Trasforma [0,1] -> [-1,+1]
-    reward = reward * 2.0f - 1.0f;
+    float reward = reward_raw * 2.0f - 1.0f;
+    reward = std::clamp(reward, -1.0f, 1.0f);
     return reward;
 }
 
@@ -141,8 +172,14 @@ void Pop::learn(float reward) {
 void Pop::update() {
     age_++;
     update_physiology();
-    if (energy_ <= 0 || age_ > MaxAge) {
-        death_cause_ = energy_ <= 0 ? DeathCause::EnergyDepletion : DeathCause::OldAge;
+    if (energy_ <= 0 || age_ > MaxAge || temperature_ <= 10.0 || temperature_ >= 75.0) {
+        if (energy_ <= 0) {
+            death_cause_ = DeathCause::EnergyDepletion;
+        } else if (age_ > MaxAge) {
+            death_cause_ = DeathCause::OldAge;
+        } else {
+            death_cause_ = DeathCause::TemperatureOutOfRange;
+        }
         die();
     } else {
         const float reward = calculate_reward();
@@ -394,44 +431,52 @@ void Pop::act() {
             p.y += last_direction_.y * (responsiveness_);
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_LEFT:
             p.x -= last_direction_.y * responsiveness_;
             p.y += last_direction_.x * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_RIGHT:
             p.x += last_direction_.y * responsiveness_;
             p.y -= last_direction_.x * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_RANDOM:
             p.x += random_util_->rnd_int(-1, 1) * responsiveness_;
             p.y += random_util_->rnd_int(-1, 1) * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_EAST:
             p.x += 1 * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_WEST:
             p.x -= 1 * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_NORTH:
             p.y -= 1 * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_SOUTH:
             p.y += 1 * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         // ── feromone signalling ─────────────────────────────────────────────
         case Action::EMIT_SIGNAL_FOOD:
@@ -461,6 +506,9 @@ void Pop::act() {
             if (world) {
                 calcium_ += world->get_cell(pos_)->take_calcium(2);
             }
+            break;
+        case Action::BURN_CALORIES:
+            run_thermoregulation();
             break;
         // ── internal modulation ──────────────────────────────────────────────
         case Action::SET_OSCILLATOR_PERIOD: {
@@ -550,9 +598,13 @@ bool Pop::wants_to_reproduce() const {
 }
 
 Genome Pop::make_offspring_genome() const {
-    if (config_->get_hebbian_inheritance())
-        if (auto lg = brain_->get_learned_genome())
-            return lg->mutated(config_->get_point_mutation_rate());
+    if (config_->get_hebbian_inheritance()) {
+        if (auto lg = brain_->get_learned_genome()) {
+            if (!lg->get_genes().empty()) {
+                return lg->mutated(config_->get_point_mutation_rate());
+            }
+        }
+    }
     return genome_.mutated(config_->get_point_mutation_rate());
 }
 
@@ -617,6 +669,7 @@ void Pop::emit_feromone(FeromoneT type, int intensity) {
 
 void Pop::update_physiology() {
     metabolism_heat_ = 0.0f;
+    previous_energy_ = energy_;
 
     auto world = world_.lock();
     if (!world)
@@ -634,10 +687,11 @@ void Pop::update_physiology() {
     run_chloroplasts();
     run_mitochondrions();
     update_temperature();
+    thermoregulation_heat_ = 0.0f;
 
     // Metabolism cost
-    previous_energy_ = energy_;
-    energy_ -= 0.02f;        // Basal metabolic rate
+    energy_ -= basal_metabolism_cost;
+    total_metabolism_energy_loss_ += basal_metabolism_cost;
     energy_ -= energy_cost_; // Additional cost from actions
 }
 
@@ -669,13 +723,19 @@ void Pop::run_chloroplasts() {
 
 void Pop::run_mitochondrions() {
     unsigned co2_produced = 0;
+    const float opt_temp = static_cast<float>(config_->get_phy_opt_temperature());
+    const float efficiency = std::clamp(1.0f - std::abs(static_cast<float>(temperature_) - opt_temp) *
+                                                   static_cast<float>(config_->get_phy_energy_per_respiration()),
+                                        0.0f, 1.0f);
     for (unsigned i = 0; i < phy_.mitochondrions; ++i) {
         if (glucose_ == 0 || o2_ == 0)
             break;
         // C6H12O6 + O2 -> energy + CO2 + heat
         glucose_--;
         o2_--;
-        energy_ += static_cast<float>(config_->get_phy_energy_per_respiration());
+        const float energy_gain = static_cast<float>(config_->get_phy_energy_per_respiration()) * efficiency;
+        energy_ += energy_gain;
+        total_respiration_energy_gain_ += energy_gain;
         metabolism_heat_ += static_cast<float>(config_->get_phy_heat_per_respiration());
         co2_++;
         co2_produced++;
@@ -694,7 +754,14 @@ void Pop::update_temperature() {
         return;
     const double env_temp = world->get_temperature(pos_);
     const double alpha = compute_alpha();
-    temperature_ += alpha * (env_temp - temperature_) + static_cast<double>(metabolism_heat_);
+    const double heat_input = static_cast<double>(metabolism_heat_ + thermoregulation_heat_);
+    temperature_ += alpha * (env_temp - temperature_) + heat_input;
+}
+
+void Pop::run_thermoregulation() {
+    thermoregulation_heat_ += thermoregulation_heat_gain;
+    energy_cost_ += thermoregulation_energy_cost;
+    total_thermoregolation_energy_loss_ += thermoregulation_energy_cost;
 }
 
 double Pop::compute_alpha() const {
@@ -707,4 +774,10 @@ double Pop::compute_alpha() const {
 
 void Pop::increment_offspring_count() {
     offspring_count_++;
+}
+
+void Pop::add_reproduction_energy_loss(float energy_loss) {
+    if (energy_loss > 0.0f) {
+        total_reproduction_energy_loss_ += energy_loss;
+    }
 }

@@ -142,6 +142,9 @@ double Config::get_phy_max_lipids_ref() const {
 double Config::get_phy_init_temperature() const {
     return params_.phy_init_temperature;
 }
+double Config::get_phy_opt_temperature() const {
+    return params_.phy_opt_temperature;
+}
 double Config::get_phy_photo_min_elevation() const {
     return params_.phy_photo_min_elevation;
 }
@@ -362,6 +365,10 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
     }
     if (name == "phy_init_temperature" && is_d) {
         params_.phy_init_temperature = dval;
+        return;
+    }
+    if (name == "phy_opt_temperature" && is_d) {
+        params_.phy_opt_temperature = dval;
         return;
     }
     if (name == "phy_photo_min_elevation" && is_d && dval >= 0.0) {

@@ -203,29 +203,6 @@ void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
                 break;
         }
 
-        if (flags_.show_feromone_food && cell_data->feromones_a != 0.0) {
-            double intensity = cell_data->feromones_a;
-            Color feromone_color =
-                Color(255, 0, 100, static_cast<uint8_t>(intensity * 255)); // Red with alpha based on intensity
-
-            float cx = cell_render_size * static_cast<float>(x) + cell_render_size;
-            float cy = cell_render_size * static_cast<float>(y) + cell_render_size;
-            float radius = cell_render_size * intensity / 1.7f;
-
-            for (int i = 0; i < SEGMENTS; ++i) {
-                float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
-                float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
-
-                Vec2 center{cx, cy};
-                Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
-                Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
-
-                feromone_layer_.push_back({center, feromone_color});
-                feromone_layer_.push_back({p0, feromone_color});
-                feromone_layer_.push_back({p1, feromone_color});
-            }
-        }
-
         auto add_feromone_layer = [&](double intensity, const Color& feromone_color) {
             if (intensity == 0.0) {
                 return;
@@ -248,15 +225,18 @@ void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
             }
         };
 
+        if (flags_.show_feromone_food)
+            add_feromone_layer(cell_data->feromones_a,
+                               Color(255, 0, 100, static_cast<uint8_t>(cell_data->feromones_a * 200)));
         if (flags_.show_feromone_danger)
             add_feromone_layer(cell_data->feromones_b,
-                               Color(55, 240, 200, static_cast<uint8_t>(cell_data->feromones_b * 255)));
+                               Color(55, 240, 200, static_cast<uint8_t>(cell_data->feromones_b * 200)));
         if (flags_.show_feromone_mate)
             add_feromone_layer(cell_data->feromones_c,
-                               Color(55, 220, 0, static_cast<uint8_t>(cell_data->feromones_c * 255)));
+                               Color(55, 220, 0, static_cast<uint8_t>(cell_data->feromones_c * 200)));
         if (flags_.show_feromone_home)
             add_feromone_layer(cell_data->feromones_d,
-                               Color(0, 10, 100, static_cast<uint8_t>(cell_data->feromones_d * 255)));
+                               Color(0, 10, 100, static_cast<uint8_t>(cell_data->feromones_d * 200)));
     }
 }
 

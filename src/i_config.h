@@ -50,6 +50,7 @@ class IConfig {
     virtual double get_phy_alpha_max() const = 0;
     virtual double get_phy_max_lipids_ref() const = 0;
     virtual double get_phy_init_temperature() const = 0;
+    virtual double get_phy_opt_temperature() const = 0;
     virtual double get_phy_photo_min_elevation() const = 0;
 
     // --- New generation controls ---------------------------------------------

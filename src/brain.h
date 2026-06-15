@@ -64,8 +64,11 @@ class Brain : public IBrain {
     std::vector<Eigen::VectorXf> activations_;
     /// Genome rebuilt from learned weights after each hebbian_update() (if hebbian_inheritance is enabled).
     std::shared_ptr<Genome> learned_genome_;
+    bool learned_genome_dirty_ = false;
     /// Genes rejected during wire() due to neuron-index overflow; preserved so mutations can reactivate them.
     std::vector<Gene> silent_genes_;
+    /// Genes rejected during wire() due to type/sink/feedforward constraints; preserved across learned-genome rebuild.
+    std::vector<Gene> discarded_genes_;
     unsigned size_s_;
     unsigned size_n_;
     unsigned size_y_;
