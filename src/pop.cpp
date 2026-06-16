@@ -114,47 +114,58 @@ float Pop::calculate_reward() const {
     logger_->debug("Calculating reward for Pop at position (" + std::to_string(pos_.x) + ", " + std::to_string(pos_.y) +
                    ") with age " + std::to_string(age_) + ", energy " + std::to_string(energy_) +
                    ", and offspring count " + std::to_string(offspring_count_) + ".");
-    // age_score: rewards longevity, encouraging the Pop to survive longer.
-    const float age_score = std::clamp(static_cast<float>(age_) / MaxAge, 0.0f, 1.0f);
+    // Long-term survival signal in [0,1]: rewards living longer without saturating too early.
+    const float age_signal = std::clamp(static_cast<float>(age_) / MaxAge, 0.0f, 1.0f);
 
-    //  energy_score: rewards efficient energy management, encouraging the Pop to maintain higher energy levels.
+    // Energy baseline signal in [-1,1]:
+    // values below ~25% energy become negative, above become progressively positive.
     const float energy_score = std::clamp(energy_ / MaxEnergy, 0.0f, 1.0f);
+    const float energy_signal = std::clamp((energy_score - 0.25f) / 0.75f, -1.0f, 1.0f);
 
-    // Normalise energy delta against the theoretical max per tick to avoid constant saturation.
-    const float max_energy_delta = std::max(
-        static_cast<float>(config_->get_phy_init_mitochondrions_max() * config_->get_phy_energy_per_respiration()),
-        1e-6f);
+    // Short-term trend signal in [-1,1]: compares this tick energy delta to the pop's own
+    // theoretical per-tick respiration capacity (based on its current mitochondria count).
+    const float per_respiration = static_cast<float>(config_->get_phy_energy_per_respiration());
+    const float max_energy_delta =
+        std::max(static_cast<float>(std::max(phy_.mitochondrions, 1u)) * per_respiration, 1e-6f);
     const float energy_delta = energy_ - previous_energy_;
-    const float energy_delta_ratio = std::clamp(energy_delta / max_energy_delta, -1.0f, 1.0f);
-    const float energy_delta_score = energy_delta_ratio * 0.5f + 0.5f;
+    const float delta_signal = std::clamp(energy_delta / max_energy_delta, -1.0f, 1.0f);
 
+    // Thermal homeostasis signal in [-1,1]: positive near optimal body temperature,
+    // negative when far from it.
     const float opt_temp = static_cast<float>(config_->get_phy_opt_temperature());
     const float temp_distance = std::abs(static_cast<float>(temperature_) - opt_temp);
     const float temp_score = std::clamp(1.0f - (temp_distance / 32.5f), 0.0f, 1.0f);
+    const float temp_signal = 2.0f * temp_score - 1.0f;
 
-    //  offspring_score: rewards reproductive success, encouraging the Pop to produce more offspring.
-    const float offspring_score = std::clamp(static_cast<float>(offspring_count_) / 1000.0f, 0.0f, 1.0f);
+    // Reproduction bonus in [0,1]: kept as a bounded bonus so reward is not dominated by offspring count.
+    const float offspring_bonus = std::clamp(static_cast<float>(offspring_count_) / 25.0f, 0.0f, 1.0f);
 
-    const float base_reward_raw = AgeRewardWeight * age_score + EnergyRewardWeight * energy_score +
-                                  EnergyDeltaRewardWeight * energy_delta_score +
-                                  OffspringRewardWeight * offspring_score;
-    const float reward_raw = std::clamp(base_reward_raw * 0.8f + temp_score * 0.2f, 0.0f, 1.0f);
+    // Weight policy:
+    // - keep at least a minimal survival/energy pressure,
+    // - cap offspring dominance,
+    // - assign remaining mass to temperature management.
+    const float w_age = std::max(AgeRewardWeight, 0.10f);
+    const float w_energy = std::max(EnergyRewardWeight, 0.30f);
+    const float w_delta = EnergyDeltaRewardWeight;
+    const float w_offspring = std::min(OffspringRewardWeight, 0.05f);
+    const float w_temp = std::clamp(1.0f - (w_age + w_energy + w_delta + w_offspring), 0.0f, 1.0f);
+
+    // Final reward is a weighted sum of interpretable signals and stays in [-1,1].
+    const float reward_raw = w_age * age_signal + w_energy * energy_signal + w_delta * delta_signal +
+                             w_offspring * offspring_bonus + w_temp * temp_signal;
 
     if (!std::isfinite(reward_raw)) {
         logger_->warning("Non-finite reward_raw detected for Pop " + pop_id_ + ". Forcing reward to -1.");
         return -1.0f;
     }
 
-    if (age_ % 1000 == 0 && std::abs(energy_delta_ratio) > 0.98f) {
+    if (age_ % 1000 == 0 && std::abs(delta_signal) > 0.98f) {
         logger_->warning("Reward delta component near saturation for Pop " + pop_id_ +
                          " (delta=" + std::to_string(energy_delta) + ", max_delta=" + std::to_string(max_energy_delta) +
-                         ", ratio=" + std::to_string(energy_delta_ratio) + ").");
+                         ", ratio=" + std::to_string(delta_signal) + ").");
     }
 
-    // Trasforma [0,1] -> [-1,+1]
-    float reward = reward_raw * 2.0f - 1.0f;
-    reward = std::clamp(reward, -1.0f, 1.0f);
-    return reward;
+    return std::clamp(reward_raw, -1.0f, 1.0f);
 }
 
 void Pop::learn(float reward) {
