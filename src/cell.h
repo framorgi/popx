@@ -25,9 +25,6 @@ class Cell : public ICell {
 
     [[nodiscard]] double get_elevation() const override;
 
-    void set_humidity(double humidity) override;
-    [[nodiscard]] double get_humidity() const override;
-
     [[nodiscard]] std::weak_ptr<IEntity> get_occupant() const override;
 
     [[nodiscard]] RenderState get_render_state() const override;
@@ -39,6 +36,8 @@ class Cell : public ICell {
     void set_glucose(unsigned int glucose) override;
 
     [[nodiscard]] unsigned int get_glucose() const override;
+
+    void set_water(unsigned int water) override;
     [[nodiscard]] unsigned int get_water() const override;
     [[nodiscard]] unsigned int get_calcium() const override;
     [[nodiscard]] unsigned int get_carbon() const override;
@@ -71,6 +70,11 @@ class Cell : public ICell {
     void regen_glucose();
 
     ///----------------------------------------------
+    // Helper method to regenerate oxygen over time
+    ///----------------------------------------------
+    void regen_o2();
+
+    ///----------------------------------------------
     // Occupant entity in the cell
     ///----------------------------------------------
     std::weak_ptr<IEntity>
@@ -84,9 +88,7 @@ class Cell : public ICell {
     ///----------------------------------------------
     float temperature_;
     ///----------------------------------------------
-    /// Humidity percentage (0-100)
-    ///----------------------------------------------
-    float humidity_;
+
     ///----------------------------------------------
     /// Elevation in meters
     ///----------------------------------------------
@@ -114,4 +116,9 @@ class Cell : public ICell {
     /// Tick counter for glucose regeneration timing
     ///----------------------------------------------
     unsigned regen_tick_;
+
+    ///----------------------------------------------
+    /// Tick counter for oxygen regeneration timing
+    ///----------------------------------------------
+    unsigned regen_o2_tick_;
 };

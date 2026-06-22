@@ -7,7 +7,7 @@
 #include <algorithm>
 
 Cell::Cell(std::weak_ptr<IEntity> occupant)
-    : occupant_(std::move(occupant)), temperature_(20.0f), humidity_(50.0f), elevation_(0.0f), regen_tick_(0)
+    : occupant_(std::move(occupant)), temperature_(20.0f), elevation_(0.0f), regen_tick_(0), regen_o2_tick_(0)
 
 {
     // Initialize organics with random values
@@ -15,8 +15,8 @@ Cell::Cell(std::weak_ptr<IEntity> occupant)
     organics_ = OrganicsT{
         static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(MaxC6h12o6))),
         static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(MaxLipids))),
-        0,
-        0,
+        static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(MaxO2))),
+        static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(MaxCo2))),
         static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(MaxH2o))),
         0,
         static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(MaxCaco3))),
@@ -29,6 +29,7 @@ Cell::Cell(std::weak_ptr<IEntity> occupant)
 
     // Randomize regen phase so cells do not all regenerate glucose at the same tick.
     regen_tick_ = static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(GlucoseRegenInterval) - 1));
+    regen_o2_tick_ = static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(O2RegenInterval) - 1));
 }
 
 void Cell::set_occupant(std::weak_ptr<IEntity> occupant) {
@@ -58,11 +59,8 @@ void Cell::set_elevation(double elevation) {
     return static_cast<double>(elevation_);
 }
 
-void Cell::set_humidity(double humidity) {
-    humidity_ = static_cast<float>(humidity);
-}
-[[nodiscard]] double Cell::get_humidity() const {
-    return static_cast<double>(humidity_);
+void Cell::set_water(unsigned int water) {
+    organics_.h2o = std::min(water, MaxH2o);
 }
 
 void Cell::set_feromone(FeromoneT type, float value) {
@@ -171,15 +169,16 @@ RenderState Cell::get_render_state() const {
     state.position = Vec2{0, 0};
     state.color = Color{0, 0, 0}; //  Black
     state.size = 5;               //  size
-    state.payload = CellVisualData{temperature_,
-                                   elevation_,
-                                   humidity_,
-                                   organics_.h2o > WaterThreshold, // water presence based on threshold
-                                   static_cast<double>(organics_.c6h12o6) / MaxC6h12o6,
-                                   static_cast<double>(feromones_.at(FeromoneT::DANGER_FEROMONE)) / MaxFeromones,
-                                   static_cast<double>(feromones_.at(FeromoneT::FOOD_FEROMONE)) / MaxFeromones,
-                                   static_cast<double>(feromones_.at(FeromoneT::MATE_FEROMONE)) / MaxFeromones,
-                                   static_cast<double>(feromones_.at(FeromoneT::HOME_FEROMONE)) / MaxFeromones};
+    state.payload =
+        CellVisualData{temperature_,
+                       elevation_,
+
+                       static_cast<double>(organics_.h2o) / WaterThreshold, // water presence based on threshold
+                       static_cast<double>(organics_.c6h12o6) / MaxC6h12o6,
+                       static_cast<double>(feromones_.at(FeromoneT::DANGER_FEROMONE)) / MaxFeromones,
+                       static_cast<double>(feromones_.at(FeromoneT::FOOD_FEROMONE)) / MaxFeromones,
+                       static_cast<double>(feromones_.at(FeromoneT::MATE_FEROMONE)) / MaxFeromones,
+                       static_cast<double>(feromones_.at(FeromoneT::HOME_FEROMONE)) / MaxFeromones};
     state.shape = RenderShape::Circle; //  shape
 
     return state;
@@ -201,7 +200,15 @@ void Cell::regen_glucose() {
     }
 }
 
+void Cell::regen_o2() {
+    if (++regen_o2_tick_ >= O2RegenInterval) {
+        regen_o2_tick_ = 0;
+        organics_.o2 = std::min(organics_.o2 + O2RegenAmount, MaxO2);
+    }
+}
+
 void Cell::update() {
     decay_feromones();
     regen_glucose();
+    regen_o2();
 }

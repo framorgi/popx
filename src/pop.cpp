@@ -46,7 +46,9 @@ Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shar
     init();
 }
 Pop::~Pop() {
-    brain_->remove_serialization(pop_id_);
+    if (config_->get_brain_serialization_enabled()) {
+        brain_->remove_serialization(pop_id_);
+    }
 }
 
 void Pop::init() {
@@ -78,7 +80,7 @@ void Pop::init() {
     }
     sensor_values_.assign(brain_->get_size_s(), 0.0f);
     brain_->wire(genome_);
-    brain_->serialize(pop_id_, 0);
+    serialize_brain(0);
 }
 
 void Pop::die() {
@@ -96,7 +98,7 @@ void Pop::die() {
     }
     alive_ = false;
     // remove serialized brain file for this pop
-    if (!brain_->remove_serialization(pop_id_)) {
+    if (config_->get_brain_serialization_enabled() && !brain_->remove_serialization(pop_id_)) {
         logger_->error("Failed to remove serialized brain file for Pop with ID: " + pop_id_);
     }
 }
@@ -210,8 +212,6 @@ void Pop::despawn() {
 // be sure return sensor values in range [0,1]
 void Pop::sense() {
     current_state_ = State::SENSE;
-    // reset energy cost for this cycle
-    energy_cost_ = 0;
 
     // lock the world weak pointer to access the world safely
     auto world = world_.lock();
@@ -422,6 +422,9 @@ void Pop::think() {
 }
 
 void Pop::serialize_brain(unsigned generation) const {
+    if (!config_->get_brain_serialization_enabled()) {
+        return;
+    }
     brain_->serialize(pop_id_, generation);
 }
 
@@ -505,7 +508,7 @@ void Pop::act() {
         // ── resource acquisition ────────────────────────────────────────────
         case Action::GET_GLUCOSE:
             if (world) {
-                glucose_ += world->get_cell(pos_)->take_glucose(2);
+                glucose_ += world->get_cell(pos_)->take_glucose(20);
             }
             break;
         case Action::GET_H2O:
@@ -605,7 +608,7 @@ RenderState Pop::get_render_state() const {
 }
 
 bool Pop::wants_to_reproduce() const {
-    return alive_ && energy_ > 30.0f && age_ > 50 && glucose_ > 10;
+    return alive_ && energy_ > 50.0f && age_ > 1000 && glucose_ > 20;
 }
 
 Genome Pop::make_offspring_genome() const {
@@ -687,12 +690,12 @@ void Pop::update_physiology() {
         return;
 
     // Auto-take resources from current cell
-    glucose_ += world->get_cell(pos_)->take_glucose(2);
-    water_ += world->get_cell(pos_)->take_water(2);
-    calcium_ += world->get_cell(pos_)->take_calcium(1);
-    co2_ += world->get_cell(pos_)->take_co2(1);
+    glucose_ += world->get_cell(pos_)->take_glucose(5);
+    water_ += world->get_cell(pos_)->take_water(5);
+    calcium_ += world->get_cell(pos_)->take_calcium(2);
+    co2_ += world->get_cell(pos_)->take_co2(5);
     lipids_ += world->get_cell(pos_)->take_lipids(1);
-    o2_ += world->get_cell(pos_)->take_o2(2);
+    o2_ += world->get_cell(pos_)->take_o2(5);
 
     // Biological reactions
     run_chloroplasts();
@@ -704,6 +707,12 @@ void Pop::update_physiology() {
     energy_ -= basal_metabolism_cost;
     total_metabolism_energy_loss_ += basal_metabolism_cost;
     energy_ -= energy_cost_; // Additional cost from actions
+                             // reset energy cost for this cycle
+    energy_cost_ = 0;
+    // cap energy to MaxEnergy
+    if (energy_ > MaxEnergy) {
+        energy_ = MaxEnergy;
+    }
 }
 
 void Pop::run_chloroplasts() {
@@ -735,9 +744,9 @@ void Pop::run_chloroplasts() {
 void Pop::run_mitochondrions() {
     unsigned co2_produced = 0;
     const float opt_temp = static_cast<float>(config_->get_phy_opt_temperature());
-    const float efficiency = std::clamp(1.0f - std::abs(static_cast<float>(temperature_) - opt_temp) *
-                                                   static_cast<float>(config_->get_phy_energy_per_respiration()),
-                                        0.0f, 1.0f);
+    constexpr float kEfficiencyHalfRangeC = 10.0f;
+    const float temp_delta = std::abs(static_cast<float>(temperature_) - opt_temp);
+    const float efficiency = std::clamp(1.0f - (temp_delta / kEfficiencyHalfRangeC), 0.0f, 1.0f);
     for (unsigned i = 0; i < phy_.mitochondrions; ++i) {
         if (glucose_ == 0 || o2_ == 0)
             break;

@@ -3,6 +3,7 @@
 #include "i_agent.h"
 #include "pop_snapshot.h"
 
+#include <cstdint>
 #include <vector>
 
 class IAgentsManager {
@@ -41,6 +42,18 @@ class IAgentsManager {
 
     /// @brief Current generation index, incremented whenever NewGen is applied.
     [[nodiscard]] virtual unsigned get_generation_count() const = 0;
+
+    /// @brief Number of reproduction attempts processed during the last tick.
+    [[nodiscard]] virtual uint64_t get_repro_processed_this_tick() const = 0;
+
+    /// @brief Current backlog size for pending reproducers.
+    [[nodiscard]] virtual uint64_t get_repro_backlog_size() const = 0;
+
+    /// @brief Peak backlog size observed since start/restart.
+    [[nodiscard]] virtual uint64_t get_repro_backlog_peak() const = 0;
+
+    /// @brief Total candidates dropped because repro backlog was full.
+    [[nodiscard]] virtual uint64_t get_repro_dropped_total() const = 0;
 
     /// @brief Clear internal state so simulation can restart from zero.
     virtual void reset_population_state() = 0;

@@ -28,6 +28,7 @@ struct ConfigParams {
     bool sexual_reproduction = true;
     bool choose_parents_by_fitness = true;
     bool hebbian_inheritance = false;
+    bool brain_serialization_enabled = false;
 
     // Directories
     std::string nnets_dir = "../data_out/nnets/";
@@ -58,6 +59,11 @@ struct ConfigParams {
     unsigned newgen_interval_ticks = 5000;
     double newgen_survival_ratio = 0.35;
     unsigned newgen_min_survivors = 8;
+
+    // Reproduction throttling
+    unsigned max_reproducers_per_tick = 3;
+    unsigned max_repro_backlog = 64;
+    unsigned forced_repro_priority_per_tick = 1;
 };
 
 /// @brief Concrete implementation of IConfig backed by a key=value INI file.
@@ -84,6 +90,7 @@ class Config : public IConfig {
     bool get_sexual_reproduction() const override;
     bool get_choose_parents_by_fitness() const override;
     bool get_hebbian_inheritance() const override;
+    bool get_brain_serialization_enabled() const override;
     const std::string& get_log_dir() const override;
     const std::string& get_image_dir() const override;
 
@@ -106,6 +113,10 @@ class Config : public IConfig {
     unsigned get_newgen_interval_ticks() const override;
     double get_newgen_survival_ratio() const override;
     unsigned get_newgen_min_survivors() const override;
+
+    unsigned get_max_reproducers_per_tick() const override;
+    unsigned get_max_repro_backlog() const override;
+    unsigned get_forced_repro_priority_per_tick() const override;
 
     void update_from_file(unsigned generation) override;
 

@@ -27,6 +27,11 @@ void GridWorld::init() {
     /// Generate a random RBF set for glucose distribution
     RBFSet glucose_rbf_set = random_util.rnd_rbf_set(35, MaxC6h12o6 / 8, MaxC6h12o6, 0, static_cast<double>(width_),
                                                      0.0, static_cast<double>(height_), 5.0, 20.0, 5.0, 10.0);
+
+    /// Generate a random RBF set for water distribution
+    RBFSet water_rbf_set = random_util.rnd_rbf_set(35, MaxH2o / 8, MaxH2o, 0, static_cast<double>(width_), 0.0,
+                                                   static_cast<double>(height_), 5.0, 20.0, 5.0, 10.0);
+    ///
     ///
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {
@@ -41,6 +46,10 @@ void GridWorld::init() {
             auto glucose_value = static_cast<unsigned>(
                 random_util.evaluate_rbf_set(glucose_rbf_set, static_cast<double>(x), static_cast<double>(y)));
             cells_[index(x, y)]->set_glucose((glucose_value));
+
+            auto water_value = static_cast<unsigned>(
+                random_util.evaluate_rbf_set(water_rbf_set, static_cast<double>(x), static_cast<double>(y)));
+            cells_[index(x, y)]->set_water((water_value));
         }
     }
     logger_->info("Grid world initialized.");

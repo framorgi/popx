@@ -111,27 +111,8 @@ void PopsManager::update_cycle() {
 
     forced_respawn_active_ = pops_.size() < MinPopulationAllowed;
 
-    // Reproduction phase: snapshot parents ready to reproduce, then spawn offspring
-    std::vector<std::shared_ptr<Pop>> reproducers;
-    for (auto& pop : pops_) {
-        if (pop->wants_to_reproduce()) {
-            reproducers.push_back(pop);
-        } else {
-            if (pops_.size() < MinPopulationAllowed && reproducers.size() < (MinPopulationAllowed - pops_.size()))
-
-            {
-                logger_->warning("Population is critically low (" + std::to_string(pops_.size()) +
-                                 " agents). Forcing reproduction of agent at position (" +
-                                 std::to_string(pop->get_position().x) + ", " + std::to_string(pop->get_position().y) +
-                                 ").");
-                reproducers.push_back(pop);
-            }
-        }
-    }
-    for (auto& parent : reproducers) {
-        if (pops_.size() < MaxPopulationAllowed)
-            try_reproduce(parent);
-    }
+    collect_reproducer_candidates();
+    process_reproduction_backlog();
 
     rotate_buckets();
 
@@ -141,6 +122,95 @@ void PopsManager::update_cycle() {
             trigger_new_generation();
         }
     }
+}
+
+void PopsManager::collect_reproducer_candidates() {
+    std::size_t forced_slots = 0;
+    if (forced_respawn_active_) {
+        forced_slots = static_cast<std::size_t>(MinPopulationAllowed - pops_.size());
+    }
+
+    uint64_t dropped_this_tick = 0;
+    for (auto& pop : pops_) {
+        if (!pop || !pop->is_alive()) {
+            continue;
+        }
+
+        const bool wants = pop->wants_to_reproduce();
+        const bool forced = !wants && forced_slots > 0;
+        if (!wants && !forced) {
+            continue;
+        }
+
+        const uint64_t dropped_before = repro_dropped_total_;
+        if (enqueue_reproducer_candidate(pop) && forced) {
+            --forced_slots;
+        } else if (repro_dropped_total_ != dropped_before) {
+            ++dropped_this_tick;
+        }
+    }
+
+    if (dropped_this_tick > 0) {
+        logger_->warning("Reproduction backlog full (" + std::to_string(config_->get_max_repro_backlog()) +
+                         "), dropped " + std::to_string(dropped_this_tick) + " candidates this tick.");
+    }
+}
+
+void PopsManager::process_reproduction_backlog() {
+    repro_processed_this_tick_ = 0;
+
+    unsigned budget = config_->get_max_reproducers_per_tick();
+    if (forced_respawn_active_) {
+        budget += config_->get_forced_repro_priority_per_tick();
+    }
+    budget = std::max(1u, budget);
+
+    unsigned inspected = 0;
+    while (!repro_backlog_.empty() && inspected < budget && pops_.size() < MaxPopulationAllowed) {
+        ReproBacklogEntry entry = repro_backlog_.front();
+        repro_backlog_.pop_front();
+        repro_backlog_ids_.erase(entry.pop_id);
+        ++inspected;
+
+        auto parent = entry.pop.lock();
+        if (!parent || !parent->is_alive()) {
+            continue;
+        }
+        if (!parent->wants_to_reproduce() && !forced_respawn_active_) {
+            continue;
+        }
+
+        try_reproduce(parent);
+        ++repro_processed_this_tick_;
+    }
+}
+
+bool PopsManager::enqueue_reproducer_candidate(const std::shared_ptr<Pop>& pop) {
+    if (!pop || !pop->is_alive()) {
+        return false;
+    }
+
+    const std::string& pop_id = pop->get_pop_id();
+    if (repro_backlog_ids_.find(pop_id) != repro_backlog_ids_.end()) {
+        return false;
+    }
+
+    const std::size_t max_backlog = static_cast<std::size_t>(std::max(1u, config_->get_max_repro_backlog()));
+    if (repro_backlog_.size() >= max_backlog) {
+        ++repro_dropped_total_;
+        return false;
+    }
+
+    repro_backlog_.push_back(ReproBacklogEntry{pop, pop_id});
+    repro_backlog_ids_.insert(pop_id);
+    repro_backlog_peak_ = std::max<uint64_t>(repro_backlog_peak_, repro_backlog_.size());
+    return true;
+}
+
+void PopsManager::clear_reproduction_backlog() {
+    repro_backlog_.clear();
+    repro_backlog_ids_.clear();
+    repro_processed_this_tick_ = 0;
 }
 
 void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
@@ -178,13 +248,13 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
             else
                 act_bucket_.push_back(child);
 
-            logger_->info("Incrementing offspring count for parent at (" + std::to_string(pp.x) + "," +
-                          std::to_string(pp.y) + ").");
+            logger_->debug("Incrementing offspring count for parent at (" + std::to_string(pp.x) + "," +
+                           std::to_string(pp.y) + ").");
             parent->increment_offspring_count();
             ++total_births_;
 
-            logger_->info("Offspring spawned at (" + std::to_string(candidate.x) + "," + std::to_string(candidate.y) +
-                          ") from parent at (" + std::to_string(pp.x) + "," + std::to_string(pp.y) + ").");
+            logger_->debug("Offspring spawned at (" + std::to_string(candidate.x) + "," + std::to_string(candidate.y) +
+                           ") from parent at (" + std::to_string(pp.x) + "," + std::to_string(pp.y) + ").");
             return;
         }
     }
@@ -261,6 +331,7 @@ void PopsManager::trigger_new_generation() {
     sense_bucket_.clear();
     think_bucket_.clear();
     act_bucket_.clear();
+    clear_reproduction_backlog();
 
     RandomUtility random_util;
     for (auto& pop : survivors) {
@@ -279,9 +350,11 @@ void PopsManager::trigger_new_generation() {
     }
 
     ++generation_count_;
-    for (const auto& pop : pops_) {
-        if (pop) {
-            pop->serialize_brain(generation_count_);
+    if (config_->get_brain_serialization_enabled()) {
+        for (const auto& pop : pops_) {
+            if (pop) {
+                pop->serialize_brain(generation_count_);
+            }
         }
     }
 
@@ -299,12 +372,15 @@ void PopsManager::reset_population_state() {
     sense_bucket_.clear();
     think_bucket_.clear();
     act_bucket_.clear();
+    clear_reproduction_backlog();
     dead_count_ = 0;
     total_births_ = 0;
     total_deaths_ = 0;
     forced_respawn_active_ = false;
     generation_count_ = 0;
     cycle_counter_ = 0;
+    repro_dropped_total_ = 0;
+    repro_backlog_peak_ = 0;
 }
 
 std::vector<PopSnapshot> PopsManager::get_pops_snapshot() const {

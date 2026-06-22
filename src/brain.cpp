@@ -178,6 +178,9 @@ void Brain::resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned n
 }
 
 bool Brain::remove_serialization(const std::string& pop_id) {
+    if (!config_->get_brain_serialization_enabled()) {
+        return true;
+    }
     const std::string dir = config_->get_nnets_dir();
     if (!std::filesystem::exists(dir))
         return false;
@@ -192,6 +195,9 @@ bool Brain::remove_serialization(const std::string& pop_id) {
 }
 
 void Brain::serialize(const std::string& pop_id, unsigned generation) const {
+    if (!config_->get_brain_serialization_enabled()) {
+        return;
+    }
     using json = nlohmann::json;
 
     const auto timestamp_ms =

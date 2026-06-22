@@ -6,7 +6,10 @@
 #include "pop.h"
 #include "random_utility.h"
 
+#include <deque>
 #include <memory>
+#include <string>
+#include <unordered_set>
 #include <vector>
 class PopsManager : public IAgentsManager {
   public:
@@ -36,6 +39,18 @@ class PopsManager : public IAgentsManager {
     [[nodiscard]] unsigned get_generation_count() const override {
         return generation_count_;
     }
+    [[nodiscard]] uint64_t get_repro_processed_this_tick() const override {
+        return repro_processed_this_tick_;
+    }
+    [[nodiscard]] uint64_t get_repro_backlog_size() const override {
+        return repro_backlog_.size();
+    }
+    [[nodiscard]] uint64_t get_repro_backlog_peak() const override {
+        return repro_backlog_peak_;
+    }
+    [[nodiscard]] uint64_t get_repro_dropped_total() const override {
+        return repro_dropped_total_;
+    }
     [[nodiscard]] std::vector<PopSnapshot> get_pops_snapshot() const override;
 
     void trigger_new_generation() override;
@@ -52,6 +67,17 @@ class PopsManager : public IAgentsManager {
     bool forced_respawn_active_ = false;
     unsigned generation_count_ = 0;
     uint64_t cycle_counter_ = 0;
+    uint64_t repro_processed_this_tick_ = 0;
+    uint64_t repro_dropped_total_ = 0;
+    uint64_t repro_backlog_peak_ = 0;
+
+    struct ReproBacklogEntry {
+        std::weak_ptr<Pop> pop;
+        std::string pop_id;
+    };
+
+    std::deque<ReproBacklogEntry> repro_backlog_;
+    std::unordered_set<std::string> repro_backlog_ids_;
     ///--------------------------------------------------------------------------
     /// Buckets for managing agent states (sense, think, act)
     ///--------------------------------------------------------------------------
@@ -66,6 +92,10 @@ class PopsManager : public IAgentsManager {
     /// @brief Attempts to spawn an offspring of parent into an adjacent free cell.
     ///--------------------------------------------------------------------------
     void try_reproduce(std::shared_ptr<Pop>& parent);
+    void collect_reproducer_candidates();
+    void process_reproduction_backlog();
+    bool enqueue_reproducer_candidate(const std::shared_ptr<Pop>& pop);
+    void clear_reproduction_backlog();
 
     [[nodiscard]] double score_pop_for_newgen(const std::shared_ptr<Pop>& pop) const;
     bool try_spawn_random_position(const std::shared_ptr<Pop>& pop, RandomUtility& random_util);
