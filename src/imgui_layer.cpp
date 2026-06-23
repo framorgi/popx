@@ -148,10 +148,16 @@ const char* action_name(unsigned idx) {
             return "EMIT_SIGNAL_HOME";
         case Action::GET_GLUCOSE:
             return "GET_GLUCOSE";
+        case Action::LEAVE_GLUCOSE:
+            return "LEAVE_GLUCOSE";
         case Action::GET_H2O:
             return "GET_H2O";
+        case Action::LEAVE_H2O:
+            return "LEAVE_H2O";
         case Action::GET_CALCIUM:
             return "GET_CALCIUM";
+        case Action::LEAVE_CALCIUM:
+            return "LEAVE_CALCIUM";
         case Action::BURN_CALORIES:
             return "BURN_CALORIES";
         case Action::SET_OSCILLATOR_PERIOD:
@@ -353,13 +359,6 @@ void ImGuiLayer::build_stats_overlay() {
         ImGui::Text("Tick:   %llu", static_cast<unsigned long long>(r.tick));
         ImGui::Text("FPS:    %.1f", r.fps);
         ImGui::Separator();
-        ImGui::Text("Glucose:  %u", r.world_organics.c6h12o6);
-        ImGui::Text("O2:       %u", r.world_organics.o2);
-        ImGui::Text("CO2:      %u", r.world_organics.co2);
-        ImGui::Text("H2O:      %u", r.world_organics.h2o);
-        ImGui::Text("Lipids:   %u", r.world_organics.lipids);
-        ImGui::Text("N2:       %u", r.world_organics.n2);
-        ImGui::Text("CaCO3:    %u", r.world_organics.caco3);
         ImGui::Separator();
         ImGui::Text("Tick dur: %s", fmt_us(r.tick_duration_us).c_str());
         ImGui::Text("Frame dur:%s", fmt_us(r.frame_duration_us).c_str());
