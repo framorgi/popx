@@ -508,17 +508,33 @@ void Pop::act() {
         // ── resource acquisition ────────────────────────────────────────────
         case Action::GET_GLUCOSE:
             if (world) {
-                glucose_ += world->get_cell(pos_)->take_glucose(20);
+                glucose_ += world->get_cell(pos_)->take_glucose(10);
+            }
+            break;
+        case Action::LEAVE_GLUCOSE:
+            if (world) {
+                world->get_cell(pos_)->give_glucose(10);
             }
             break;
         case Action::GET_H2O:
             if (world) {
-                water_ += world->get_cell(pos_)->take_water(2);
+                water_ += world->get_cell(pos_)->take_water(10);
+            }
+            break;
+
+        case Action::LEAVE_H2O:
+            if (world) {
+                world->get_cell(pos_)->give_water(10);
             }
             break;
         case Action::GET_CALCIUM:
             if (world) {
-                calcium_ += world->get_cell(pos_)->take_calcium(2);
+                calcium_ += world->get_cell(pos_)->take_calcium(10);
+            }
+            break;
+        case Action::LEAVE_CALCIUM:
+            if (world) {
+                world->get_cell(pos_)->give_calcium(10);
             }
             break;
         case Action::BURN_CALORIES:

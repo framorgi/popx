@@ -62,11 +62,12 @@ bool GridWorld::is_free(PositionT p) const {
     }
 
     auto weak_occupant = cells_[index(p.x, p.y)]->get_occupant();
+    auto carbonate_barrier = cells_[index(p.x, p.y)]->get_organics().caco3;
     auto locked = weak_occupant.lock();
 
     // Debug: check use_count and owner_before
 
-    bool is_free = (locked == nullptr);
+    bool is_free = (locked == nullptr) && (carbonate_barrier != MaxCaco3);
 
     return is_free;
 }
