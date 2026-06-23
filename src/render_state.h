@@ -15,8 +15,8 @@ struct PopVisualData {
 struct CellVisualData {
     double temperature;
     double elevation;
-    double humidity;
-    bool water;
+
+    double water;
     double glucose;
     double feromones_a;
     double feromones_b;

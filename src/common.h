@@ -7,7 +7,7 @@ constexpr int MapSize = 120; // Number of cells along one side of the square map
 constexpr unsigned MaxAge = 200000;
 constexpr float MaxEnergy = 400.0f;
 constexpr unsigned MinPopulationAllowed = 20;
-constexpr unsigned MaxPopulationAllowed = 100;
+constexpr unsigned MaxPopulationAllowed = 120;
 // learning contribution weights
 constexpr float AgeRewardWeight = 0.05f;
 constexpr float EnergyRewardWeight = 0;
@@ -23,8 +23,10 @@ using PositionT = struct {
 constexpr unsigned WaterThreshold = 100;
 constexpr unsigned MaxH2o = 1000;
 constexpr unsigned MaxC6h12o6 = 500;
-constexpr unsigned GlucoseRegenInterval = 2000; // ticks between each glucose increment
+constexpr unsigned GlucoseRegenInterval = 1000; // ticks between each glucose increment
 constexpr unsigned GlucoseRegenAmount = 1;      // units of glucose added per interval
+constexpr unsigned O2RegenInterval = 1000;      // ticks between each oxygen increment
+constexpr unsigned O2RegenAmount = 1;           // units of oxygen added per interval
 constexpr unsigned MaxLipids = 300;
 constexpr unsigned MaxO2 = 1000;
 constexpr unsigned MaxCo2 = 1000;
@@ -45,7 +47,7 @@ using OrganicsT = struct {
 using FeromoneT = enum { FOOD_FEROMONE, DANGER_FEROMONE, MATE_FEROMONE, HOME_FEROMONE };
 using FeromoneMapT = std::map<FeromoneT, float>;
 
-constexpr float FeromoneDecayRate = 0.99f; // Decay rate per update
+constexpr float FeromoneDecayRate = 0.9995f; // Decay rate per update
 
 enum class Direction { N, NE, E, SE, S, SW, W, NW };
 

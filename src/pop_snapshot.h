@@ -36,4 +36,9 @@ struct PopSnapshot {
     Color genetic_color = {128, 128, 128, 255};
     int offspring = 0;
     bool is_photosynthetic = false;
+    float total_movement_energy_loss = 0.0f;
+    float total_metabolism_energy_loss = 0.0f;
+    float total_reproduction_energy_loss = 0.0f;
+    float total_respiration_energy_gain = 0.0f;
+    float total_thermoregolation_energy_loss = 0.0f;
 };

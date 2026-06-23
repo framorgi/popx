@@ -99,6 +99,9 @@ bool Config::get_choose_parents_by_fitness() const {
 bool Config::get_hebbian_inheritance() const {
     return params_.hebbian_inheritance;
 }
+bool Config::get_brain_serialization_enabled() const {
+    return params_.brain_serialization_enabled;
+}
 const std::string& Config::get_log_dir() const {
     return params_.log_dir;
 }
@@ -142,6 +145,9 @@ double Config::get_phy_max_lipids_ref() const {
 double Config::get_phy_init_temperature() const {
     return params_.phy_init_temperature;
 }
+double Config::get_phy_opt_temperature() const {
+    return params_.phy_opt_temperature;
+}
 double Config::get_phy_photo_min_elevation() const {
     return params_.phy_photo_min_elevation;
 }
@@ -160,6 +166,18 @@ double Config::get_newgen_survival_ratio() const {
 
 unsigned Config::get_newgen_min_survivors() const {
     return params_.newgen_min_survivors;
+}
+
+unsigned Config::get_max_reproducers_per_tick() const {
+    return params_.max_reproducers_per_tick;
+}
+
+unsigned Config::get_max_repro_backlog() const {
+    return params_.max_repro_backlog;
+}
+
+unsigned Config::get_forced_repro_priority_per_tick() const {
+    return params_.forced_repro_priority_per_tick;
 }
 
 // ---------------------------------------------------------------------------
@@ -295,6 +313,10 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
         params_.hebbian_inheritance = to_bool(value);
         return;
     }
+    if (name == "brain_serialization_enabled" && is_b) {
+        params_.brain_serialization_enabled = to_bool(value);
+        return;
+    }
 
     // Directories (resolve relative paths against the INI file location)
     if (name == "nnets_dir") {
@@ -364,6 +386,10 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
         params_.phy_init_temperature = dval;
         return;
     }
+    if (name == "phy_opt_temperature" && is_d) {
+        params_.phy_opt_temperature = dval;
+        return;
+    }
     if (name == "phy_photo_min_elevation" && is_d && dval >= 0.0) {
         params_.phy_photo_min_elevation = dval;
         return;
@@ -384,6 +410,20 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
     }
     if (name == "newgen_min_survivors" && is_u && uval > 0) {
         params_.newgen_min_survivors = uval;
+        return;
+    }
+
+    // Reproduction throttling
+    if (name == "max_reproducers_per_tick" && is_u) {
+        params_.max_reproducers_per_tick = std::clamp(uval, 1u, 32u);
+        return;
+    }
+    if (name == "max_repro_backlog" && is_u) {
+        params_.max_repro_backlog = std::clamp(uval, 8u, 2048u);
+        return;
+    }
+    if (name == "forced_repro_priority_per_tick" && is_u) {
+        params_.forced_repro_priority_per_tick = std::clamp(uval, 0u, 32u);
         return;
     }
 

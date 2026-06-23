@@ -56,7 +56,7 @@ int main(int /*argc*/, char* argv[]) {
     app.set_gui(app_gui);
 
     // Clean nnets output directory at startup
-    {
+    if (app_config->get_brain_serialization_enabled()) {
         const std::string& nd = app_config->get_nnets_dir();
         if (std::filesystem::exists(nd)) {
             for (const auto& entry : std::filesystem::directory_iterator(nd)) {

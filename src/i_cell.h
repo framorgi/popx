@@ -24,9 +24,6 @@ class ICell {
     virtual void set_elevation(double elevation) = 0;
     [[nodiscard]] virtual double get_elevation() const = 0;
 
-    virtual void set_humidity(double humidity) = 0;
-    [[nodiscard]] virtual double get_humidity() const = 0;
-
     virtual void set_glucose(unsigned glucose) = 0;
 
     virtual void set_feromone(FeromoneT type, float value) = 0;
@@ -34,6 +31,8 @@ class ICell {
 
     // --- Chemical resources ---------------------------------------------------
     [[nodiscard]] virtual unsigned get_glucose() const = 0;
+
+    virtual void set_water(unsigned water) = 0;
     [[nodiscard]] virtual unsigned get_water() const = 0;
     [[nodiscard]] virtual unsigned get_calcium() const = 0;
     [[nodiscard]] virtual unsigned get_carbon() const = 0;

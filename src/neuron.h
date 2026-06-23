@@ -75,15 +75,19 @@ enum class Action {
     EMIT_SIGNAL_MATE,   // 10  emit MATE feromone
     EMIT_SIGNAL_HOME,   // 11  emit HOME feromone
 
-    // ── 12-14: resource acquisition ──────────────────────────────────────
-    GET_GLUCOSE, // 12  absorb 2 units glucose from current cell
-    GET_H2O,     // 13  absorb 2 units water from current cell
-    GET_CALCIUM, // 14  absorb 2 units calcium from current cell
+    // ── 12-17: resource acquisition ──────────────────────────────────────
+    GET_GLUCOSE,   // 12  absorb 2 units glucose from current cell
+    LEAVE_GLUCOSE, // 13  release 2 units glucose to current cell
+    GET_H2O,       // 14  absorb 2 units water from current cell
+    LEAVE_H2O,     // 15  release 2 units water to current cell
+    GET_CALCIUM,   // 16  absorb 2 units calcium from current cell
+    LEAVE_CALCIUM, // 17  release 2 units calcium to current cell
 
-    // ── 15-16: internal modulation ────────────────────────────────────────
-    SET_OSCILLATOR_PERIOD, // 15  scale osc_period_ × 1.1
-    SET_RESPONSIVENESS,    // 16  increase responsiveness_ by 0.1
+    // ── 18-20: internal modulation ────────────────────────────────────────
+    BURN_CALORIES,         // 18  burn energy to produce extra heat
+    SET_OSCILLATOR_PERIOD, // 19  scale osc_period_ × 1.1
+    SET_RESPONSIVENESS,    // 20  increase responsiveness_ by 0.1
 
-    NUM_ACTIONS,  // 17  ← brain output layer size (brain_size_y = 17)
-    KILL_FORWARD, // 18  lethal: kill entity in the forward cell
+    NUM_ACTIONS,  // 21  ← brain output layer size (brain_size_y = 21)
+    KILL_FORWARD, // 22  lethal: kill entity in the forward cell
 };

@@ -13,7 +13,10 @@
 namespace {
 std::atomic<unsigned> s_pop_counter{0};
 }
-constexpr float move_cost = 0.03f;
+constexpr float move_cost = 0.01f;
+constexpr float basal_metabolism_cost = 0.02f;
+constexpr float thermoregulation_energy_cost = 0.05f;
+constexpr float thermoregulation_heat_gain = 0.5f;
 
 Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config)
     : genome_(Genome(RandomUtility().rnd_int(static_cast<int>(config->get_genome_min_length()),
@@ -43,7 +46,9 @@ Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shar
     init();
 }
 Pop::~Pop() {
-    brain_->remove_serialization(pop_id_);
+    if (config_->get_brain_serialization_enabled()) {
+        brain_->remove_serialization(pop_id_);
+    }
 }
 
 void Pop::init() {
@@ -56,8 +61,14 @@ void Pop::init() {
     co2_ = 0;
     lipids_ = 20;
     metabolism_heat_ = 0.0f;
+    thermoregulation_heat_ = 0.0f;
     temperature_ = config_->get_phy_init_temperature();
     last_reward_ = 0.0f;
+    total_movement_energy_loss_ = 0.0f;
+    total_metabolism_energy_loss_ = 0.0f;
+    total_reproduction_energy_loss_ = 0.0f;
+    total_respiration_energy_gain_ = 0.0f;
+    total_thermoregolation_energy_loss_ = 0.0f;
     if (!inherit_phy) {
         phy_.mitochondrions = static_cast<unsigned>(
             random_util_->rnd_int(1, static_cast<int>(config_->get_phy_init_mitochondrions_max())));
@@ -69,7 +80,7 @@ void Pop::init() {
     }
     sensor_values_.assign(brain_->get_size_s(), 0.0f);
     brain_->wire(genome_);
-    brain_->serialize(pop_id_, 0);
+    serialize_brain(0);
 }
 
 void Pop::die() {
@@ -87,7 +98,7 @@ void Pop::die() {
     }
     alive_ = false;
     // remove serialized brain file for this pop
-    if (!brain_->remove_serialization(pop_id_)) {
+    if (config_->get_brain_serialization_enabled() && !brain_->remove_serialization(pop_id_)) {
         logger_->error("Failed to remove serialized brain file for Pop with ID: " + pop_id_);
     }
 }
@@ -105,25 +116,58 @@ float Pop::calculate_reward() const {
     logger_->debug("Calculating reward for Pop at position (" + std::to_string(pos_.x) + ", " + std::to_string(pos_.y) +
                    ") with age " + std::to_string(age_) + ", energy " + std::to_string(energy_) +
                    ", and offspring count " + std::to_string(offspring_count_) + ".");
-    // age_score: rewards longevity, encouraging the Pop to survive longer.
-    float age_score = std::min(static_cast<float>(age_) / MaxAge, 1.0f);
+    // Long-term survival signal in [0,1]: rewards living longer without saturating too early.
+    const float age_signal = std::clamp(static_cast<float>(age_) / MaxAge, 0.0f, 1.0f);
 
-    //  energy_score: rewards efficient energy management, encouraging the Pop to maintain higher energy levels.
-    float energy_score = energy_ / MaxEnergy;
+    // Energy baseline signal in [-1,1]:
+    // values below ~25% energy become negative, above become progressively positive.
+    const float energy_score = std::clamp(energy_ / MaxEnergy, 0.0f, 1.0f);
+    const float energy_signal = std::clamp((energy_score - 0.25f) / 0.75f, -1.0f, 1.0f);
 
-    // energy_delta_score: rewards positive changes in energy, encouraging the Pop to take actions that increase its
-    // energy.
-    float energy_delta_score = std::min((energy_ - previous_energy_) / 0.02f, 1.0f);
+    // Short-term trend signal in [-1,1]: compares this tick energy delta to the pop's own
+    // theoretical per-tick respiration capacity (based on its current mitochondria count).
+    const float per_respiration = static_cast<float>(config_->get_phy_energy_per_respiration());
+    const float max_energy_delta =
+        std::max(static_cast<float>(std::max(phy_.mitochondrions, 1u)) * per_respiration, 1e-6f);
+    const float energy_delta = energy_ - previous_energy_;
+    const float delta_signal = std::clamp(energy_delta / max_energy_delta, -1.0f, 1.0f);
 
-    //  offspring_score: rewards reproductive success, encouraging the Pop to produce more offspring.
-    float offspring_score = std::min(static_cast<float>(offspring_count_) / 1000.0f, 1.0f);
+    // Thermal homeostasis signal in [-1,1]: positive near optimal body temperature,
+    // negative when far from it.
+    const float opt_temp = static_cast<float>(config_->get_phy_opt_temperature());
+    const float temp_distance = std::abs(static_cast<float>(temperature_) - opt_temp);
+    const float temp_score = std::clamp(1.0f - (temp_distance / 32.5f), 0.0f, 1.0f);
+    const float temp_signal = 2.0f * temp_score - 1.0f;
 
-    float reward = AgeRewardWeight * age_score + EnergyRewardWeight * energy_score +
-                   EnergyDeltaRewardWeight * energy_delta_score + OffspringRewardWeight * offspring_score;
+    // Reproduction bonus in [0,1]: kept as a bounded bonus so reward is not dominated by offspring count.
+    const float offspring_bonus = std::clamp(static_cast<float>(offspring_count_) / 25.0f, 0.0f, 1.0f);
 
-    // Trasforma [0,1] -> [-1,+1]
-    reward = reward * 2.0f - 1.0f;
-    return reward;
+    // Weight policy:
+    // - keep at least a minimal survival/energy pressure,
+    // - cap offspring dominance,
+    // - assign remaining mass to temperature management.
+    const float w_age = std::max(AgeRewardWeight, 0.10f);
+    const float w_energy = std::max(EnergyRewardWeight, 0.30f);
+    const float w_delta = EnergyDeltaRewardWeight;
+    const float w_offspring = std::min(OffspringRewardWeight, 0.05f);
+    const float w_temp = std::clamp(1.0f - (w_age + w_energy + w_delta + w_offspring), 0.0f, 1.0f);
+
+    // Final reward is a weighted sum of interpretable signals and stays in [-1,1].
+    const float reward_raw = w_age * age_signal + w_energy * energy_signal + w_delta * delta_signal +
+                             w_offspring * offspring_bonus + w_temp * temp_signal;
+
+    if (!std::isfinite(reward_raw)) {
+        logger_->warning("Non-finite reward_raw detected for Pop " + pop_id_ + ". Forcing reward to -1.");
+        return -1.0f;
+    }
+
+    if (age_ % 1000 == 0 && std::abs(delta_signal) > 0.98f) {
+        logger_->warning("Reward delta component near saturation for Pop " + pop_id_ +
+                         " (delta=" + std::to_string(energy_delta) + ", max_delta=" + std::to_string(max_energy_delta) +
+                         ", ratio=" + std::to_string(delta_signal) + ").");
+    }
+
+    return std::clamp(reward_raw, -1.0f, 1.0f);
 }
 
 void Pop::learn(float reward) {
@@ -141,8 +185,14 @@ void Pop::learn(float reward) {
 void Pop::update() {
     age_++;
     update_physiology();
-    if (energy_ <= 0 || age_ > MaxAge) {
-        death_cause_ = energy_ <= 0 ? DeathCause::EnergyDepletion : DeathCause::OldAge;
+    if (energy_ <= 0 || age_ > MaxAge || temperature_ <= 10.0 || temperature_ >= 75.0) {
+        if (energy_ <= 0) {
+            death_cause_ = DeathCause::EnergyDepletion;
+        } else if (age_ > MaxAge) {
+            death_cause_ = DeathCause::OldAge;
+        } else {
+            death_cause_ = DeathCause::TemperatureOutOfRange;
+        }
         die();
     } else {
         const float reward = calculate_reward();
@@ -162,8 +212,6 @@ void Pop::despawn() {
 // be sure return sensor values in range [0,1]
 void Pop::sense() {
     current_state_ = State::SENSE;
-    // reset energy cost for this cycle
-    energy_cost_ = 0;
 
     // lock the world weak pointer to access the world safely
     auto world = world_.lock();
@@ -374,6 +422,9 @@ void Pop::think() {
 }
 
 void Pop::serialize_brain(unsigned generation) const {
+    if (!config_->get_brain_serialization_enabled()) {
+        return;
+    }
     brain_->serialize(pop_id_, generation);
 }
 
@@ -394,44 +445,52 @@ void Pop::act() {
             p.y += last_direction_.y * (responsiveness_);
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_LEFT:
             p.x -= last_direction_.y * responsiveness_;
             p.y += last_direction_.x * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_RIGHT:
             p.x += last_direction_.y * responsiveness_;
             p.y -= last_direction_.x * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_RANDOM:
             p.x += random_util_->rnd_int(-1, 1) * responsiveness_;
             p.y += random_util_->rnd_int(-1, 1) * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_EAST:
             p.x += 1 * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_WEST:
             p.x -= 1 * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_NORTH:
             p.y -= 1 * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_SOUTH:
             p.y += 1 * responsiveness_;
             try_move(p);
             energy_cost_ += move_cost;
+            total_movement_energy_loss_ += move_cost;
             break;
         // ── feromone signalling ─────────────────────────────────────────────
         case Action::EMIT_SIGNAL_FOOD:
@@ -449,18 +508,37 @@ void Pop::act() {
         // ── resource acquisition ────────────────────────────────────────────
         case Action::GET_GLUCOSE:
             if (world) {
-                glucose_ += world->get_cell(pos_)->take_glucose(2);
+                glucose_ += world->get_cell(pos_)->take_glucose(10);
+            }
+            break;
+        case Action::LEAVE_GLUCOSE:
+            if (world) {
+                world->get_cell(pos_)->give_glucose(10);
             }
             break;
         case Action::GET_H2O:
             if (world) {
-                water_ += world->get_cell(pos_)->take_water(2);
+                water_ += world->get_cell(pos_)->take_water(10);
+            }
+            break;
+
+        case Action::LEAVE_H2O:
+            if (world) {
+                world->get_cell(pos_)->give_water(10);
             }
             break;
         case Action::GET_CALCIUM:
             if (world) {
-                calcium_ += world->get_cell(pos_)->take_calcium(2);
+                calcium_ += world->get_cell(pos_)->take_calcium(10);
             }
+            break;
+        case Action::LEAVE_CALCIUM:
+            if (world) {
+                world->get_cell(pos_)->give_calcium(10);
+            }
+            break;
+        case Action::BURN_CALORIES:
+            run_thermoregulation();
             break;
         // ── internal modulation ──────────────────────────────────────────────
         case Action::SET_OSCILLATOR_PERIOD: {
@@ -546,13 +624,17 @@ RenderState Pop::get_render_state() const {
 }
 
 bool Pop::wants_to_reproduce() const {
-    return alive_ && energy_ > 30.0f && age_ > 50 && glucose_ > 10;
+    return alive_ && energy_ > 50.0f && age_ > 1000 && glucose_ > 20;
 }
 
 Genome Pop::make_offspring_genome() const {
-    if (config_->get_hebbian_inheritance())
-        if (auto lg = brain_->get_learned_genome())
-            return lg->mutated(config_->get_point_mutation_rate());
+    if (config_->get_hebbian_inheritance()) {
+        if (auto lg = brain_->get_learned_genome()) {
+            if (!lg->get_genes().empty()) {
+                return lg->mutated(config_->get_point_mutation_rate());
+            }
+        }
+    }
     return genome_.mutated(config_->get_point_mutation_rate());
 }
 
@@ -576,10 +658,10 @@ PhyT Pop::make_offspring_phy() const {
 }
 
 void Pop::donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_co2) {
-    out_glucose = glucose_ / 2;
-    out_water = water_ / 2;
-    out_calcium = calcium_ / 2;
-    out_co2 = co2_ / 2;
+    out_glucose = glucose_ / 8;
+    out_water = water_ / 8;
+    out_calcium = calcium_ / 8;
+    out_co2 = co2_ / 8;
     glucose_ -= out_glucose;
     water_ -= out_water;
     calcium_ -= out_calcium;
@@ -617,28 +699,36 @@ void Pop::emit_feromone(FeromoneT type, int intensity) {
 
 void Pop::update_physiology() {
     metabolism_heat_ = 0.0f;
+    previous_energy_ = energy_;
 
     auto world = world_.lock();
     if (!world)
         return;
 
     // Auto-take resources from current cell
-    glucose_ += world->get_cell(pos_)->take_glucose(2);
-    water_ += world->get_cell(pos_)->take_water(2);
-    calcium_ += world->get_cell(pos_)->take_calcium(1);
-    co2_ += world->get_cell(pos_)->take_co2(1);
+    glucose_ += world->get_cell(pos_)->take_glucose(5);
+    water_ += world->get_cell(pos_)->take_water(5);
+    calcium_ += world->get_cell(pos_)->take_calcium(2);
+    co2_ += world->get_cell(pos_)->take_co2(5);
     lipids_ += world->get_cell(pos_)->take_lipids(1);
-    o2_ += world->get_cell(pos_)->take_o2(2);
+    o2_ += world->get_cell(pos_)->take_o2(5);
 
     // Biological reactions
     run_chloroplasts();
     run_mitochondrions();
     update_temperature();
+    thermoregulation_heat_ = 0.0f;
 
     // Metabolism cost
-    previous_energy_ = energy_;
-    energy_ -= 0.02f;        // Basal metabolic rate
+    energy_ -= basal_metabolism_cost;
+    total_metabolism_energy_loss_ += basal_metabolism_cost;
     energy_ -= energy_cost_; // Additional cost from actions
+                             // reset energy cost for this cycle
+    energy_cost_ = 0;
+    // cap energy to MaxEnergy
+    if (energy_ > MaxEnergy) {
+        energy_ = MaxEnergy;
+    }
 }
 
 void Pop::run_chloroplasts() {
@@ -669,13 +759,19 @@ void Pop::run_chloroplasts() {
 
 void Pop::run_mitochondrions() {
     unsigned co2_produced = 0;
+    const float opt_temp = static_cast<float>(config_->get_phy_opt_temperature());
+    constexpr float kEfficiencyHalfRangeC = 10.0f;
+    const float temp_delta = std::abs(static_cast<float>(temperature_) - opt_temp);
+    const float efficiency = std::clamp(1.0f - (temp_delta / kEfficiencyHalfRangeC), 0.0f, 1.0f);
     for (unsigned i = 0; i < phy_.mitochondrions; ++i) {
         if (glucose_ == 0 || o2_ == 0)
             break;
         // C6H12O6 + O2 -> energy + CO2 + heat
         glucose_--;
         o2_--;
-        energy_ += static_cast<float>(config_->get_phy_energy_per_respiration());
+        const float energy_gain = static_cast<float>(config_->get_phy_energy_per_respiration()) * efficiency;
+        energy_ += energy_gain;
+        total_respiration_energy_gain_ += energy_gain;
         metabolism_heat_ += static_cast<float>(config_->get_phy_heat_per_respiration());
         co2_++;
         co2_produced++;
@@ -694,7 +790,14 @@ void Pop::update_temperature() {
         return;
     const double env_temp = world->get_temperature(pos_);
     const double alpha = compute_alpha();
-    temperature_ += alpha * (env_temp - temperature_) + static_cast<double>(metabolism_heat_);
+    const double heat_input = static_cast<double>(metabolism_heat_ + thermoregulation_heat_);
+    temperature_ += alpha * (env_temp - temperature_) + heat_input;
+}
+
+void Pop::run_thermoregulation() {
+    thermoregulation_heat_ += thermoregulation_heat_gain;
+    energy_cost_ += thermoregulation_energy_cost;
+    total_thermoregolation_energy_loss_ += thermoregulation_energy_cost;
 }
 
 double Pop::compute_alpha() const {
@@ -707,4 +810,10 @@ double Pop::compute_alpha() const {
 
 void Pop::increment_offspring_count() {
     offspring_count_++;
+}
+
+void Pop::add_reproduction_energy_loss(float energy_loss) {
+    if (energy_loss > 0.0f) {
+        total_reproduction_energy_loss_ += energy_loss;
+    }
 }

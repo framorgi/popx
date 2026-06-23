@@ -148,10 +148,18 @@ const char* action_name(unsigned idx) {
             return "EMIT_SIGNAL_HOME";
         case Action::GET_GLUCOSE:
             return "GET_GLUCOSE";
+        case Action::LEAVE_GLUCOSE:
+            return "LEAVE_GLUCOSE";
         case Action::GET_H2O:
             return "GET_H2O";
+        case Action::LEAVE_H2O:
+            return "LEAVE_H2O";
         case Action::GET_CALCIUM:
             return "GET_CALCIUM";
+        case Action::LEAVE_CALCIUM:
+            return "LEAVE_CALCIUM";
+        case Action::BURN_CALORIES:
+            return "BURN_CALORIES";
         case Action::SET_OSCILLATOR_PERIOD:
             return "SET_OSC_PERIOD";
         case Action::SET_RESPONSIVENESS:
@@ -351,13 +359,6 @@ void ImGuiLayer::build_stats_overlay() {
         ImGui::Text("Tick:   %llu", static_cast<unsigned long long>(r.tick));
         ImGui::Text("FPS:    %.1f", r.fps);
         ImGui::Separator();
-        ImGui::Text("Glucose:  %u", r.world_organics.c6h12o6);
-        ImGui::Text("O2:       %u", r.world_organics.o2);
-        ImGui::Text("CO2:      %u", r.world_organics.co2);
-        ImGui::Text("H2O:      %u", r.world_organics.h2o);
-        ImGui::Text("Lipids:   %u", r.world_organics.lipids);
-        ImGui::Text("N2:       %u", r.world_organics.n2);
-        ImGui::Text("CaCO3:    %u", r.world_organics.caco3);
         ImGui::Separator();
         ImGui::Text("Tick dur: %s", fmt_us(r.tick_duration_us).c_str());
         ImGui::Text("Frame dur:%s", fmt_us(r.frame_duration_us).c_str());
@@ -479,6 +480,12 @@ void ImGuiLayer::build_pop_inspector() {
     ImGui::Text("Learning score (last reward): %.4f", s.learning_score);
     ImGui::Text("Brain connections: %zu", s.total_connections);
     ImGui::Text("Useful connections (eps=0.05): %zu", s.useful_connections);
+    ImGui::Separator();
+    ImGui::Text("Lifetime movement loss:      %.4f", s.total_movement_energy_loss);
+    ImGui::Text("Lifetime metabolism loss:    %.4f", s.total_metabolism_energy_loss);
+    ImGui::Text("Lifetime reproduction loss:  %.4f", s.total_reproduction_energy_loss);
+    ImGui::Text("Lifetime respiration gain:   %.4f", s.total_respiration_energy_gain);
+    ImGui::Text("Lifetime thermoreg loss:     %.4f", s.total_thermoregolation_energy_loss);
 
     // Genetic colour marker (circle for heterotroph, triangle for photosynthetic)
     ImGui::Text("Genetic marker:");
@@ -727,6 +734,11 @@ void ImGuiLayer::build_end_modal() {
         ImGui::Text("Avg FPS:        %.1f", s.avg_fps);
         ImGui::Text("Avg birth rate: %.3f /sec", s.avg_birth_rate_per_sec);
         ImGui::Text("Avg death rate: %.3f /sec", s.avg_death_rate_per_sec);
+        ImGui::Text("Avg movement loss (active): %.4f", s.avg_movement_energy_loss_active);
+        ImGui::Text("Avg metabolism loss (active): %.4f", s.avg_metabolism_energy_loss_active);
+        ImGui::Text("Avg reproduction loss (active): %.4f", s.avg_reproduction_energy_loss_active);
+        ImGui::Text("Avg respiration gain (active): %.4f", s.avg_respiration_energy_gain_active);
+        ImGui::Text("Avg thermoreg loss (active): %.4f", s.avg_thermoregolation_energy_loss_active);
 
         ImGui::Separator();
         ImGui::Text("Last organics:");

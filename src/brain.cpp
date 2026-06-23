@@ -49,7 +49,9 @@ unsigned Brain::layer_size(unsigned k) const {
 void Brain::wire(const Genome& genome) {
     // Reset Hebbian-learning state; will be repopulated on the next hebbian_update().
     learned_genome_ = nullptr;
+    learned_genome_dirty_ = false;
     silent_genes_.clear();
+    discarded_genes_.clear();
 
     using Triplet = Eigen::Triplet<float>;
 
@@ -68,8 +70,10 @@ void Brain::wire(const Genome& genome) {
 
         // Validate source: must be sensor(0) or an active hidden layer(1..H)
         const bool src_ok = (src_type == 0) || (src_type >= 1 && src_type <= num_hidden_);
-        if (!src_ok)
+        if (!src_ok) {
+            discarded_genes_.push_back(g);
             continue;
+        }
 
         const unsigned src_layer = src_type;
 
@@ -80,12 +84,15 @@ void Brain::wire(const Genome& genome) {
         } else if (snk_type >= 1 && snk_type <= num_hidden_) {
             dst_layer = snk_type;
         } else {
+            discarded_genes_.push_back(g);
             continue; // sensor(0) or unused hidden layer as sink
         }
 
         // Enforce feedforward: sink must be strictly deeper than source
-        if (dst_layer <= src_layer)
+        if (dst_layer <= src_layer) {
+            discarded_genes_.push_back(g);
             continue;
+        }
 
         // Reject genes whose num field exceeds the actual layer size.
         // Using modulo would create a coverage bias:  e.g. with sizeY=19 and
@@ -164,9 +171,16 @@ void Brain::resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned n
     num_hidden_ = num_hidden;
     num_layers_ = num_hidden_ + 2;
     allocate();
+    learned_genome_ = nullptr;
+    learned_genome_dirty_ = false;
+    silent_genes_.clear();
+    discarded_genes_.clear();
 }
 
 bool Brain::remove_serialization(const std::string& pop_id) {
+    if (!config_->get_brain_serialization_enabled()) {
+        return true;
+    }
     const std::string dir = config_->get_nnets_dir();
     if (!std::filesystem::exists(dir))
         return false;
@@ -181,6 +195,9 @@ bool Brain::remove_serialization(const std::string& pop_id) {
 }
 
 void Brain::serialize(const std::string& pop_id, unsigned generation) const {
+    if (!config_->get_brain_serialization_enabled()) {
+        return;
+    }
     using json = nlohmann::json;
 
     const auto timestamp_ms =
@@ -468,12 +485,17 @@ void Brain::hebbian_update(float reward) {
         }
     }
 
-    // Rebuild genome from learned weights so offspring can inherit the current synaptic state.
-    if (config_->get_hebbian_inheritance())
-        rebuild_genome_from_weights();
+    // Mark dirty; rebuilding the learned genome is deferred until reproduction requests it.
+    if (config_->get_hebbian_inheritance()) {
+        learned_genome_dirty_ = true;
+    }
 }
 
 std::shared_ptr<const Genome> Brain::get_learned_genome() const {
+    if (config_->get_hebbian_inheritance() && learned_genome_dirty_) {
+        const_cast<Brain*>(this)->rebuild_genome_from_weights();
+        const_cast<Brain*>(this)->learned_genome_dirty_ = false;
+    }
     return learned_genome_;
 }
 
@@ -510,5 +532,11 @@ void Brain::rebuild_genome_from_weights() {
     for (const Gene& g : silent_genes_)
         genome->add_gene(g);
 
+    // Append genes discarded for type/sink/order constraints.
+    // Keeping them avoids irreversible genetic collapse when hebbian inheritance is enabled.
+    for (const Gene& g : discarded_genes_)
+        genome->add_gene(g);
+
     learned_genome_ = std::move(genome);
+    learned_genome_dirty_ = false;
 }
