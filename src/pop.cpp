@@ -642,10 +642,10 @@ PhyT Pop::make_offspring_phy() const {
 }
 
 void Pop::donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_co2) {
-    out_glucose = glucose_ / 2;
-    out_water = water_ / 2;
-    out_calcium = calcium_ / 2;
-    out_co2 = co2_ / 2;
+    out_glucose = glucose_ / 8;
+    out_water = water_ / 8;
+    out_calcium = calcium_ / 8;
+    out_co2 = co2_ / 8;
     glucose_ -= out_glucose;
     water_ -= out_water;
     calcium_ -= out_calcium;

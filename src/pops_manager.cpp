@@ -235,8 +235,7 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
             unsigned g = 0, w = 0, ca = 0, co2 = 0;
             parent->donate_resources(g, w, ca, co2);
             child->set_resources(g, w, ca, co2);
-            const float reproduction_energy_loss =
-                static_cast<float>(g) * static_cast<float>(config_->get_phy_energy_per_respiration());
+            const float reproduction_energy_loss = static_cast<float>(config_->get_phy_energy_per_respiration());
             parent->add_reproduction_energy_loss(reproduction_energy_loss);
 
             pops_.push_back(child);
