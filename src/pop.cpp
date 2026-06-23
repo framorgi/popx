@@ -13,7 +13,7 @@
 namespace {
 std::atomic<unsigned> s_pop_counter{0};
 }
-constexpr float move_cost = 0.03f;
+constexpr float move_cost = 0.01f;
 constexpr float basal_metabolism_cost = 0.02f;
 constexpr float thermoregulation_energy_cost = 0.05f;
 constexpr float thermoregulation_heat_gain = 0.5f;
