@@ -194,6 +194,9 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     [[nodiscard]] double get_body_temperature() const {
         return temperature_;
     }
+    [[nodiscard]] double get_opt_temperature() const {
+        return config_->get_phy_opt_temperature();
+    }
     [[nodiscard]] float get_learning_score() const {
         return last_reward_;
     }
@@ -224,6 +227,9 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     }
     [[nodiscard]] float get_total_thermoregolation_energy_loss() const {
         return total_thermoregolation_energy_loss_;
+    }
+    [[nodiscard]] double get_lifetime_distance() const {
+        return lifetime_distance_;
     }
 
     void add_reproduction_energy_loss(float energy_loss);
@@ -349,6 +355,10 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Last reward used by learning update (displayed in inspector).
     /// ---------------------------------------------------------------------------
     float last_reward_ = 0.0f;
+    /// ---------------------------------------------------------------------------
+    /// @brief Lifetime cumulative traveled distance (Euclidean, successful moves only).
+    /// ---------------------------------------------------------------------------
+    double lifetime_distance_ = 0.0;
     ///----------------------------------------------------------------------------
     /// @brief Counter for the number of offspring produced by this Pop
     ///----------------------------------------------------------------------------

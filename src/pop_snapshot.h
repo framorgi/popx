@@ -16,6 +16,7 @@
 struct PopSnapshot {
     std::string pop_id = {};
     uint32_t age = 0;
+    double lifetime_distance = 0.0;
     float energy = 0.f;
     PositionT pos = {0, 0};
     unsigned mitochondrions = 0;
@@ -23,6 +24,7 @@ struct PopSnapshot {
     unsigned sensitiveness = 0;
     unsigned adipose_stock_max = 0;
     double body_temperature = 0.0;
+    double opt_temperature = 37.0;
     unsigned glucose = 0;
     unsigned water = 0;
     unsigned o2 = 0;

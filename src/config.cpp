@@ -152,6 +152,10 @@ double Config::get_phy_photo_min_elevation() const {
     return params_.phy_photo_min_elevation;
 }
 
+double Config::get_phy_efficiency_half_range_c() const {
+    return params_.phy_efficiency_half_range_c;
+}
+
 bool Config::get_newgen_enabled() const {
     return params_.newgen_enabled;
 }
@@ -392,6 +396,10 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
     }
     if (name == "phy_photo_min_elevation" && is_d && dval >= 0.0) {
         params_.phy_photo_min_elevation = dval;
+        return;
+    }
+    if (name == "phy_efficiency_half_range_c" && is_d && dval > 0.0) {
+        params_.phy_efficiency_half_range_c = std::clamp(dval, 0.1, 100.0);
         return;
     }
 

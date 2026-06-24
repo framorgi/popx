@@ -2,8 +2,10 @@
 #include "i_cell.h"
 #include "i_entity.h"
 #include "i_logger.h"
+#include "i_random.h"
 #include "i_world.h"
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -180,4 +182,34 @@ class GridWorld : public IWorld {
     /// @brief    Shared pointer to the Logger instance
     ///----------------------------------------------------------------------
     std::shared_ptr<ILogger> logger_;
+
+    ///----------------------------------------------------------------------
+    /// @brief      Radial Basis Function set for temperature interpolation
+    ///----------------------------------------------------------------------
+    RBFSet temp_rbf_set_ = {};
+    ///----------------------------------------------------------------------
+
+    /// @brief      Radial Basis Function set for elevation interpolation
+    ///----------------------------------------------------------------------
+    RBFSet elevation_rbf_set_ = {};
+
+    ///----------------------------------------------------------------------
+    /// @brief      Radial Basis Function set for glucose distribution
+    ///----------------------------------------------------------------------
+    RBFSet glucose_rbf_set_ = {};
+
+    ///----------------------------------------------------------------------
+    /// @brief      Radial Basis Function set for water distribution
+    ///----------------------------------------------------------------------
+    RBFSet water_rbf_set_ = {};
+
+    ///----------------------------------------------------------------------
+    /// @brief      Environment tick counter to track the number of update cycles
+    ///----------------------------------------------------------------------
+    uint64_t environment_tick_counter_ = 0;
+
+    ///----------------------------------------------------------------------
+    /// @brief      Tick counter to track the time axis applied to RBF sets rotation
+    ///----------------------------------------------------------------------
+    uint64_t rotation_tick_counter_ = 0;
 };

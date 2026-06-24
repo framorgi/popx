@@ -1,5 +1,7 @@
 #include "stats.h"
 
+#include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <nlohmann/json.hpp>
 
@@ -22,6 +24,12 @@ void Stats::begin_session() {
     total_reproduction_energy_loss_active_ = 0.0;
     total_respiration_energy_gain_active_ = 0.0;
     total_thermoregolation_energy_loss_active_ = 0.0;
+    total_offspring_count_ = 0.0;
+    total_lifetime_distance_ = 0.0;
+    max_lifetime_distance_ = 0.0;
+    total_corr_offspring_lifetime_ = 0.0;
+    total_body_temperature_ = 0.0;
+    total_abs_temp_delta_opt_ = 0.0;
 }
 
 void Stats::end_session() {
@@ -58,12 +66,31 @@ void Stats::record_tick(uint64_t tick, unsigned generation, int alive, int dead,
         double reproduction_sum = 0.0;
         double respiration_sum = 0.0;
         double thermoreg_sum = 0.0;
+        double offspring_sum = 0.0;
+        double distance_sum = 0.0;
+        double temp_sum = 0.0;
+        double abs_temp_delta_opt_sum = 0.0;
+        double max_distance = 0.0;
+
+        double offspring_sq_sum = 0.0;
+        double distance_sq_sum = 0.0;
+        double offspring_distance_sum = 0.0;
+
         for (const auto& pop : pops_snapshot) {
             movement_sum += pop.total_movement_energy_loss;
             metabolism_sum += pop.total_metabolism_energy_loss;
             reproduction_sum += pop.total_reproduction_energy_loss;
             respiration_sum += pop.total_respiration_energy_gain;
             thermoreg_sum += pop.total_thermoregolation_energy_loss;
+            offspring_sum += static_cast<double>(pop.offspring);
+            distance_sum += pop.lifetime_distance;
+            temp_sum += pop.body_temperature;
+            abs_temp_delta_opt_sum += std::abs(pop.body_temperature - pop.opt_temperature);
+            max_distance = std::max(max_distance, pop.lifetime_distance);
+
+            offspring_sq_sum += static_cast<double>(pop.offspring) * static_cast<double>(pop.offspring);
+            distance_sq_sum += pop.lifetime_distance * pop.lifetime_distance;
+            offspring_distance_sum += static_cast<double>(pop.offspring) * pop.lifetime_distance;
         }
         const double denom = static_cast<double>(pops_snapshot.size());
         r.avg_movement_energy_loss_active = movement_sum / denom;
@@ -71,6 +98,22 @@ void Stats::record_tick(uint64_t tick, unsigned generation, int alive, int dead,
         r.avg_reproduction_energy_loss_active = reproduction_sum / denom;
         r.avg_respiration_energy_gain_active = respiration_sum / denom;
         r.avg_thermoregolation_energy_loss_active = thermoreg_sum / denom;
+        r.avg_offspring_count = offspring_sum / denom;
+        r.avg_lifetime_distance = distance_sum / denom;
+        r.max_lifetime_distance = max_distance;
+        r.avg_body_temperature = temp_sum / denom;
+        r.avg_abs_temp_delta_opt = abs_temp_delta_opt_sum / denom;
+
+        const double ex = r.avg_offspring_count;
+        const double ey = r.avg_lifetime_distance;
+        const double ex2 = offspring_sq_sum / denom;
+        const double ey2 = distance_sq_sum / denom;
+        const double exy = offspring_distance_sum / denom;
+        const double var_x = std::max(0.0, ex2 - (ex * ex));
+        const double var_y = std::max(0.0, ey2 - (ey * ey));
+        const double cov_xy = exy - (ex * ey);
+        const double corr_denom = std::sqrt(var_x * var_y);
+        r.corr_offspring_lifetime = corr_denom > 1e-12 ? (cov_xy / corr_denom) : 0.0;
     }
 
     if (!history_.empty()) {
@@ -101,6 +144,12 @@ void Stats::record_tick(uint64_t tick, unsigned generation, int alive, int dead,
     total_reproduction_energy_loss_active_ += r.avg_reproduction_energy_loss_active;
     total_respiration_energy_gain_active_ += r.avg_respiration_energy_gain_active;
     total_thermoregolation_energy_loss_active_ += r.avg_thermoregolation_energy_loss_active;
+    total_offspring_count_ += r.avg_offspring_count;
+    total_lifetime_distance_ += r.avg_lifetime_distance;
+    max_lifetime_distance_ = std::max(max_lifetime_distance_, r.max_lifetime_distance);
+    total_corr_offspring_lifetime_ += r.corr_offspring_lifetime;
+    total_body_temperature_ += r.avg_body_temperature;
+    total_abs_temp_delta_opt_ += r.avg_abs_temp_delta_opt;
 }
 
 void Stats::record_frame(std::chrono::microseconds frame_dur) {
@@ -131,6 +180,12 @@ SessionSummary Stats::get_summary() const {
     s.avg_respiration_energy_gain_active = n > 0 ? total_respiration_energy_gain_active_ / static_cast<double>(n) : 0.0;
     s.avg_thermoregolation_energy_loss_active =
         n > 0 ? total_thermoregolation_energy_loss_active_ / static_cast<double>(n) : 0.0;
+    s.avg_offspring_count = n > 0 ? total_offspring_count_ / static_cast<double>(n) : 0.0;
+    s.avg_lifetime_distance = n > 0 ? total_lifetime_distance_ / static_cast<double>(n) : 0.0;
+    s.max_lifetime_distance = max_lifetime_distance_;
+    s.avg_corr_offspring_lifetime = n > 0 ? total_corr_offspring_lifetime_ / static_cast<double>(n) : 0.0;
+    s.avg_body_temperature = n > 0 ? total_body_temperature_ / static_cast<double>(n) : 0.0;
+    s.avg_abs_temp_delta_opt = n > 0 ? total_abs_temp_delta_opt_ / static_cast<double>(n) : 0.0;
     s.last_organics = history_.empty() ? OrganicsT{} : history_.back().world_organics;
     return s;
 }
@@ -171,6 +226,12 @@ bool Stats::save_to_json(const std::string& path) {
                     {"avg_reproduction_energy_loss_active", summary.avg_reproduction_energy_loss_active},
                     {"avg_respiration_energy_gain_active", summary.avg_respiration_energy_gain_active},
                     {"avg_thermoregolation_energy_loss_active", summary.avg_thermoregolation_energy_loss_active},
+                    {"avg_offspring_count", summary.avg_offspring_count},
+                    {"avg_lifetime_distance", summary.avg_lifetime_distance},
+                    {"max_lifetime_distance", summary.max_lifetime_distance},
+                    {"avg_corr_offspring_lifetime", summary.avg_corr_offspring_lifetime},
+                    {"avg_body_temperature", summary.avg_body_temperature},
+                    {"avg_abs_temp_delta_opt", summary.avg_abs_temp_delta_opt},
                     {"rate_window_samples", static_cast<uint64_t>(rate_window_samples_)},
                     {"last_organics", organics_to_json(summary.last_organics)}};
 
@@ -194,6 +255,12 @@ bool Stats::save_to_json(const std::string& path) {
                            {"avg_reproduction_energy_loss_active", r.avg_reproduction_energy_loss_active},
                            {"avg_respiration_energy_gain_active", r.avg_respiration_energy_gain_active},
                            {"avg_thermoregolation_energy_loss_active", r.avg_thermoregolation_energy_loss_active},
+                           {"avg_offspring_count", r.avg_offspring_count},
+                           {"avg_lifetime_distance", r.avg_lifetime_distance},
+                           {"max_lifetime_distance", r.max_lifetime_distance},
+                           {"corr_offspring_lifetime", r.corr_offspring_lifetime},
+                           {"avg_body_temperature", r.avg_body_temperature},
+                           {"avg_abs_temp_delta_opt", r.avg_abs_temp_delta_opt},
                            {"organics", organics_to_json(r.world_organics)}});
     }
     j["records"] = std::move(records);

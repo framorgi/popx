@@ -69,6 +69,7 @@ void Pop::init() {
     total_reproduction_energy_loss_ = 0.0f;
     total_respiration_energy_gain_ = 0.0f;
     total_thermoregolation_energy_loss_ = 0.0f;
+    lifetime_distance_ = 0.0;
     if (!inherit_phy) {
         phy_.mitochondrions = static_cast<unsigned>(
             random_util_->rnd_int(1, static_cast<int>(config_->get_phy_init_mitochondrions_max())));
@@ -136,7 +137,8 @@ float Pop::calculate_reward() const {
     // negative when far from it.
     const float opt_temp = static_cast<float>(config_->get_phy_opt_temperature());
     const float temp_distance = std::abs(static_cast<float>(temperature_) - opt_temp);
-    const float temp_score = std::clamp(1.0f - (temp_distance / 32.5f), 0.0f, 1.0f);
+    const float temp_half_range = static_cast<float>(config_->get_phy_efficiency_half_range_c());
+    const float temp_score = std::clamp(1.0f - (temp_distance / temp_half_range), 0.0f, 1.0f);
     const float temp_signal = 2.0f * temp_score - 1.0f;
 
     // Reproduction bonus in [0,1]: kept as a bounded bonus so reward is not dominated by offspring count.
@@ -583,6 +585,9 @@ bool Pop::try_move(PositionT p) {
         //  movement logic
         if (world->move_entity(shared_from_this(), p)) {
             pos_ = p;
+            const double dx = static_cast<double>(pos_.x - old_pos.x);
+            const double dy = static_cast<double>(pos_.y - old_pos.y);
+            lifetime_distance_ += std::sqrt(dx * dx + dy * dy);
             update_last_direction(pos_, old_pos);
             return true;
         }
@@ -760,7 +765,7 @@ void Pop::run_chloroplasts() {
 void Pop::run_mitochondrions() {
     unsigned co2_produced = 0;
     const float opt_temp = static_cast<float>(config_->get_phy_opt_temperature());
-    constexpr float kEfficiencyHalfRangeC = 10.0f;
+    const float kEfficiencyHalfRangeC = static_cast<float>(config_->get_phy_efficiency_half_range_c());
     const float temp_delta = std::abs(static_cast<float>(temperature_) - opt_temp);
     const float efficiency = std::clamp(1.0f - (temp_delta / kEfficiencyHalfRangeC), 0.0f, 1.0f);
     for (unsigned i = 0; i < phy_.mitochondrions; ++i) {

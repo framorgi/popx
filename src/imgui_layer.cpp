@@ -6,6 +6,7 @@
 #include <imgui-SFML.h>
 #include <imgui.h>
 
+#include <algorithm>
 #include <cfloat>
 #include <chrono>
 #include <cstdio>
@@ -179,6 +180,24 @@ std::string node_label(unsigned layer, unsigned neuron, unsigned output_layer) {
         return std::string(action_name(neuron));
     }
     return "H" + std::to_string(layer) + "N" + std::to_string(neuron);
+}
+
+void draw_horizontal_reference_line(float value, float y_min, float y_max, const char* label, ImU32 color) {
+    if (!(y_max > y_min)) {
+        return;
+    }
+
+    const ImVec2 plot_min = ImGui::GetItemRectMin();
+    const ImVec2 plot_max = ImGui::GetItemRectMax();
+    const float t = std::clamp((value - y_min) / (y_max - y_min), 0.0f, 1.0f);
+    const float y = plot_max.y - t * (plot_max.y - plot_min.y);
+
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    draw_list->AddLine(ImVec2(plot_min.x, y), ImVec2(plot_max.x, y), color, 1.5f);
+
+    if (label != nullptr && label[0] != '\0') {
+        draw_list->AddText(ImVec2(plot_min.x + 4.0f, y - 14.0f), color, label);
+    }
 }
 
 } // namespace
@@ -451,6 +470,7 @@ void ImGuiLayer::build_pop_inspector() {
 
     // Life stats
     ImGui::Text("Age:         %u", s.age);
+    ImGui::Text("Lifetime distance: %.2f", s.lifetime_distance);
     ImGui::Text("Energy:");
     ImGui::SameLine();
     ImGui::ProgressBar(s.energy / 400.f, ImVec2(-1.f, 0.f));
@@ -628,7 +648,8 @@ void ImGuiLayer::build_charts() {
     const int count = (n + step - 1) / step;
 
     static std::vector<float> alive_arr, dead_arr, glucose_arr, o2_arr, co2_arr, h2o_arr, lipids_arr, n2_arr, caco3_arr,
-        births_arr, deaths_arr, brate_arr, drate_arr;
+        births_arr, deaths_arr, brate_arr, drate_arr, avg_offspring_arr, avg_lifetime_distance_arr,
+        max_lifetime_distance_arr, corr_offspring_lifetime_arr, avg_body_temp_arr, avg_abs_temp_delta_arr;
     alive_arr.resize(count);
     dead_arr.resize(count);
     glucose_arr.resize(count);
@@ -642,6 +663,12 @@ void ImGuiLayer::build_charts() {
     deaths_arr.resize(count);
     brate_arr.resize(count);
     drate_arr.resize(count);
+    avg_offspring_arr.resize(count);
+    avg_lifetime_distance_arr.resize(count);
+    max_lifetime_distance_arr.resize(count);
+    corr_offspring_lifetime_arr.resize(count);
+    avg_body_temp_arr.resize(count);
+    avg_abs_temp_delta_arr.resize(count);
 
     for (int i = 0; i < count; ++i) {
         const auto& r = history[static_cast<std::size_t>(i * step)];
@@ -658,7 +685,15 @@ void ImGuiLayer::build_charts() {
         deaths_arr[i] = static_cast<float>(r.total_deaths);
         brate_arr[i] = static_cast<float>(r.birth_rate_per_sec);
         drate_arr[i] = static_cast<float>(r.death_rate_per_sec);
+        avg_offspring_arr[i] = static_cast<float>(r.avg_offspring_count);
+        avg_lifetime_distance_arr[i] = static_cast<float>(r.avg_lifetime_distance);
+        max_lifetime_distance_arr[i] = static_cast<float>(r.max_lifetime_distance);
+        corr_offspring_lifetime_arr[i] = static_cast<float>(r.corr_offspring_lifetime);
+        avg_body_temp_arr[i] = static_cast<float>(r.avg_body_temperature);
+        avg_abs_temp_delta_arr[i] = static_cast<float>(r.avg_abs_temp_delta_opt);
     }
+
+    const ImU32 ref_color = IM_COL32(255, 60, 60, 255);
 
     ImGui::Text("Alive pop over time");
     ImGui::PlotLines("##alive", alive_arr.data(), count, 0, nullptr, 0.f, FLT_MAX, ImVec2(-1.f, 60.f));
@@ -698,6 +733,59 @@ void ImGuiLayer::build_charts() {
 
     ImGui::Text("Death rate (per sec)");
     ImGui::PlotLines("##drate", drate_arr.data(), count, 0, nullptr, 0.f, FLT_MAX, ImVec2(-1.f, 60.f));
+
+    ImGui::Text("Avg offspring count (alive)");
+    ImGui::PlotLines("##avg_offspring", avg_offspring_arr.data(), count, 0, nullptr, 0.f, FLT_MAX, ImVec2(-1.f, 60.f));
+
+    ImGui::Text("Avg lifetime distance (alive)");
+    float avg_lifetime_distance_max = 1.0f;
+    float max_possible_avg_distance = 1.0f;
+    for (int i = 0; i < count; ++i) {
+        avg_lifetime_distance_max = std::max(avg_lifetime_distance_max, avg_lifetime_distance_arr[i]);
+        max_possible_avg_distance = std::max(max_possible_avg_distance, max_lifetime_distance_arr[i]);
+    }
+    const float avg_lifetime_plot_max = std::max(avg_lifetime_distance_max, max_possible_avg_distance);
+    ImGui::PlotLines("##avg_lifetime_distance", avg_lifetime_distance_arr.data(), count, 0, nullptr, 0.f,
+                     avg_lifetime_plot_max, ImVec2(-1.f, 60.f));
+    char avg_distance_ref_label[96];
+    /* std::snprintf(avg_distance_ref_label, sizeof(avg_distance_ref_label), "max =%.2f",
+                  max_possible_avg_distance); */
+    draw_horizontal_reference_line(max_possible_avg_distance, 0.f, avg_lifetime_plot_max, nullptr, ref_color);
+
+    ImGui::Text("Max lifetime distance (alive)");
+    ImGui::PlotLines("##max_lifetime_distance", max_lifetime_distance_arr.data(), count, 0, nullptr, 0.f, FLT_MAX,
+                     ImVec2(-1.f, 60.f));
+
+    ImGui::Text("Corr(offspring, lifetime_distance)");
+    ImGui::PlotLines("##corr_offspring_lifetime", corr_offspring_lifetime_arr.data(), count, 0, nullptr, -1.f, 1.f,
+                     ImVec2(-1.f, 60.f));
+    ImGui::TextDisabled(
+        "Interpretazione: +1 correlazione positiva forte, 0 assenza di relazione lineare, -1 correlazione inversa "
+        "forte (non implica causalita').");
+
+    ImGui::Text("Avg body temperature (alive)");
+    float avg_body_temp_max = 1.0f;
+    for (int i = 0; i < count; ++i) {
+        avg_body_temp_max = std::max(avg_body_temp_max, avg_body_temp_arr[i]);
+    }
+    float opt_temp_ref = 37.0f;
+    const auto chart_snap = agents_.get_pops_snapshot();
+    if (!chart_snap.empty()) {
+        double opt_sum = 0.0;
+        for (const auto& pop : chart_snap) {
+            opt_sum += pop.opt_temperature;
+        }
+        opt_temp_ref = static_cast<float>(opt_sum / static_cast<double>(chart_snap.size()));
+    }
+    const float avg_body_temp_plot_max = std::max(avg_body_temp_max, opt_temp_ref);
+    ImGui::PlotLines("##avg_body_temp", avg_body_temp_arr.data(), count, 0, nullptr, 0.f, avg_body_temp_plot_max,
+                     ImVec2(-1.f, 60.f));
+    // std::snprintf(opt_temp_label, sizeof(opt_temp_label), "opt=%.2f", opt_temp_ref);
+    draw_horizontal_reference_line(opt_temp_ref, 0.f, avg_body_temp_plot_max, nullptr, ref_color);
+
+    ImGui::Text("Avg |temperature - opt_temp| (alive)");
+    ImGui::PlotLines("##avg_abs_temp_delta", avg_abs_temp_delta_arr.data(), count, 0, nullptr, 0.f, FLT_MAX,
+                     ImVec2(-1.f, 60.f));
 
     const auto& latest = history.back();
     ImGui::Separator();
@@ -739,6 +827,12 @@ void ImGuiLayer::build_end_modal() {
         ImGui::Text("Avg reproduction loss (active): %.4f", s.avg_reproduction_energy_loss_active);
         ImGui::Text("Avg respiration gain (active): %.4f", s.avg_respiration_energy_gain_active);
         ImGui::Text("Avg thermoreg loss (active): %.4f", s.avg_thermoregolation_energy_loss_active);
+        ImGui::Text("Avg offspring count (active): %.4f", s.avg_offspring_count);
+        ImGui::Text("Avg lifetime distance (active): %.4f", s.avg_lifetime_distance);
+        ImGui::Text("Max lifetime distance: %.4f", s.max_lifetime_distance);
+        ImGui::Text("Avg corr offspring-distance: %.4f", s.avg_corr_offspring_lifetime);
+        ImGui::Text("Avg body temperature (active): %.4f", s.avg_body_temperature);
+        ImGui::Text("Avg |temperature-opt| (active): %.4f", s.avg_abs_temp_delta_opt);
 
         ImGui::Separator();
         ImGui::Text("Last organics:");

@@ -33,6 +33,12 @@ struct TickRecord {
     double avg_reproduction_energy_loss_active = 0.0;
     double avg_respiration_energy_gain_active = 0.0;
     double avg_thermoregolation_energy_loss_active = 0.0;
+    double avg_offspring_count = 0.0;
+    double avg_lifetime_distance = 0.0;
+    double max_lifetime_distance = 0.0;
+    double corr_offspring_lifetime = 0.0;
+    double avg_body_temperature = 0.0;
+    double avg_abs_temp_delta_opt = 0.0;
 };
 
 ///--------------------------------------------------------------------------
@@ -58,6 +64,12 @@ struct SessionSummary {
     double avg_reproduction_energy_loss_active = 0.0;
     double avg_respiration_energy_gain_active = 0.0;
     double avg_thermoregolation_energy_loss_active = 0.0;
+    double avg_offspring_count = 0.0;
+    double avg_lifetime_distance = 0.0;
+    double max_lifetime_distance = 0.0;
+    double avg_corr_offspring_lifetime = 0.0;
+    double avg_body_temperature = 0.0;
+    double avg_abs_temp_delta_opt = 0.0;
 };
 
 ///--------------------------------------------------------------------------

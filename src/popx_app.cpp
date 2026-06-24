@@ -27,7 +27,7 @@ void PopXApp::run() {
     running_token_ = true;
 
     const sf::Time fixed_dt = sf::milliseconds(10);
-    constexpr int stats_interval = 100; ///< record stats every N ticks
+    constexpr int stats_interval = 200; ///< record stats every N ticks
 
     sf::Clock clock;
     sf::Time accumulator = sf::Time::Zero;

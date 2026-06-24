@@ -95,3 +95,35 @@ double RandomUtility::evaluate_rbf_set(const RBFSet& rbf_set, double x, double y
     }
     return result;
 }
+
+RBFSet RandomUtility::rotate_rbf_set(const RBFSet& rbf_set, unsigned int tick, unsigned int radius, double center_x,
+                                     double center_y) {
+    RBFSet moved_set = rbf_set;
+
+    if (radius == 0U || moved_set.data.empty()) {
+        return moved_set;
+    }
+
+    // Keep the same recalc cadence in GridWorld, but make each update move only a tiny amount.
+    // We move along a circle using the incremental delta between consecutive angles.
+    constexpr double kAngularStepPerUpdate = 0.009; // 0.0025;
+    const double angle_now = static_cast<double>(tick) * kAngularStepPerUpdate;
+    const double angle_prev = static_cast<double>(tick > 0U ? tick - 1U : 0U) * kAngularStepPerUpdate;
+
+    const double dtheta = angle_now - angle_prev;
+    const double cos_dt = std::cos(dtheta);
+    const double sin_dt = std::sin(dtheta);
+
+    for (auto& gbf : moved_set.data) {
+        const double rel_x = gbf.mean_x - center_x;
+        const double rel_y = gbf.mean_y - center_y;
+
+        gbf.mean_x = center_x + (rel_x * cos_dt - rel_y * sin_dt);
+        gbf.mean_y = center_y + (rel_x * sin_dt + rel_y * cos_dt);
+
+        gbf.stddev_x = gbf.stddev_x + cos_dt * 0.01;
+        gbf.stddev_y = gbf.stddev_y + sin_dt * 0.01;
+    }
+
+    return moved_set;
+}

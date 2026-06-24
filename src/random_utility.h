@@ -27,6 +27,9 @@ class RandomUtility : public IRandom {
     double evaluate_gaussian(const GaussianBaseFunction& gbf, double x, double y) override;
     double evaluate_rbf_set(const RBFSet& rbf_set, double x, double y) override;
 
+    RBFSet rotate_rbf_set(const RBFSet& rbf_set, unsigned int tick, unsigned int radius, double center_x,
+                          double center_y) override;
+
   private:
     std::mt19937 mt_;
 };

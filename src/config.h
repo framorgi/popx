@@ -53,6 +53,7 @@ struct ConfigParams {
     double phy_init_temperature = 25.0;
     double phy_opt_temperature = 37.0;
     double phy_photo_min_elevation = 30.0;
+    double phy_efficiency_half_range_c = 10.0;
 
     // New generation controls
     bool newgen_enabled = false;
@@ -108,6 +109,7 @@ class Config : public IConfig {
     double get_phy_init_temperature() const override;
     double get_phy_opt_temperature() const override;
     double get_phy_photo_min_elevation() const override;
+    double get_phy_efficiency_half_range_c() const override;
 
     bool get_newgen_enabled() const override;
     unsigned get_newgen_interval_ticks() const override;

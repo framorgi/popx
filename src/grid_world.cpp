@@ -2,7 +2,6 @@
 
 #include "cell.h"
 #include "common.h"
-#include "i_random.h"
 #include "random_utility.h"
 
 GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger) : width_(w), height_(h), logger_(logger) {
@@ -17,38 +16,38 @@ void GridWorld::init() {
     RandomUtility random_util;
 
     /// Generate a random RBF set for temperature
-    RBFSet temp_rbf_set = random_util.rnd_rbf_set(10, 5.0, 100.0, 0.0, static_cast<double>(width_), 0.0,
-                                                  static_cast<double>(height_), 6.0, 20.0, 6.0, 20.0);
+    temp_rbf_set_ = random_util.rnd_rbf_set(10, 5.0, 100.0, 0.0, static_cast<double>(width_), 0.0,
+                                            static_cast<double>(height_), 6.0, 20.0, 6.0, 20.0);
 
     /// Generate a random RBF set for elevation
-    RBFSet elevation_rbf_set = random_util.rnd_symmetric_rbf_set(20, 5.0, 100.0, 0.0, static_cast<double>(width_), 0.0,
-                                                                 static_cast<double>(height_), 0.0, 20.0);
+    elevation_rbf_set_ = random_util.rnd_symmetric_rbf_set(20, 5.0, 100.0, 0.0, static_cast<double>(width_), 0.0,
+                                                           static_cast<double>(height_), 0.0, 20.0);
 
     /// Generate a random RBF set for glucose distribution
-    RBFSet glucose_rbf_set = random_util.rnd_rbf_set(35, MaxC6h12o6 / 8, MaxC6h12o6, 0, static_cast<double>(width_),
-                                                     0.0, static_cast<double>(height_), 5.0, 20.0, 5.0, 10.0);
+    glucose_rbf_set_ = random_util.rnd_rbf_set(35, MaxC6h12o6 / 8, MaxC6h12o6, 0, static_cast<double>(width_), 0.0,
+                                               static_cast<double>(height_), 5.0, 20.0, 5.0, 10.0);
 
     /// Generate a random RBF set for water distribution
-    RBFSet water_rbf_set = random_util.rnd_rbf_set(35, MaxH2o / 8, MaxH2o, 0, static_cast<double>(width_), 0.0,
-                                                   static_cast<double>(height_), 5.0, 20.0, 5.0, 10.0);
+    water_rbf_set_ = random_util.rnd_rbf_set(35, MaxH2o / 8, MaxH2o, 0, static_cast<double>(width_), 0.0,
+                                             static_cast<double>(height_), 5.0, 20.0, 5.0, 10.0);
     ///
     ///
     for (int y = 0; y < height_; ++y) {
         for (int x = 0; x < width_; ++x) {
             cells_[index(x, y)]->set_occupant(std::weak_ptr<IEntity>());
             double temp_value =
-                random_util.evaluate_rbf_set(temp_rbf_set, static_cast<double>(x), static_cast<double>(y));
+                random_util.evaluate_rbf_set(temp_rbf_set_, static_cast<double>(x), static_cast<double>(y));
             cells_[index(x, y)]->set_temperature((temp_value));
             double elevation_value =
-                random_util.evaluate_rbf_set(elevation_rbf_set, static_cast<double>(x), static_cast<double>(y));
+                random_util.evaluate_rbf_set(elevation_rbf_set_, static_cast<double>(x), static_cast<double>(y));
             cells_[index(x, y)]->set_elevation((elevation_value));
 
             auto glucose_value = static_cast<unsigned>(
-                random_util.evaluate_rbf_set(glucose_rbf_set, static_cast<double>(x), static_cast<double>(y)));
+                random_util.evaluate_rbf_set(glucose_rbf_set_, static_cast<double>(x), static_cast<double>(y)));
             cells_[index(x, y)]->set_glucose((glucose_value));
 
             auto water_value = static_cast<unsigned>(
-                random_util.evaluate_rbf_set(water_rbf_set, static_cast<double>(x), static_cast<double>(y)));
+                random_util.evaluate_rbf_set(water_rbf_set_, static_cast<double>(x), static_cast<double>(y)));
             cells_[index(x, y)]->set_water((water_value));
         }
     }
@@ -130,6 +129,22 @@ bool GridWorld::update_cycle() {
     for (auto& cell : cells_) {
         cell->update();
     }
+    if (environment_tick_counter_ % TemperatureRefreshInterval == 0) {
+        RandomUtility random_util;
+        const double center_x = static_cast<double>(width_) * 0.5;
+        const double center_y = static_cast<double>(height_) * 0.5;
+        temp_rbf_set_ =
+            random_util.rotate_rbf_set(temp_rbf_set_, rotation_tick_counter_, height_ / 6, center_x, center_y);
+        for (int y = 0; y < height_; ++y) {
+            for (int x = 0; x < width_; ++x) {
+                double temp_value =
+                    random_util.evaluate_rbf_set(temp_rbf_set_, static_cast<double>(x), static_cast<double>(y));
+                cells_[index(x, y)]->set_temperature((temp_value));
+            }
+        }
+        rotation_tick_counter_++;
+    }
+    environment_tick_counter_++;
     return true;
 }
 

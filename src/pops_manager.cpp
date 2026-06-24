@@ -391,6 +391,7 @@ std::vector<PopSnapshot> PopsManager::get_pops_snapshot() const {
         PopSnapshot s;
         s.pop_id = pop->get_pop_id();
         s.age = pop->get_age();
+        s.lifetime_distance = pop->get_lifetime_distance();
         s.energy = pop->get_energy();
         s.pos = pop->get_position();
         s.mitochondrions = pop->get_phy().mitochondrions;
@@ -398,6 +399,7 @@ std::vector<PopSnapshot> PopsManager::get_pops_snapshot() const {
         s.sensitiveness = pop->get_phy().sensitiveness;
         s.adipose_stock_max = pop->get_phy().adipose_stock_max;
         s.body_temperature = pop->get_body_temperature();
+        s.opt_temperature = pop->get_opt_temperature();
         s.glucose = pop->get_glucose();
         s.water = pop->get_water();
         s.o2 = pop->get_o2();

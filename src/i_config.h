@@ -53,6 +53,7 @@ class IConfig {
     virtual double get_phy_init_temperature() const = 0;
     virtual double get_phy_opt_temperature() const = 0;
     virtual double get_phy_photo_min_elevation() const = 0;
+    virtual double get_phy_efficiency_half_range_c() const = 0;
 
     // --- New generation controls ---------------------------------------------
     virtual bool get_newgen_enabled() const = 0;

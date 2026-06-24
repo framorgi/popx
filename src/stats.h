@@ -52,5 +52,11 @@ class Stats : public IStats {
     double total_reproduction_energy_loss_active_ = 0.0;
     double total_respiration_energy_gain_active_ = 0.0;
     double total_thermoregolation_energy_loss_active_ = 0.0;
+    double total_offspring_count_ = 0.0;
+    double total_lifetime_distance_ = 0.0;
+    double max_lifetime_distance_ = 0.0;
+    double total_corr_offspring_lifetime_ = 0.0;
+    double total_body_temperature_ = 0.0;
+    double total_abs_temp_delta_opt_ = 0.0;
     std::size_t rate_window_samples_ = 10;
 };
