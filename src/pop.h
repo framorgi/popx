@@ -9,9 +9,11 @@
 #include "neuron.h"
 #include "random_utility.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <type_traits>
 
@@ -63,6 +65,8 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
 
     /// @brief Serialises brain weights to JSON with the given generation stamp.
     void serialize_brain(unsigned generation) const;
+    nlohmann::json telemetry(bool detailed = false) const;
+    nlohmann::json brain_snapshot() const;
     ///---------------------------------------------------------------------------
     /// @brief Initializes the Pop entity (sets initial stats, behaviors, etc.).
     ///---------------------------------------------------------------------------
@@ -318,6 +322,9 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// ---------------------------------------------------------------------------
     /// @brief Unique string identifier for this Pop instance.
     /// ---------------------------------------------------------------------------
+    std::array<uint64_t, 23> action_requests_{};
+    std::array<uint64_t, 6> acquired_{}, released_{};
+    uint64_t movement_attempts_ = 0, movement_successes_ = 0;
     std::string pop_id_;
 
     /// @brief Birth provenance for scientific diagnostics (empty for founders).

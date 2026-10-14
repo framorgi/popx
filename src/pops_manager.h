@@ -3,15 +3,17 @@
 #include "i_agents_manager.h"
 #include "i_config.h"
 #include "i_logger.h"
+#include "i_stats.h"
 #include "pop.h"
 #include "random_utility.h"
+
+#include <tbb/task_arena.h>
 
 #include <deque>
 #include <memory>
 #include <string>
 #include <unordered_set>
 #include <vector>
-#include <tbb/task_arena.h>
 class PopsManager : public IAgentsManager {
   public:
     PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config);
@@ -22,13 +24,13 @@ class PopsManager : public IAgentsManager {
     void update_cycle() override;
 
     [[nodiscard]] int get_alive_count() const override;
-    [[nodiscard]] int get_dead_count() const override {
+    [[nodiscard]] uint64_t get_dead_count() const override {
         return dead_count_;
     }
-    [[nodiscard]] int get_total_births() const override {
+    [[nodiscard]] uint64_t get_total_births() const override {
         return total_births_;
     }
-    [[nodiscard]] int get_total_deaths() const override {
+    [[nodiscard]] uint64_t get_total_deaths() const override {
         return total_deaths_;
     }
     [[nodiscard]] bool get_forced_respawn_active() const override {
@@ -57,7 +59,14 @@ class PopsManager : public IAgentsManager {
     void trigger_new_generation() override;
     void reset_population_state() override;
 
+    void set_stats(std::shared_ptr<IStats> stats) {
+        stats_ = std::move(stats);
+    }
+    nlohmann::json telemetry(bool detailed) const;
+    nlohmann::json inspect(const std::string& id) const;
+
   private:
+    std::shared_ptr<IStats> stats_;
     // Narrow access for the standalone dynamic audit and its regression fixtures.
     friend class SimulationAudit;
 
@@ -67,9 +76,9 @@ class PopsManager : public IAgentsManager {
     std::shared_ptr<IConfig> config_;
     /// @brief Bounds concurrency of the read-only-world sense/think phases.
     tbb::task_arena phase_arena_;
-    int dead_count_ = 0;
-    int total_births_ = 0;
-    int total_deaths_ = 0;
+    uint64_t dead_count_ = 0;
+    uint64_t total_births_ = 0;
+    uint64_t total_deaths_ = 0;
     bool forced_respawn_active_ = false;
     unsigned generation_count_ = 0;
     uint64_t cycle_counter_ = 0;

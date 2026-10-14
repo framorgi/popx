@@ -11,7 +11,7 @@
 #include <cmath>
 
 namespace {
-std::atomic<unsigned> s_pop_counter{0};
+std::atomic<uint64_t> s_pop_counter{0};
 }
 constexpr float move_cost = 0.01f;
 constexpr float basal_metabolism_cost = 0.02f;
@@ -46,11 +46,7 @@ Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shar
     inherit_phy_ = true;
     init();
 }
-Pop::~Pop() {
-    if (config_->get_brain_serialization_enabled()) {
-        brain_->remove_serialization(pop_id_);
-    }
-}
+Pop::~Pop() = default;
 
 void Pop::init() {
     const bool inherit_phy = inherit_phy_;
@@ -96,7 +92,10 @@ void Pop::init() {
     lipids_ = std::min(lipids_, phy_.adipose_stock_max);
     sensor_values_.assign(brain_->get_size_s(), 0.0f);
     brain_->wire(genome_);
-    serialize_brain(0);
+    action_requests_.fill(0);
+    acquired_.fill(0);
+    released_.fill(0);
+    movement_attempts_ = movement_successes_ = 0;
 }
 
 void Pop::die() {
@@ -106,18 +105,38 @@ void Pop::die() {
     auto world = world_.lock();
     if (world) {
         auto cell = world->get_cell(pos_);
-        glucose_ -= cell->give_glucose(glucose_);
-        water_ -= cell->give_water(water_);
-        o2_ -= cell->give_o2(o2_);
-        co2_ -= cell->give_co2(co2_);
-        calcium_ -= cell->give_calcium(calcium_);
-        lipids_ -= cell->give_lipids(lipids_);
+        {
+            const auto accepted = cell->give_glucose(glucose_);
+            glucose_ -= accepted;
+            released_[0] += accepted;
+        }
+        {
+            const auto accepted = cell->give_water(water_);
+            water_ -= accepted;
+            released_[1] += accepted;
+        }
+        {
+            const auto accepted = cell->give_o2(o2_);
+            o2_ -= accepted;
+            released_[4] += accepted;
+        }
+        {
+            const auto accepted = cell->give_co2(co2_);
+            co2_ -= accepted;
+            released_[3] += accepted;
+        }
+        {
+            const auto accepted = cell->give_calcium(calcium_);
+            calcium_ -= accepted;
+            released_[2] += accepted;
+        }
+        {
+            const auto accepted = cell->give_lipids(lipids_);
+            lipids_ -= accepted;
+            released_[5] += accepted;
+        }
     }
     alive_ = false;
-    // remove serialized brain file for this pop
-    if (config_->get_brain_serialization_enabled() && !brain_->remove_serialization(pop_id_)) {
-        logger_->error("Failed to remove serialized brain file for Pop with ID: " + pop_id_);
-    }
 }
 
 bool Pop::try_spawn(PositionT p) {
@@ -490,6 +509,10 @@ void Pop::act() {
         return;
     }
 
+    ++action_requests_[last_action_];
+    if (last_action_ < 8)
+        ++movement_attempts_;
+    const double distance_before = lifetime_distance_;
     PositionT p = pos_;
     auto world = world_.lock();
 
@@ -563,33 +586,57 @@ void Pop::act() {
         // ── resource acquisition ────────────────────────────────────────────
         case Action::GET_GLUCOSE:
             if (world) {
-                glucose_ += world->get_cell(pos_)->take_glucose(10);
+                {
+                    const auto accepted = world->get_cell(pos_)->take_glucose(10);
+                    glucose_ += accepted;
+                    acquired_[0] += accepted;
+                }
             }
             break;
         case Action::LEAVE_GLUCOSE:
             if (world) {
-                glucose_ -= world->get_cell(pos_)->give_glucose(std::min(10u, glucose_));
+                {
+                    const auto accepted = world->get_cell(pos_)->give_glucose(std::min(10u, glucose_));
+                    glucose_ -= accepted;
+                    released_[0] += accepted;
+                }
             }
             break;
         case Action::GET_H2O:
             if (world) {
-                water_ += world->get_cell(pos_)->take_water(10);
+                {
+                    const auto accepted = world->get_cell(pos_)->take_water(10);
+                    water_ += accepted;
+                    acquired_[1] += accepted;
+                }
             }
             break;
 
         case Action::LEAVE_H2O:
             if (world) {
-                water_ -= world->get_cell(pos_)->give_water(std::min(10u, water_));
+                {
+                    const auto accepted = world->get_cell(pos_)->give_water(std::min(10u, water_));
+                    water_ -= accepted;
+                    released_[1] += accepted;
+                }
             }
             break;
         case Action::GET_CALCIUM:
             if (world) {
-                calcium_ += world->get_cell(pos_)->take_calcium(10);
+                {
+                    const auto accepted = world->get_cell(pos_)->take_calcium(10);
+                    calcium_ += accepted;
+                    acquired_[2] += accepted;
+                }
             }
             break;
         case Action::LEAVE_CALCIUM:
             if (world) {
-                calcium_ -= world->get_cell(pos_)->give_calcium(std::min(10u, calcium_));
+                {
+                    const auto accepted = world->get_cell(pos_)->give_calcium(std::min(10u, calcium_));
+                    calcium_ -= accepted;
+                    released_[2] += accepted;
+                }
             }
             break;
         case Action::BURN_CALORIES:
@@ -624,6 +671,8 @@ void Pop::act() {
             break;
         }
     }
+    if (lifetime_distance_ > distance_before)
+        ++movement_successes_;
 }
 
 bool Pop::try_move(PositionT p) {
@@ -776,13 +825,36 @@ void Pop::update_physiology() {
         return;
 
     // Auto-take resources from current cell
-    glucose_ += world->get_cell(pos_)->take_glucose(5);
-    water_ += world->get_cell(pos_)->take_water(5);
-    calcium_ += world->get_cell(pos_)->take_calcium(2);
-    co2_ += world->get_cell(pos_)->take_co2(5);
-    if (lipids_ < phy_.adipose_stock_max)
-        lipids_ += world->get_cell(pos_)->take_lipids(1);
-    o2_ += world->get_cell(pos_)->take_o2(5);
+    {
+        const auto accepted = world->get_cell(pos_)->take_glucose(5);
+        glucose_ += accepted;
+        acquired_[0] += accepted;
+    }
+    {
+        const auto accepted = world->get_cell(pos_)->take_water(5);
+        water_ += accepted;
+        acquired_[1] += accepted;
+    }
+    {
+        const auto accepted = world->get_cell(pos_)->take_calcium(2);
+        calcium_ += accepted;
+        acquired_[2] += accepted;
+    }
+    {
+        const auto accepted = world->get_cell(pos_)->take_co2(5);
+        co2_ += accepted;
+        acquired_[3] += accepted;
+    }
+    if (lipids_ < phy_.adipose_stock_max) {
+        const auto accepted = world->get_cell(pos_)->take_lipids(1);
+        lipids_ += accepted;
+        acquired_[5] += accepted;
+    }
+    {
+        const auto accepted = world->get_cell(pos_)->take_o2(5);
+        o2_ += accepted;
+        acquired_[4] += accepted;
+    }
 
     // Biological reactions
     run_chloroplasts();
@@ -832,14 +904,13 @@ void Pop::run_chloroplasts() {
 }
 
 void Pop::run_mitochondrions() {
-    const double target = std::clamp(config_->get_phy_respiration_energy_target(), 0.0,
-                                     static_cast<double>(MaxEnergy));
+    const double target = std::clamp(config_->get_phy_respiration_energy_target(), 0.0, static_cast<double>(MaxEnergy));
     const double band = config_->get_phy_respiration_demand_band();
     const double width = config_->get_phy_efficiency_half_range_c();
     const double optimum = config_->get_phy_opt_temperature();
-    if (glucose_ == 0 || o2_ == 0 || phy_.mitochondrions == 0 || energy_ >= target ||
-        !std::isfinite(energy_) || !std::isfinite(temperature_) || !std::isfinite(target) ||
-        !std::isfinite(band) || band <= 0.0 || !std::isfinite(width) || width <= 0.0 || !std::isfinite(optimum)) {
+    if (glucose_ == 0 || o2_ == 0 || phy_.mitochondrions == 0 || energy_ >= target || !std::isfinite(energy_) ||
+        !std::isfinite(temperature_) || !std::isfinite(target) || !std::isfinite(band) || band <= 0.0 ||
+        !std::isfinite(width) || width <= 0.0 || !std::isfinite(optimum)) {
         respiration_credit_ = 0.0;
         return;
     }
@@ -859,8 +930,8 @@ void Pop::run_mitochondrions() {
     const double demand = std::clamp((target - energy_) / band, 0.0, 1.0);
     const double capacity = static_cast<double>(phy_.mitochondrions);
     respiration_credit_ = std::min(capacity, respiration_credit_ + capacity * demand * thermal_activity);
-    const unsigned reactions = static_cast<unsigned>(std::min(
-        std::floor(respiration_credit_), static_cast<double>(std::min(glucose_, o2_))));
+    const unsigned reactions =
+        static_cast<unsigned>(std::min(std::floor(respiration_credit_), static_cast<double>(std::min(glucose_, o2_))));
     // Discard unfulfilled whole capacity when substrate-limited: no catch-up burst.
     respiration_credit_ -= std::floor(respiration_credit_);
 
@@ -884,8 +955,11 @@ void Pop::run_mitochondrions() {
     // Release produced CO2 into the cell
     if (co2_produced > 0) {
         auto world = world_.lock();
-        if (world)
-            co2_ -= world->get_cell(pos_)->give_co2(co2_produced);
+        if (world) {
+            const auto accepted = world->get_cell(pos_)->give_co2(co2_produced);
+            co2_ -= accepted;
+            released_[3] += accepted;
+        }
     }
 }
 
@@ -928,4 +1002,59 @@ void Pop::change_energy(float delta) {
     const double before = energy_;
     energy_ += delta;
     total_energy_roundoff_ += static_cast<double>(energy_) - before - static_cast<double>(delta);
+}
+
+nlohmann::json Pop::telemetry(bool detailed) const {
+    static const char* causes[] = {"external", "energy", "age", "temperature"};
+    nlohmann::json result = {{"pop_id", pop_id_},
+                             {"parent_id", parent_id_},
+                             {"forced", birth_was_forced_},
+                             {"alive", alive_},
+                             {"age", age_},
+                             {"position", {pos_.x, pos_.y}},
+                             {"death_cause", causes[static_cast<int>(death_cause_)]},
+                             {"resources", {glucose_, water_, calcium_, co2_, o2_, lipids_}},
+                             {"actions", action_requests_},
+                             {"acquired", acquired_},
+                             {"released", released_},
+                             {"traits",
+                              {{"mitochondria", phy_.mitochondrions},
+                               {"chloroplasts", phy_.chloroplasts},
+                               {"sensitiveness", phy_.sensitiveness},
+                               {"adipose_capacity", phy_.adipose_stock_max}}},
+                             {"totals",
+                              {{"energy", energy_},
+                               {"distance", lifetime_distance_},
+                               {"offspring", offspring_count_},
+                               {"movement_attempts", movement_attempts_},
+                               {"movement_successes", movement_successes_},
+                               {"respirations", total_respiration_count_},
+                               {"photosynthesis", total_photosynthesis_count_},
+                               {"respiration_gain", total_respiration_energy_gain_},
+                               {"respiration_heat", total_respiration_heat_},
+                               {"metabolism_cost", total_metabolism_energy_loss_},
+                               {"movement_cost", total_movement_energy_loss_},
+                               {"pending_action_cost", energy_cost_},
+                               {"reproduction_cost", total_reproduction_energy_loss_},
+                               {"thermoregulation_cost", total_thermoregolation_energy_loss_},
+                               {"energy_cap", total_energy_cap_loss_},
+                               {"roundoff", total_energy_roundoff_},
+                               {"body_temperature", temperature_},
+                               {"abs_temp_delta", std::abs(temperature_ - config_->get_phy_opt_temperature())}}}};
+    if (detailed) {
+        result["genes"] = nlohmann::json::array();
+        for (const auto& gene : genome_.get_genes())
+            result["genes"].push_back({gene.get_source_type(), gene.get_source_num(), gene.get_sink_type(),
+                                       gene.get_sink_num(), gene.get_weight()});
+        result["last_action"] = last_action_;
+        result["sensors"] = sensor_values_;
+        result["reward"] = last_reward_;
+        result["direction"] = {last_direction_.x, last_direction_.y};
+        result["lazyness"] = lazyness_;
+        result["phase"] = static_cast<int>(next_phase_);
+    }
+    return result;
+}
+nlohmann::json Pop::brain_snapshot() const {
+    return brain_->snapshot();
 }

@@ -1,16 +1,18 @@
 #include "pops_manager.h"
 
+#include <tbb/parallel_for.h>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <tbb/parallel_for.h>
+#include <stdexcept>
 #include <utility>
 
 PopsManager::PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger,
                          std::shared_ptr<IConfig> config)
     : world_(std::move(world)), logger_(std::move(logger)), config_(std::move(config)),
-      phase_arena_(static_cast<int>(std::clamp(config_->get_num_threads(), 1u,
-                                             static_cast<unsigned>(std::numeric_limits<int>::max())))) {
+      phase_arena_(static_cast<int>(
+          std::clamp(config_->get_num_threads(), 1u, static_cast<unsigned>(std::numeric_limits<int>::max())))) {
     sense_bucket_.reserve(config_->get_start_population());
     think_bucket_.reserve(config_->get_start_population());
     act_bucket_.reserve(config_->get_start_population());
@@ -32,12 +34,33 @@ bool PopsManager::spawn_population() {
             act_bucket_.push_back(new_pop);
         }
     }
+    std::size_t available = 0;
+    for (int y = 0; y < world_->get_height(); ++y)
+        for (int x = 0; x < world_->get_width(); ++x)
+            available += world_->is_free({x, y});
+    if (available < pops_.size())
+        throw std::runtime_error("Not enough free cells for the population");
     for (auto& pop : pops_) {
         if (pop->is_alive()) {
             int w = random_util->rnd_int(0, world_->get_width());
             int h = random_util->rnd_int(0, world_->get_height());
             logger_->debug("Spawning agent at random position (" + std::to_string(w) + ", " + std::to_string(h) + ").");
+            unsigned attempts = 0;
             while (!(pop->try_spawn(PositionT{w, h}))) {
+                if (++attempts > 1000) {
+                    bool found = false;
+                    for (int y = 0; y < world_->get_height() && !found; ++y)
+                        for (int x = 0; x < world_->get_width(); ++x)
+                            if (world_->is_free({x, y})) {
+                                w = x;
+                                h = y;
+                                found = true;
+                                break;
+                            }
+                    if (!found)
+                        throw std::runtime_error("No free spawn cell");
+                    continue;
+                }
                 logger_->debug("Position (" + std::to_string(w) + ", " + std::to_string(h) +
                                ") is occupied. Retrying...");
                 w = random_util->rnd_int(0, world_->get_width());
@@ -46,6 +69,8 @@ bool PopsManager::spawn_population() {
 
             pop->init();
             ++total_births_;
+            if (stats_)
+                stats_->record_event({LifeEvent::Founder, pop->telemetry(true)});
             logger_->info("Agent spawned successfully at position (" + std::to_string(w) + ", " + std::to_string(h) +
                           ").");
 
@@ -95,6 +120,8 @@ void PopsManager::update_cycle() {
 
     for (auto& pop : pops_) {
         if (!pop->is_alive()) {
+            if (stats_)
+                stats_->record_event({LifeEvent::Death, pop->telemetry(false)});
             world_->remove_entity(pop);
             ++dead_count_;
             ++total_deaths_;
@@ -256,6 +283,8 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
                            std::to_string(pp.y) + ").");
             parent->increment_offspring_count();
             ++total_births_;
+            if (stats_)
+                stats_->record_event({LifeEvent::Birth, child->telemetry(true)});
 
             logger_->debug("Offspring spawned at (" + std::to_string(candidate.x) + "," + std::to_string(candidate.y) +
                            ") from parent at (" + std::to_string(pp.x) + "," + std::to_string(pp.y) + ").");
@@ -313,6 +342,8 @@ void PopsManager::trigger_new_generation() {
     // preserving local resource access, signals and pending sense/think decisions.
     for (std::size_t i = static_cast<std::size_t>(survivors_n); i < alive.size(); ++i) {
         alive[i]->die();
+        if (stats_)
+            stats_->record_event({LifeEvent::Cull, alive[i]->telemetry(false)});
         world_->remove_entity(alive[i]);
     }
 
@@ -327,13 +358,6 @@ void PopsManager::trigger_new_generation() {
     clear_reproduction_backlog();
 
     ++generation_count_;
-    if (config_->get_brain_serialization_enabled()) {
-        for (const auto& pop : pops_) {
-            if (pop) {
-                pop->serialize_brain(generation_count_);
-            }
-        }
-    }
 
     logger_->info("NewGen applied. generation=" + std::to_string(generation_count_) +
                   " survivors=" + std::to_string(pops_.size()) + " dead_total=" + std::to_string(dead_count_));
@@ -399,4 +423,20 @@ std::vector<PopSnapshot> PopsManager::get_pops_snapshot() const {
         snaps.push_back(s);
     }
     return snaps;
+}
+nlohmann::json PopsManager::telemetry(bool detailed) const {
+    auto result = nlohmann::json::array();
+    for (const auto& pop : pops_)
+        if (pop->is_alive())
+            result.push_back(pop->telemetry(detailed));
+    return result;
+}
+nlohmann::json PopsManager::inspect(const std::string& id) const {
+    for (const auto& pop : pops_)
+        if (pop->is_alive() && pop->get_pop_id() == id) {
+            auto result = pop->telemetry(true);
+            result["brain"] = pop->brain_snapshot();
+            return result;
+        }
+    throw std::runtime_error("Agent is no longer alive");
 }

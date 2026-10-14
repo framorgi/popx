@@ -2,7 +2,9 @@
 #include "common.h"
 #include "i_cell.h"
 
+#include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 class IEntity;
@@ -10,6 +12,9 @@ class IEntity;
 class IWorld {
   public:
     virtual ~IWorld() = default;
+    virtual std::pair<uint64_t, uint64_t> get_regeneration_totals() const {
+        return {0, 0};
+    }
     ///----------------------------------------------------------------------
     /// @brief Initialize the world
     ///----------------------------------------------------------------------

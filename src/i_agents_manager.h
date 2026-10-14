@@ -20,13 +20,13 @@ class IAgentsManager {
     [[nodiscard]] virtual int get_alive_count() const = 0;
 
     /// @brief Return the cumulative number of agents that have died since spawn.
-    [[nodiscard]] virtual int get_dead_count() const = 0;
+    [[nodiscard]] virtual uint64_t get_dead_count() const = 0;
 
     /// @brief Return the cumulative number of births since simulation start/restart.
-    [[nodiscard]] virtual int get_total_births() const = 0;
+    [[nodiscard]] virtual uint64_t get_total_births() const = 0;
 
     /// @brief Return the cumulative number of deaths since simulation start/restart.
-    [[nodiscard]] virtual int get_total_deaths() const = 0;
+    [[nodiscard]] virtual uint64_t get_total_deaths() const = 0;
 
     /// @brief Return a snapshot of all alive agents (copied; safe to read from GUI thread).
     [[nodiscard]] virtual std::vector<PopSnapshot> get_pops_snapshot() const = 0;

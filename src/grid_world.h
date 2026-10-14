@@ -150,7 +150,12 @@ class GridWorld : public IWorld {
     ///----------------------------------------------------------------------
     [[nodiscard]] OrganicsT get_total_organics() const override;
 
+    std::pair<uint64_t, uint64_t> get_regeneration_totals() const override {
+        return {glucose_regenerated_, oxygen_regenerated_};
+    }
+
   private:
+    uint64_t glucose_regenerated_ = 0, oxygen_regenerated_ = 0;
     ///----------------------------------------------------------------------
     /// @brief    Check if coordinates are within the bounds of the grid
     /// @param    x The x-coordinate

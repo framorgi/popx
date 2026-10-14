@@ -1,280 +1,296 @@
 #include "stats.h"
 
-#include <algorithm>
+#include "pops_manager.h"
+
 #include <cmath>
-#include <fstream>
-#include <nlohmann/json.hpp>
+#include <random>
 
-void Stats::begin_session() {
-    start_time_ = StatsClock::now();
-    session_active_ = true;
-    history_.clear();
-    history_.reserve(512);
-    peak_alive_ = 0;
-    current_generation_ = 0;
-    current_dead_ = 0;
-    total_births_ = 0;
-    total_deaths_ = 0;
-    total_tick_us_ = 0;
-    total_frame_us_ = 0;
-    total_birth_rate_ = 0.0;
-    total_death_rate_ = 0.0;
-    total_movement_energy_loss_active_ = 0.0;
-    total_metabolism_energy_loss_active_ = 0.0;
-    total_reproduction_energy_loss_active_ = 0.0;
-    total_respiration_energy_gain_active_ = 0.0;
-    total_thermoregolation_energy_loss_active_ = 0.0;
-    total_offspring_count_ = 0.0;
-    total_lifetime_distance_ = 0.0;
-    max_lifetime_distance_ = 0.0;
-    total_corr_offspring_lifetime_ = 0.0;
-    total_body_temperature_ = 0.0;
-    total_abs_temp_delta_opt_ = 0.0;
+using Json = nlohmann::json;
+namespace {
+Json empty_totals() {
+    return {{"energy", 0.0},
+            {"distance", 0.0},
+            {"offspring", 0.0},
+            {"movement_attempts", 0.0},
+            {"movement_successes", 0.0},
+            {"respirations", 0.0},
+            {"photosynthesis", 0.0},
+            {"respiration_gain", 0.0},
+            {"respiration_heat", 0.0},
+            {"metabolism_cost", 0.0},
+            {"movement_cost", 0.0},
+            {"pending_action_cost", 0.0},
+            {"reproduction_cost", 0.0},
+            {"thermoregulation_cost", 0.0},
+            {"energy_cap", 0.0},
+            {"roundoff", 0.0},
+            {"body_temperature", 0.0},
+            {"abs_temp_delta", 0.0}};
 }
-
-void Stats::end_session() {
-    if (!session_active_)
-        return;
-    end_time_ = StatsClock::now();
-    session_active_ = false;
+Json resources(const OrganicsT& o) {
+    return Json::array({o.c6h12o6, o.h2o, o.caco3, o.co2, o.o2, o.lipids});
 }
-
-void Stats::record_tick(uint64_t tick, unsigned generation, int alive, int dead, int total_births, int total_deaths,
-                        const OrganicsT& world_organics, const std::vector<PopSnapshot>& pops_snapshot,
-                        std::chrono::microseconds tick_dur) {
-    // Rolling window: when full, drop the oldest quarter to amortise the erase cost.
-    if (history_.size() >= kMaxHistory) {
-        const std::size_t drop = kMaxHistory / 4;
-        history_.erase(history_.begin(), history_.begin() + static_cast<std::ptrdiff_t>(drop));
+void add(Json& a, const Json& b) {
+    for (auto it = b.begin(); it != b.end(); ++it) {
+        if (it.value().is_number())
+            a[it.key()] = a.value(it.key(), 0.0) + it.value().get<double>();
     }
+}
+} // namespace
+Stats::Stats(std::unique_ptr<ICommunicator> communicator) : communicator_(std::move(communicator)) {}
+void Stats::record_session(SessionRecord session) {
+    auto metadata = std::move(session.metadata);
+    const auto stamp = std::chrono::system_clock::now().time_since_epoch().count();
+    run_id_ = std::to_string(stamp) + "-" + std::to_string(std::random_device{}());
+    tick_ = samples_ = frames_ = measured_ticks_ = 0;
+    tick_us_ = frame_us_ = frame_interval_us_ = 0;
+    latest_ = Json::object();
+    closed_ = empty_totals();
+    initial_ = Json::object();
+    sample_sums_ = empty_totals();
+    peak_alive_ = completed_age_ = 0;
+    peak_distance_ = correlation_sum_ = 0;
+    closed_["resources"] = Json::array({0, 0, 0, 0, 0, 0});
+    closed_["actions"] = std::vector<uint64_t>(23, 0);
+    closed_["acquired"] = Json::array({0, 0, 0, 0, 0, 0});
+    closed_["released"] = Json::array({0, 0, 0, 0, 0, 0});
+    counts_ = {{"founders", 0}, {"natural_births", 0}, {"forced_births", 0}, {"deaths", 0}, {"culled", 0}};
+    rate_history_.clear();
+    started_ = std::chrono::steady_clock::now();
+    cpu_started_ = std::clock();
+    metadata_ = std::move(metadata);
+    publish("session", metadata_);
+}
+void Stats::publish(const std::string& type, Json data) {
+    if (communicator_)
+        communicator_->send({{"type", type}, {"run_id", run_id_}, {"tick", tick_}, {"data", std::move(data)}});
+}
+void Stats::record_event(AgentEvent event) {
+    const std::string type(event_name(event.kind));
+    auto data = std::move(event.agent);
+    if (type == "founder" || type == "birth") {
+        const std::string key = type == "founder"             ? "founders"
+                                : data.value("forced", false) ? "forced_births"
+                                                              : "natural_births";
+        counts_[key] = counts_[key].get<uint64_t>() + 1;
+        peak_alive_ =
+            std::max(peak_alive_, counts_["founders"].get<uint64_t>() + counts_["natural_births"].get<uint64_t>() +
+                                      counts_["forced_births"].get<uint64_t>() - counts_["deaths"].get<uint64_t>());
+    } else if (type == "death" || type == "cull") {
+        counts_["deaths"] = counts_["deaths"].get<uint64_t>() + 1;
+        if (type == "cull")
+            counts_["culled"] = counts_["culled"].get<uint64_t>() + 1;
+        add(closed_, data["totals"]);
+        completed_age_ += data["age"].get<uint64_t>();
+        peak_distance_ = std::max(peak_distance_, data["totals"]["distance"].get<double>());
+        for (const auto* key : {"resources", "actions", "acquired", "released"})
+            for (std::size_t i = 0; i < data[key].size(); ++i)
+                closed_[key][i] = closed_[key][i].get<double>() + data[key][i].get<double>();
+        const auto cause = "death_cause_" + data.value("death_cause", std::string("unknown"));
+        counts_[cause] = counts_.value(cause, uint64_t(0)) + 1;
+    }
+    publish("event", {{"event_type", type}, {"agent", std::move(data)}});
+}
+void Stats::record_tick_cost(int64_t us) {
+    tick_us_ += us;
+    ++measured_ticks_;
+}
+void Stats::record_frame(int64_t us, int64_t interval) {
+    frame_us_ += us;
+    frame_interval_us_ += interval;
+    ++frames_;
+}
+void Stats::sample(uint64_t tick, const PopsManager& agents, const IWorld& world) {
+    const bool replace = samples_ > 0 && latest_.value("tick", uint64_t(0)) == tick;
+    const auto previous_averages = replace ? latest_["averages"] : Json::object();
+    const double previous_correlation = replace ? latest_.value("corr_offspring_distance_alive", 0.0) : 0.0;
+    if (replace && !rate_history_.empty())
+        rate_history_.pop_back();
 
-    TickRecord r;
-    r.tick = tick;
-    r.generation = generation;
-    r.alive = alive;
-    r.dead = dead;
-    r.total_births = total_births;
-    r.total_deaths = total_deaths;
-    r.world_organics = world_organics;
-    r.tick_duration_us = tick_dur.count();
-    r.frame_duration_us = last_frame_dur_us_;
-    r.fps = last_frame_dur_us_ > 0 ? (1'000'000.0 / static_cast<double>(last_frame_dur_us_)) : 0.0;
+    tick_ = tick;
+    auto live = agents.telemetry(false);
+    Json active = empty_totals();
+    auto all = closed_;
+    auto total_resources = resources(world.get_total_organics());
+    double max_distance = 0, offspring_sq = 0, distance_sq = 0, product = 0;
+    for (const auto& p : live) {
+        add(active, p["totals"]);
+        add(all, p["totals"]);
+        const double d = p["totals"]["distance"], o = p["totals"]["offspring"];
+        max_distance = std::max(max_distance, d);
+        offspring_sq += o * o;
+        distance_sq += d * d;
+        product += o * d;
+        for (std::size_t i = 0; i < 6; ++i)
+            total_resources[i] = total_resources[i].get<int64_t>() + p["resources"][i].get<int64_t>();
+        for (const auto* key : {"actions", "acquired", "released"})
+            for (std::size_t i = 0; i < p[key].size(); ++i)
+                all[key][i] = all[key][i].get<double>() + p[key][i].get<double>();
+    }
+    if (initial_.empty())
+        initial_ = {{"resources", total_resources}, {"energy", active["energy"]}};
+    const auto n = live.size();
+    Json averages = active;
+    for (auto it = averages.begin(); it != averages.end(); ++it)
+        it.value() = n ? it.value().get<double>() / n : 0;
+    const double vx = n ? offspring_sq / n - std::pow(averages["offspring"].get<double>(), 2) : 0;
+    const double vy = n ? distance_sq / n - std::pow(averages["distance"].get<double>(), 2) : 0;
+    const double correlation =
+        n && vx > 1e-12 && vy > 1e-12
+            ? (product / n - averages["offspring"].get<double>() * averages["distance"].get<double>()) /
+                  std::sqrt(vx * vy)
+            : 0;
+    const int64_t respiration = all["respirations"].get<int64_t>(), photo = all["photosynthesis"].get<int64_t>();
+    const auto regen = world.get_regeneration_totals();
+    const std::vector<int64_t> changes = {int64_t(regen.first) + photo - respiration,  -photo, 0, respiration - photo,
+                                          int64_t(regen.second) + photo - respiration, 0};
+    Json residual = Json::array();
+    for (std::size_t i = 0; i < 6; ++i)
+        residual.push_back(total_resources[i].get<int64_t>() - initial_["resources"][i].get<int64_t>() - changes[i] +
+                           closed_["resources"][i].get<int64_t>());
+    const double expected = all["respiration_gain"].get<double>() - all["metabolism_cost"].get<double>() -
+                            all["movement_cost"].get<double>() - all["reproduction_cost"].get<double>() -
+                            all["thermoregulation_cost"].get<double>() - all["energy_cap"].get<double>() -
+                            closed_["energy"].get<double>() + all["roundoff"].get<double>() +
+                            all["pending_action_cost"].get<double>();
+    const auto births = counts_["natural_births"].get<uint64_t>() + counts_["forced_births"].get<uint64_t>();
+    double birth_rate = 0, death_rate = 0;
+    if (!rate_history_.empty() && tick > rate_history_.front()["tick"].get<uint64_t>()) {
+        const auto& base = rate_history_.front();
+        const double seconds = (tick - base["tick"].get<uint64_t>()) * .01;
+        birth_rate = (births - base["births"].get<uint64_t>()) / seconds;
+        death_rate = (counts_["deaths"].get<uint64_t>() - base["deaths"].get<uint64_t>()) / seconds;
+    }
+    rate_history_.push_back({{"tick", tick}, {"births", births}, {"deaths", counts_["deaths"]}});
+    if (rate_history_.size() > 10)
+        rate_history_.pop_front();
+    latest_ = {{"tick", tick},
+               {"simulated_seconds", tick * .01},
+               {"wall_seconds", std::chrono::duration<double>(std::chrono::steady_clock::now() - started_).count()},
+               {"process_cpu_seconds", double(std::clock() - cpu_started_) / CLOCKS_PER_SEC},
+               {"alive", n},
+               {"generation", agents.get_generation_count()},
+               {"counts", counts_},
+               {"active", active},
+               {"averages", averages},
+               {"totals", all},
+               {"world_resources", resources(world.get_total_organics())},
+               {"world_nitrogen", world.get_total_organics().n2},
+               {"max_distance_alive", max_distance},
+               {"corr_offspring_distance_alive", correlation},
+               {"birth_rate_simulated_second", birth_rate},
+               {"death_rate_simulated_second", death_rate},
+               {"backlog", agents.get_repro_backlog_size()},
+               {"backlog_peak", agents.get_repro_backlog_peak()},
+               {"backlog_dropped", agents.get_repro_dropped_total()},
+               {"reproduction_attempts_last_tick", agents.get_repro_processed_this_tick()},
+               {"avg_tick_us", measured_ticks_ ? double(tick_us_) / measured_ticks_ : 0},
+               {"avg_frame_us", frames_ ? double(frame_us_) / frames_ : 0},
+               {"fps", frame_interval_us_ ? frames_ * 1e6 / frame_interval_us_ : 0},
+               {"transport", transport_status()}};
+    if (replace) {
+        for (auto it = previous_averages.begin(); it != previous_averages.end(); ++it)
+            sample_sums_[it.key()] = sample_sums_[it.key()].get<double>() - it.value().get<double>();
+        correlation_sum_ -= previous_correlation;
+    } else
+        ++samples_;
+    peak_distance_ = std::max(peak_distance_, max_distance);
+    add(sample_sums_, averages);
+    correlation_sum_ += correlation;
+    auto means = sample_sums_;
+    for (auto it = means.begin(); it != means.end(); ++it)
+        it.value() = it.value().get<double>() / samples_;
+    means["corr_offspring_distance_alive"] = correlation_sum_ / samples_;
+    latest_["sample_means"] = std::move(means);
+    latest_["peak_alive"] = peak_alive_;
+    latest_["max_lifetime_distance"] = peak_distance_;
+    const auto completed = counts_["deaths"].get<uint64_t>();
+    latest_["completed_lives"] = {{"count", completed},
+                                  {"age_sum", completed_age_},
+                                  {"mean_age", completed ? double(completed_age_) / completed : 0},
+                                  {"mean_offspring", completed ? closed_["offspring"].get<double>() / completed : 0},
+                                  {"mean_distance", completed ? closed_["distance"].get<double>() / completed : 0}};
+    BalanceRecord balance{initial_["resources"].get<std::array<int64_t, 6>>(),
+                          total_resources.get<std::array<int64_t, 6>>(),
+                          closed_["resources"].get<std::array<int64_t, 6>>(),
+                          residual.get<std::array<int64_t, 6>>(),
+                          regen.first,
+                          regen.second,
+                          initial_["energy"].get<double>(),
+                          active["energy"].get<double>(),
+                          closed_["energy"].get<double>(),
+                          active["energy"].get<double>() - initial_["energy"].get<double>() - expected};
+    const double wall_seconds = latest_["wall_seconds"], cpu_seconds = latest_["process_cpu_seconds"];
+    record_sample({tick, n, wall_seconds, cpu_seconds, balance, std::move(latest_)});
+}
+void Stats::end_session(uint64_t tick, const std::string& reason, const PopsManager& agents, const IWorld& world) {
+    sample(tick, agents, world);
+    for (auto& p : agents.telemetry(false))
+        record_event({LifeEvent::Censored, std::move(p)});
+    publish("end", {{"reason", reason}, {"summary", latest_}});
+}
+void Stats::publish_status(Json status) {
+    status["performance"] = performance();
+    status["transport"] = transport_status();
+    status["metadata"] = metadata_;
+    publish("status", std::move(status));
+}
+void Stats::record_diagnostic(DiagnosticResult result) {
+    publish("diagnostic", std::move(result.measurements));
+}
+std::vector<Json> Stats::commands() {
+    return communicator_ ? communicator_->receive() : std::vector<Json>{};
+}
+Json Stats::transport_status() const {
+    return communicator_ ? communicator_->status() : Json{{"connected", false}, {"dropped_messages", 0}};
+}
+bool Stats::flush(unsigned ms) {
+    return !communicator_ || communicator_->flush(ms);
+}
 
-    if (!pops_snapshot.empty()) {
-        double movement_sum = 0.0;
-        double metabolism_sum = 0.0;
-        double reproduction_sum = 0.0;
-        double respiration_sum = 0.0;
-        double thermoreg_sum = 0.0;
-        double offspring_sum = 0.0;
-        double distance_sum = 0.0;
-        double temp_sum = 0.0;
-        double abs_temp_delta_opt_sum = 0.0;
-        double max_distance = 0.0;
+nlohmann::json Stats::performance() const {
+    return {{"process_cpu_seconds", double(std::clock() - cpu_started_) / CLOCKS_PER_SEC},
+            {"avg_tick_us", measured_ticks_ ? double(tick_us_) / measured_ticks_ : 0},
+            {"avg_frame_us", frames_ ? double(frame_us_) / frames_ : 0},
+            {"fps", frame_interval_us_ ? frames_ * 1e6 / frame_interval_us_ : 0}};
+}
 
-        double offspring_sq_sum = 0.0;
-        double distance_sq_sum = 0.0;
-        double offspring_distance_sum = 0.0;
-
-        for (const auto& pop : pops_snapshot) {
-            movement_sum += pop.total_movement_energy_loss;
-            metabolism_sum += pop.total_metabolism_energy_loss;
-            reproduction_sum += pop.total_reproduction_energy_loss;
-            respiration_sum += pop.total_respiration_energy_gain;
-            thermoreg_sum += pop.total_thermoregolation_energy_loss;
-            offspring_sum += static_cast<double>(pop.offspring);
-            distance_sum += pop.lifetime_distance;
-            temp_sum += pop.body_temperature;
-            abs_temp_delta_opt_sum += std::abs(pop.body_temperature - pop.opt_temperature);
-            max_distance = std::max(max_distance, pop.lifetime_distance);
-
-            offspring_sq_sum += static_cast<double>(pop.offspring) * static_cast<double>(pop.offspring);
-            distance_sq_sum += pop.lifetime_distance * pop.lifetime_distance;
-            offspring_distance_sum += static_cast<double>(pop.offspring) * pop.lifetime_distance;
+void Stats::record_environment(const IWorld& world) {
+    Json cells = Json::array();
+    std::size_t offset = 0;
+    const auto& source = world.get_cells();
+    for (const auto& cell : source) {
+        cells.push_back({{"resources", resources(cell->get_organics())},
+                         {"temperature", cell->get_temperature()},
+                         {"elevation", cell->get_elevation()}});
+        if (cells.size() == 2048) {
+            publish("environment", {{"offset", offset}, {"total", source.size()}, {"cells", std::move(cells)}});
+            offset += 2048;
+            cells = Json::array();
         }
-        const double denom = static_cast<double>(pops_snapshot.size());
-        r.avg_movement_energy_loss_active = movement_sum / denom;
-        r.avg_metabolism_energy_loss_active = metabolism_sum / denom;
-        r.avg_reproduction_energy_loss_active = reproduction_sum / denom;
-        r.avg_respiration_energy_gain_active = respiration_sum / denom;
-        r.avg_thermoregolation_energy_loss_active = thermoreg_sum / denom;
-        r.avg_offspring_count = offspring_sum / denom;
-        r.avg_lifetime_distance = distance_sum / denom;
-        r.max_lifetime_distance = max_distance;
-        r.avg_body_temperature = temp_sum / denom;
-        r.avg_abs_temp_delta_opt = abs_temp_delta_opt_sum / denom;
-
-        const double ex = r.avg_offspring_count;
-        const double ey = r.avg_lifetime_distance;
-        const double ex2 = offspring_sq_sum / denom;
-        const double ey2 = distance_sq_sum / denom;
-        const double exy = offspring_distance_sum / denom;
-        const double var_x = std::max(0.0, ex2 - (ex * ex));
-        const double var_y = std::max(0.0, ey2 - (ey * ey));
-        const double cov_xy = exy - (ex * ey);
-        const double corr_denom = std::sqrt(var_x * var_y);
-        r.corr_offspring_lifetime = corr_denom > 1e-12 ? (cov_xy / corr_denom) : 0.0;
     }
-
-    if (!history_.empty()) {
-        const std::size_t base_idx =
-            (history_.size() > rate_window_samples_) ? history_.size() - rate_window_samples_ : 0;
-        const TickRecord& prev = history_[base_idx];
-        const auto dt_ticks = static_cast<double>(std::max<uint64_t>(1, tick - prev.tick));
-        const auto dt_sec = dt_ticks / 100.0;
-        r.births_window = total_births - prev.total_births;
-        r.deaths_window = total_deaths - prev.total_deaths;
-        r.birth_rate_per_sec = dt_sec > 0.0 ? (static_cast<double>(r.births_window) / dt_sec) : 0.0;
-        r.death_rate_per_sec = dt_sec > 0.0 ? (static_cast<double>(r.deaths_window) / dt_sec) : 0.0;
-    }
-
-    history_.push_back(r);
-
-    if (alive > peak_alive_)
-        peak_alive_ = alive;
-    current_generation_ = generation;
-    current_dead_ = dead;
-    total_births_ = total_births;
-    total_deaths_ = total_deaths;
-    total_tick_us_ += tick_dur.count();
-    total_birth_rate_ += r.birth_rate_per_sec;
-    total_death_rate_ += r.death_rate_per_sec;
-    total_movement_energy_loss_active_ += r.avg_movement_energy_loss_active;
-    total_metabolism_energy_loss_active_ += r.avg_metabolism_energy_loss_active;
-    total_reproduction_energy_loss_active_ += r.avg_reproduction_energy_loss_active;
-    total_respiration_energy_gain_active_ += r.avg_respiration_energy_gain_active;
-    total_thermoregolation_energy_loss_active_ += r.avg_thermoregolation_energy_loss_active;
-    total_offspring_count_ += r.avg_offspring_count;
-    total_lifetime_distance_ += r.avg_lifetime_distance;
-    max_lifetime_distance_ = std::max(max_lifetime_distance_, r.max_lifetime_distance);
-    total_corr_offspring_lifetime_ += r.corr_offspring_lifetime;
-    total_body_temperature_ += r.avg_body_temperature;
-    total_abs_temp_delta_opt_ += r.avg_abs_temp_delta_opt;
+    if (!cells.empty())
+        publish("environment", {{"offset", offset}, {"total", source.size()}, {"cells", std::move(cells)}});
 }
 
-void Stats::record_frame(std::chrono::microseconds frame_dur) {
-    last_frame_dur_us_ = frame_dur.count();
-    total_frame_us_ += frame_dur.count();
-}
-
-SessionSummary Stats::get_summary() const {
-    SessionSummary s;
-    s.start_time = start_time_;
-    s.end_time = session_active_ ? StatsClock::now() : end_time_;
-    s.total_ticks = history_.empty() ? 0 : history_.back().tick;
-    s.current_generation = current_generation_;
-    s.peak_alive = peak_alive_;
-    s.total_dead = current_dead_;
-    s.total_births = total_births_;
-    s.total_deaths = total_deaths_;
-    const int64_t n = static_cast<int64_t>(history_.size());
-    s.avg_tick_us = n > 0 ? total_tick_us_ / n : 0;
-    s.avg_frame_us = n > 0 ? total_frame_us_ / n : 0;
-    s.avg_fps = s.avg_frame_us > 0 ? (1'000'000.0 / static_cast<double>(s.avg_frame_us)) : 0.0;
-    s.avg_birth_rate_per_sec = n > 0 ? total_birth_rate_ / static_cast<double>(n) : 0.0;
-    s.avg_death_rate_per_sec = n > 0 ? total_death_rate_ / static_cast<double>(n) : 0.0;
-    s.avg_movement_energy_loss_active = n > 0 ? total_movement_energy_loss_active_ / static_cast<double>(n) : 0.0;
-    s.avg_metabolism_energy_loss_active = n > 0 ? total_metabolism_energy_loss_active_ / static_cast<double>(n) : 0.0;
-    s.avg_reproduction_energy_loss_active =
-        n > 0 ? total_reproduction_energy_loss_active_ / static_cast<double>(n) : 0.0;
-    s.avg_respiration_energy_gain_active = n > 0 ? total_respiration_energy_gain_active_ / static_cast<double>(n) : 0.0;
-    s.avg_thermoregolation_energy_loss_active =
-        n > 0 ? total_thermoregolation_energy_loss_active_ / static_cast<double>(n) : 0.0;
-    s.avg_offspring_count = n > 0 ? total_offspring_count_ / static_cast<double>(n) : 0.0;
-    s.avg_lifetime_distance = n > 0 ? total_lifetime_distance_ / static_cast<double>(n) : 0.0;
-    s.max_lifetime_distance = max_lifetime_distance_;
-    s.avg_corr_offspring_lifetime = n > 0 ? total_corr_offspring_lifetime_ / static_cast<double>(n) : 0.0;
-    s.avg_body_temperature = n > 0 ? total_body_temperature_ / static_cast<double>(n) : 0.0;
-    s.avg_abs_temp_delta_opt = n > 0 ? total_abs_temp_delta_opt_ / static_cast<double>(n) : 0.0;
-    s.last_organics = history_.empty() ? OrganicsT{} : history_.back().world_organics;
-    return s;
-}
-
-void Stats::set_rate_window_samples(std::size_t samples) {
-    rate_window_samples_ = std::max<std::size_t>(1, samples);
-}
-
-bool Stats::save_to_json(const std::string& path) {
-    using json = nlohmann::json;
-
-    auto summary = get_summary();
-    auto epoch_ms = [](StatsTimePoint tp) {
-        return std::chrono::duration_cast<std::chrono::milliseconds>(tp.time_since_epoch()).count();
-    };
-
-    auto organics_to_json = [](const OrganicsT& o) {
-        return json{{"glucose", o.c6h12o6}, {"lipids", o.lipids}, {"o2", o.o2},      {"co2", o.co2},
-                    {"h2o", o.h2o},         {"n2", o.n2},         {"caco3", o.caco3}};
-    };
-
-    json j;
-    j["summary"] = {{"start_time_ms", epoch_ms(summary.start_time)},
-                    {"end_time_ms", epoch_ms(summary.end_time)},
-                    {"total_ticks", summary.total_ticks},
-                    {"generation", summary.current_generation},
-                    {"peak_alive", summary.peak_alive},
-                    {"total_dead", summary.total_dead},
-                    {"avg_tick_us", summary.avg_tick_us},
-                    {"avg_frame_us", summary.avg_frame_us},
-                    {"avg_fps", summary.avg_fps},
-                    {"total_births", summary.total_births},
-                    {"total_deaths", summary.total_deaths},
-                    {"avg_birth_rate_per_sec", summary.avg_birth_rate_per_sec},
-                    {"avg_death_rate_per_sec", summary.avg_death_rate_per_sec},
-                    {"avg_movement_energy_loss_active", summary.avg_movement_energy_loss_active},
-                    {"avg_metabolism_energy_loss_active", summary.avg_metabolism_energy_loss_active},
-                    {"avg_reproduction_energy_loss_active", summary.avg_reproduction_energy_loss_active},
-                    {"avg_respiration_energy_gain_active", summary.avg_respiration_energy_gain_active},
-                    {"avg_thermoregolation_energy_loss_active", summary.avg_thermoregolation_energy_loss_active},
-                    {"avg_offspring_count", summary.avg_offspring_count},
-                    {"avg_lifetime_distance", summary.avg_lifetime_distance},
-                    {"max_lifetime_distance", summary.max_lifetime_distance},
-                    {"avg_corr_offspring_lifetime", summary.avg_corr_offspring_lifetime},
-                    {"avg_body_temperature", summary.avg_body_temperature},
-                    {"avg_abs_temp_delta_opt", summary.avg_abs_temp_delta_opt},
-                    {"rate_window_samples", static_cast<uint64_t>(rate_window_samples_)},
-                    {"last_organics", organics_to_json(summary.last_organics)}};
-
-    json records = json::array();
-    for (const auto& r : history_) {
-        records.push_back({{"tick", r.tick},
-                           {"generation", r.generation},
-                           {"alive", r.alive},
-                           {"dead", r.dead},
-                           {"total_births", r.total_births},
-                           {"total_deaths", r.total_deaths},
-                           {"births_window", r.births_window},
-                           {"deaths_window", r.deaths_window},
-                           {"birth_rate_per_sec", r.birth_rate_per_sec},
-                           {"death_rate_per_sec", r.death_rate_per_sec},
-                           {"tick_duration_us", r.tick_duration_us},
-                           {"frame_duration_us", r.frame_duration_us},
-                           {"fps", r.fps},
-                           {"avg_movement_energy_loss_active", r.avg_movement_energy_loss_active},
-                           {"avg_metabolism_energy_loss_active", r.avg_metabolism_energy_loss_active},
-                           {"avg_reproduction_energy_loss_active", r.avg_reproduction_energy_loss_active},
-                           {"avg_respiration_energy_gain_active", r.avg_respiration_energy_gain_active},
-                           {"avg_thermoregolation_energy_loss_active", r.avg_thermoregolation_energy_loss_active},
-                           {"avg_offspring_count", r.avg_offspring_count},
-                           {"avg_lifetime_distance", r.avg_lifetime_distance},
-                           {"max_lifetime_distance", r.max_lifetime_distance},
-                           {"corr_offspring_lifetime", r.corr_offspring_lifetime},
-                           {"avg_body_temperature", r.avg_body_temperature},
-                           {"avg_abs_temp_delta_opt", r.avg_abs_temp_delta_opt},
-                           {"organics", organics_to_json(r.world_organics)}});
-    }
-    j["records"] = std::move(records);
-
-    std::ofstream file(path);
-    if (!file.is_open()) {
-        return false;
-    }
-
-    file << j.dump(2);
-    if (!file.good()) {
-        return false;
-    }
-
-    file.flush();
-    return file.good();
+void Stats::record_sample(SampleRecord sample) {
+    tick_ = sample.tick;
+    latest_ = std::move(sample.measurements);
+    latest_["tick"] = sample.tick;
+    latest_["alive"] = sample.alive;
+    latest_["simulated_seconds"] = sample.tick * .01;
+    latest_["wall_seconds"] = sample.wall_seconds;
+    latest_["process_cpu_seconds"] = sample.process_cpu_seconds;
+    const auto& b = sample.balance;
+    latest_["resource_ledger"] = {{"initial", b.initial_resources},
+                                  {"final", b.final_resources},
+                                  {"death_overflow", b.death_overflow},
+                                  {"residual", b.resource_residual},
+                                  {"regenerated_glucose", b.regenerated_glucose},
+                                  {"regenerated_o2", b.regenerated_o2}};
+    latest_["energy_ledger"] = {{"initial", b.initial_energy},
+                                {"final_alive", b.final_energy},
+                                {"dead_sink", b.dead_energy_sink},
+                                {"residual", b.energy_residual}};
+    publish("sample", latest_);
 }

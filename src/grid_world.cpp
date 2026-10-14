@@ -13,6 +13,8 @@ GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger) : width_(w),
 }
 
 void GridWorld::init() {
+    glucose_regenerated_ = oxygen_regenerated_ = 0;
+    environment_tick_counter_ = rotation_tick_counter_ = 0;
     RandomUtility random_util;
 
     /// Generate a random RBF set for temperature
@@ -127,7 +129,10 @@ int GridWorld::index(int x, int y) const {
 bool GridWorld::update_cycle() {
     // TODO: Implement world update logic (resource regeneration, environmental changes, etc.)
     for (auto& cell : cells_) {
+        const auto glucose = cell->get_glucose(), oxygen = cell->get_organics().o2;
         cell->update();
+        glucose_regenerated_ += cell->get_glucose() - glucose;
+        oxygen_regenerated_ += cell->get_organics().o2 - oxygen;
     }
     if (environment_tick_counter_ % TemperatureRefreshInterval == 0) {
         RandomUtility random_util;
