@@ -1,8 +1,10 @@
 #include "config.h"
+
 #include "common.h"
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -15,7 +17,7 @@
 // Construction
 // ---------------------------------------------------------------------------
 
-Config::Config(const std::string& filepath) : filepath_(filepath) {
+Config::Config(const std::string& filepath, bool strict) : strict_(strict), filepath_(filepath) {
     config_dir_ = std::filesystem::weakly_canonical(std::filesystem::path(filepath).parent_path());
     set_defaults();
     // Resolve default directory paths relative to the INI file location
@@ -23,6 +25,8 @@ Config::Config(const std::string& filepath) : filepath_(filepath) {
     resolve_dir(params_.log_dir);
     resolve_dir(params_.image_dir);
     update_from_file(0);
+    if (strict_)
+        validate();
 }
 
 void Config::resolve_dir(std::string& dir) const {
@@ -252,230 +256,682 @@ bool to_bool(const std::string& s) {
 // INI ingestion
 // ---------------------------------------------------------------------------
 
+nlohmann::json Config::schema() {
+    return nlohmann::json::array({
+        {{"name", "brain_size_s"},
+         {"type", "integer"},
+         {"default", 5},
+         {"group", "brain"},
+         {"description", "Inputs 0..48 implemented; 32 reserved"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 4096}},
+        {{"name", "brain_size_n"},
+         {"type", "integer"},
+         {"default", 5},
+         {"group", "brain"},
+         {"description", "brain size n"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 4096}},
+        {{"name", "brain_size_y"},
+         {"type", "integer"},
+         {"default", 5},
+         {"group", "brain"},
+         {"description", "Actions 0..20, 22 implemented; 21 reserved"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 4096}},
+        {{"name", "brain_num_hidden_layers"},
+         {"type", "integer"},
+         {"default", 1},
+         {"group", "brain"},
+         {"description", "brain num hidden layers"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 6}},
+        {{"name", "map_size"},
+         {"type", "integer"},
+         {"default", 120},
+         {"group", "simulation"},
+         {"description", "Cells per side of the square world"},
+         {"effective", true},
+         {"min", 4},
+         {"max", 1024}},
+        {{"name", "max_duration_minutes"},
+         {"type", "number"},
+         {"default", 0.0},
+         {"group", "simulation"},
+         {"description", "Simulated minutes; 0 means unlimited"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 1000000000.0}},
+        {{"name", "gui_fps"},
+         {"type", "integer"},
+         {"default", 30},
+         {"group", "simulation"},
+         {"description", "Maximum visible frames per second"},
+         {"effective", true},
+         {"min", 5},
+         {"max", 60}},
+        {{"name", "population"},
+         {"type", "integer"},
+         {"default", 100},
+         {"group", "simulation"},
+         {"description", "population"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 120}},
+        {{"name", "steps_per_generation"},
+         {"type", "integer"},
+         {"default", 300},
+         {"group", "simulation"},
+         {"description", "Age/oscillator scale; does not schedule births"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 4294967295}},
+        {{"name", "max_generations"},
+         {"type", "integer"},
+         {"default", 200000},
+         {"group", "simulation"},
+         {"description", "max generations (legacy: no application effect)"},
+         {"effective", false},
+         {"min", 1},
+         {"max", 4294967295}},
+        {{"name", "num_threads"},
+         {"type", "integer"},
+         {"default", 4},
+         {"group", "simulation"},
+         {"description", "num threads"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 256}},
+        {{"name", "genome_min_length"},
+         {"type", "integer"},
+         {"default", 24},
+         {"group", "genome"},
+         {"description", "genome min length"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 100000}},
+        {{"name", "genome_max_length"},
+         {"type", "integer"},
+         {"default", 24},
+         {"group", "genome"},
+         {"description", "genome max length"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 100000}},
+        {{"name", "genome_source_index_count"},
+         {"type", "integer"},
+         {"default", 0},
+         {"group", "genome"},
+         {"description", "genome source index count"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 2147483647}},
+        {{"name", "genome_sink_index_count"},
+         {"type", "integer"},
+         {"default", 0},
+         {"group", "genome"},
+         {"description", "genome sink index count"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 2147483647}},
+        {{"name", "point_mutation_rate"},
+         {"type", "number"},
+         {"default", 0.001},
+         {"group", "simulation"},
+         {"description", "point mutation rate"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 1}},
+        {{"name", "gene_insertion_deletion_rate"},
+         {"type", "number"},
+         {"default", 0.0},
+         {"group", "simulation"},
+         {"description", "gene insertion deletion rate (legacy: no application effect)"},
+         {"effective", false},
+         {"min", 0},
+         {"max", 1}},
+        {{"name", "deletion_ratio"},
+         {"type", "number"},
+         {"default", 0.5},
+         {"group", "simulation"},
+         {"description", "deletion ratio (legacy: no application effect)"},
+         {"effective", false},
+         {"min", 0},
+         {"max", 1}},
+        {{"name", "sexual_reproduction"},
+         {"type", "boolean"},
+         {"default", true},
+         {"group", "simulation"},
+         {"description", "sexual reproduction (legacy: no application effect)"},
+         {"effective", false}},
+        {{"name", "choose_parents_by_fitness"},
+         {"type", "boolean"},
+         {"default", true},
+         {"group", "simulation"},
+         {"description", "choose parents by fitness (legacy: no application effect)"},
+         {"effective", false}},
+        {{"name", "hebbian_inheritance"},
+         {"type", "boolean"},
+         {"default", false},
+         {"group", "simulation"},
+         {"description", "Offspring inherit learned weights"},
+         {"effective", true}},
+        {{"name", "brain_serialization_enabled"},
+         {"type", "boolean"},
+         {"default", false},
+         {"group", "brain"},
+         {"description", "brain serialization enabled (legacy: no application effect)"},
+         {"effective", false}},
+        {{"name", "nnets_dir"},
+         {"type", "string"},
+         {"default", "../data_out/nnets/"},
+         {"group", "simulation"},
+         {"description", "nnets dir"},
+         {"effective", true}},
+        {{"name", "log_dir"},
+         {"type", "string"},
+         {"default", "../data_out/logs/"},
+         {"group", "simulation"},
+         {"description", "log dir"},
+         {"effective", true}},
+        {{"name", "image_dir"},
+         {"type", "string"},
+         {"default", "../data_out/images/"},
+         {"group", "simulation"},
+         {"description", "image dir"},
+         {"effective", true}},
+        {{"name", "phy_init_mitochondrions_max"},
+         {"type", "integer"},
+         {"default", 3},
+         {"group", "physiology"},
+         {"description", "phy init mitochondrions max"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 4294967295}},
+        {{"name", "phy_init_chloroplasts_max"},
+         {"type", "integer"},
+         {"default", 2},
+         {"group", "physiology"},
+         {"description", "phy init chloroplasts max"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 4294967295}},
+        {{"name", "phy_init_sensitiveness_max"},
+         {"type", "integer"},
+         {"default", 6},
+         {"group", "physiology"},
+         {"description", "phy init sensitiveness max"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 4294967295}},
+        {{"name", "phy_adipose_stock_max"},
+         {"type", "integer"},
+         {"default", 80},
+         {"group", "physiology"},
+         {"description", "phy adipose stock max"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 4294967295}},
+        {{"name", "phy_min_chloroplasts"},
+         {"type", "integer"},
+         {"default", 1},
+         {"group", "physiology"},
+         {"description", "phy min chloroplasts"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 4294967295}},
+        {{"name", "phy_max_chloroplasts_ref"},
+         {"type", "integer"},
+         {"default", 3},
+         {"group", "physiology"},
+         {"description", "phy max chloroplasts ref"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 4294967295}},
+        {{"name", "phy_energy_per_respiration"},
+         {"type", "number"},
+         {"default", 0.2},
+         {"group", "physiology"},
+         {"description", "phy energy per respiration"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 1000000.0}},
+        {{"name", "phy_heat_per_respiration"},
+         {"type", "number"},
+         {"default", 0.3},
+         {"group", "physiology"},
+         {"description", "phy heat per respiration"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 1000000.0}},
+        {{"name", "phy_respiration_energy_target"},
+         {"type", "number"},
+         {"default", 100.0},
+         {"group", "physiology"},
+         {"description", "phy respiration energy target"},
+         {"effective", true},
+         {"min", 1e-06},
+         {"max", 400}},
+        {{"name", "phy_respiration_demand_band"},
+         {"type", "number"},
+         {"default", 25.0},
+         {"group", "physiology"},
+         {"description", "phy respiration demand band"},
+         {"effective", true},
+         {"min", 1e-06},
+         {"max", 400}},
+        {{"name", "phy_alpha_min"},
+         {"type", "number"},
+         {"default", 0.01},
+         {"group", "physiology"},
+         {"description", "phy alpha min"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 1000000.0}},
+        {{"name", "phy_alpha_max"},
+         {"type", "number"},
+         {"default", 0.5},
+         {"group", "physiology"},
+         {"description", "phy alpha max"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 1000000.0}},
+        {{"name", "phy_max_lipids_ref"},
+         {"type", "number"},
+         {"default", 80.0},
+         {"group", "physiology"},
+         {"description", "phy max lipids ref"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 1000000.0}},
+        {{"name", "phy_init_temperature"},
+         {"type", "number"},
+         {"default", 25.0},
+         {"group", "physiology"},
+         {"description", "phy init temperature"},
+         {"effective", true},
+         {"min", -273},
+         {"max", 1000}},
+        {{"name", "phy_opt_temperature"},
+         {"type", "number"},
+         {"default", 37.0},
+         {"group", "physiology"},
+         {"description", "phy opt temperature"},
+         {"effective", true},
+         {"min", -273},
+         {"max", 1000}},
+        {{"name", "phy_photo_min_elevation"},
+         {"type", "number"},
+         {"default", 30.0},
+         {"group", "physiology"},
+         {"description", "phy photo min elevation"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 1000000.0}},
+        {{"name", "phy_efficiency_half_range_c"},
+         {"type", "number"},
+         {"default", 10.0},
+         {"group", "physiology"},
+         {"description", "phy efficiency half range c"},
+         {"effective", true},
+         {"min", 0.1},
+         {"max", 100}},
+        {{"name", "newgen_enabled"},
+         {"type", "boolean"},
+         {"default", false},
+         {"group", "newgen"},
+         {"description", "newgen enabled"},
+         {"effective", true}},
+        {{"name", "newgen_interval_ticks"},
+         {"type", "integer"},
+         {"default", 5000},
+         {"group", "newgen"},
+         {"description", "newgen interval ticks"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 4294967295}},
+        {{"name", "newgen_survival_ratio"},
+         {"type", "number"},
+         {"default", 0.35},
+         {"group", "newgen"},
+         {"description", "newgen survival ratio"},
+         {"effective", true},
+         {"min", 0.01},
+         {"max", 1}},
+        {{"name", "newgen_min_survivors"},
+         {"type", "integer"},
+         {"default", 8},
+         {"group", "newgen"},
+         {"description", "newgen min survivors"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 120}},
+        {{"name", "max_reproducers_per_tick"},
+         {"type", "integer"},
+         {"default", 3},
+         {"group", "simulation"},
+         {"description", "max reproducers per tick"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 32}},
+        {{"name", "max_repro_backlog"},
+         {"type", "integer"},
+         {"default", 64},
+         {"group", "simulation"},
+         {"description", "max repro backlog"},
+         {"effective", true},
+         {"min", 8},
+         {"max", 2048}},
+        {{"name", "forced_repro_priority_per_tick"},
+         {"type", "integer"},
+         {"default", 1},
+         {"group", "simulation"},
+         {"description", "forced repro priority per tick"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 32}},
+    });
+}
+nlohmann::json Config::values() const {
+    return {
+        {"brain_size_s", params_.brain_size_s},
+        {"brain_size_n", params_.brain_size_n},
+        {"brain_size_y", params_.brain_size_y},
+        {"brain_num_hidden_layers", params_.brain_num_hidden_layers},
+        {"map_size", params_.map_size},
+        {"max_duration_minutes", params_.max_duration_minutes},
+        {"gui_fps", params_.gui_fps},
+        {"population", params_.population},
+        {"steps_per_generation", params_.steps_per_generation},
+        {"max_generations", params_.max_generations},
+        {"num_threads", params_.num_threads},
+        {"genome_min_length", params_.genome_min_length},
+        {"genome_max_length", params_.genome_max_length},
+        {"genome_source_index_count", params_.genome_source_index_count},
+        {"genome_sink_index_count", params_.genome_sink_index_count},
+        {"point_mutation_rate", params_.point_mutation_rate},
+        {"gene_insertion_deletion_rate", params_.gene_insertion_deletion_rate},
+        {"deletion_ratio", params_.deletion_ratio},
+        {"sexual_reproduction", params_.sexual_reproduction},
+        {"choose_parents_by_fitness", params_.choose_parents_by_fitness},
+        {"hebbian_inheritance", params_.hebbian_inheritance},
+        {"brain_serialization_enabled", params_.brain_serialization_enabled},
+        {"nnets_dir", params_.nnets_dir},
+        {"log_dir", params_.log_dir},
+        {"image_dir", params_.image_dir},
+        {"phy_init_mitochondrions_max", params_.phy_init_mitochondrions_max},
+        {"phy_init_chloroplasts_max", params_.phy_init_chloroplasts_max},
+        {"phy_init_sensitiveness_max", params_.phy_init_sensitiveness_max},
+        {"phy_adipose_stock_max", params_.phy_adipose_stock_max},
+        {"phy_min_chloroplasts", params_.phy_min_chloroplasts},
+        {"phy_max_chloroplasts_ref", params_.phy_max_chloroplasts_ref},
+        {"phy_energy_per_respiration", params_.phy_energy_per_respiration},
+        {"phy_heat_per_respiration", params_.phy_heat_per_respiration},
+        {"phy_respiration_energy_target", params_.phy_respiration_energy_target},
+        {"phy_respiration_demand_band", params_.phy_respiration_demand_band},
+        {"phy_alpha_min", params_.phy_alpha_min},
+        {"phy_alpha_max", params_.phy_alpha_max},
+        {"phy_max_lipids_ref", params_.phy_max_lipids_ref},
+        {"phy_init_temperature", params_.phy_init_temperature},
+        {"phy_opt_temperature", params_.phy_opt_temperature},
+        {"phy_photo_min_elevation", params_.phy_photo_min_elevation},
+        {"phy_efficiency_half_range_c", params_.phy_efficiency_half_range_c},
+        {"newgen_enabled", params_.newgen_enabled},
+        {"newgen_interval_ticks", params_.newgen_interval_ticks},
+        {"newgen_survival_ratio", params_.newgen_survival_ratio},
+        {"newgen_min_survivors", params_.newgen_min_survivors},
+        {"max_reproducers_per_tick", params_.max_reproducers_per_tick},
+        {"max_repro_backlog", params_.max_repro_backlog},
+        {"forced_repro_priority_per_tick", params_.forced_repro_priority_per_tick},
+    };
+}
+void Config::validate() const {
+    if (params_.genome_min_length > params_.genome_max_length)
+        throw std::invalid_argument("genome_min_length must not exceed genome_max_length");
+    if (params_.phy_alpha_min > params_.phy_alpha_max)
+        throw std::invalid_argument("phy_alpha_min must not exceed phy_alpha_max");
+    if (params_.population > uint64_t(params_.map_size) * params_.map_size)
+        throw std::invalid_argument("population exceeds world capacity");
+}
 void Config::ingest_parameter(const std::string& raw_name, const std::string& raw_value) {
-    const std::string name = to_lower(trim(raw_name));
-    const std::string value = trim(raw_value);
-
-    if (value.empty())
-        return;
-
-    const bool is_u = is_uint(value);
-    const unsigned uval = is_u ? to_uint(value) : 0u;
-
-    // Brain sizes
-    if (name == "genome_source_index_count" || name == "genome_sink_index_count") {
-        if (!is_u || uval > static_cast<unsigned>(std::numeric_limits<int>::max()))
-            throw std::invalid_argument(name + " must be in [0, INT_MAX] (0 = automatic)");
-        if (name == "genome_source_index_count")
-            params_.genome_source_index_count = uval;
-        else
-            params_.genome_sink_index_count = uval;
-        return;
+    const auto name = to_lower(trim(raw_name));
+    const auto value = trim(raw_value);
+    try {
+        static const auto specs = schema();
+        auto spec = std::find_if(specs.begin(), specs.end(), [&](const auto& x) { return x["name"] == name; });
+        if (spec == specs.end())
+            throw std::invalid_argument("unknown parameter");
+        const auto type = spec->at("type").get<std::string>();
+        if (type == "integer" && !is_uint(value))
+            throw std::invalid_argument("expected unsigned integer");
+        if (type == "number" && !is_double(value))
+            throw std::invalid_argument("expected finite number");
+        if (type == "boolean" && !is_bool(value))
+            throw std::invalid_argument("expected true/false");
+        if (type == "string" && value.empty())
+            throw std::invalid_argument("empty path");
+        if (type == "integer" || type == "number") {
+            double number = std::stod(value);
+            if (!std::isfinite(number) || number < spec->at("min").get<double>() ||
+                number > spec->at("max").get<double>())
+                throw std::invalid_argument("outside allowed range");
+        }
+        if (name == "brain_size_s") {
+            params_.brain_size_s = to_uint(value);
+            return;
+        }
+        if (name == "brain_size_n") {
+            params_.brain_size_n = to_uint(value);
+            return;
+        }
+        if (name == "brain_size_y") {
+            params_.brain_size_y = to_uint(value);
+            return;
+        }
+        if (name == "brain_num_hidden_layers") {
+            params_.brain_num_hidden_layers = to_uint(value);
+            return;
+        }
+        if (name == "map_size") {
+            params_.map_size = to_uint(value);
+            return;
+        }
+        if (name == "max_duration_minutes") {
+            params_.max_duration_minutes = to_double(value);
+            return;
+        }
+        if (name == "gui_fps") {
+            params_.gui_fps = to_uint(value);
+            return;
+        }
+        if (name == "population") {
+            params_.population = to_uint(value);
+            return;
+        }
+        if (name == "steps_per_generation") {
+            params_.steps_per_generation = to_uint(value);
+            return;
+        }
+        if (name == "max_generations") {
+            params_.max_generations = to_uint(value);
+            return;
+        }
+        if (name == "num_threads") {
+            params_.num_threads = to_uint(value);
+            return;
+        }
+        if (name == "genome_min_length") {
+            params_.genome_min_length = to_uint(value);
+            return;
+        }
+        if (name == "genome_max_length") {
+            params_.genome_max_length = to_uint(value);
+            return;
+        }
+        if (name == "genome_source_index_count") {
+            params_.genome_source_index_count = to_uint(value);
+            return;
+        }
+        if (name == "genome_sink_index_count") {
+            params_.genome_sink_index_count = to_uint(value);
+            return;
+        }
+        if (name == "point_mutation_rate") {
+            params_.point_mutation_rate = to_double(value);
+            return;
+        }
+        if (name == "gene_insertion_deletion_rate") {
+            params_.gene_insertion_deletion_rate = to_double(value);
+            return;
+        }
+        if (name == "deletion_ratio") {
+            params_.deletion_ratio = to_double(value);
+            return;
+        }
+        if (name == "sexual_reproduction") {
+            params_.sexual_reproduction = to_bool(value);
+            return;
+        }
+        if (name == "choose_parents_by_fitness") {
+            params_.choose_parents_by_fitness = to_bool(value);
+            return;
+        }
+        if (name == "hebbian_inheritance") {
+            params_.hebbian_inheritance = to_bool(value);
+            return;
+        }
+        if (name == "brain_serialization_enabled") {
+            params_.brain_serialization_enabled = to_bool(value);
+            return;
+        }
+        if (name == "nnets_dir") {
+            params_.nnets_dir = value;
+            resolve_dir(params_.nnets_dir);
+            return;
+        }
+        if (name == "log_dir") {
+            params_.log_dir = value;
+            resolve_dir(params_.log_dir);
+            return;
+        }
+        if (name == "image_dir") {
+            params_.image_dir = value;
+            resolve_dir(params_.image_dir);
+            return;
+        }
+        if (name == "phy_init_mitochondrions_max") {
+            params_.phy_init_mitochondrions_max = to_uint(value);
+            return;
+        }
+        if (name == "phy_init_chloroplasts_max") {
+            params_.phy_init_chloroplasts_max = to_uint(value);
+            return;
+        }
+        if (name == "phy_init_sensitiveness_max") {
+            params_.phy_init_sensitiveness_max = to_uint(value);
+            return;
+        }
+        if (name == "phy_adipose_stock_max") {
+            params_.phy_adipose_stock_max = to_uint(value);
+            return;
+        }
+        if (name == "phy_min_chloroplasts") {
+            params_.phy_min_chloroplasts = to_uint(value);
+            return;
+        }
+        if (name == "phy_max_chloroplasts_ref") {
+            params_.phy_max_chloroplasts_ref = to_uint(value);
+            return;
+        }
+        if (name == "phy_energy_per_respiration") {
+            params_.phy_energy_per_respiration = to_double(value);
+            return;
+        }
+        if (name == "phy_heat_per_respiration") {
+            params_.phy_heat_per_respiration = to_double(value);
+            return;
+        }
+        if (name == "phy_respiration_energy_target") {
+            params_.phy_respiration_energy_target = to_double(value);
+            return;
+        }
+        if (name == "phy_respiration_demand_band") {
+            params_.phy_respiration_demand_band = to_double(value);
+            return;
+        }
+        if (name == "phy_alpha_min") {
+            params_.phy_alpha_min = to_double(value);
+            return;
+        }
+        if (name == "phy_alpha_max") {
+            params_.phy_alpha_max = to_double(value);
+            return;
+        }
+        if (name == "phy_max_lipids_ref") {
+            params_.phy_max_lipids_ref = to_double(value);
+            return;
+        }
+        if (name == "phy_init_temperature") {
+            params_.phy_init_temperature = to_double(value);
+            return;
+        }
+        if (name == "phy_opt_temperature") {
+            params_.phy_opt_temperature = to_double(value);
+            return;
+        }
+        if (name == "phy_photo_min_elevation") {
+            params_.phy_photo_min_elevation = to_double(value);
+            return;
+        }
+        if (name == "phy_efficiency_half_range_c") {
+            params_.phy_efficiency_half_range_c = to_double(value);
+            return;
+        }
+        if (name == "newgen_enabled") {
+            params_.newgen_enabled = to_bool(value);
+            return;
+        }
+        if (name == "newgen_interval_ticks") {
+            params_.newgen_interval_ticks = to_uint(value);
+            return;
+        }
+        if (name == "newgen_survival_ratio") {
+            params_.newgen_survival_ratio = to_double(value);
+            return;
+        }
+        if (name == "newgen_min_survivors") {
+            params_.newgen_min_survivors = to_uint(value);
+            return;
+        }
+        if (name == "max_reproducers_per_tick") {
+            params_.max_reproducers_per_tick = to_uint(value);
+            return;
+        }
+        if (name == "max_repro_backlog") {
+            params_.max_repro_backlog = to_uint(value);
+            return;
+        }
+        if (name == "forced_repro_priority_per_tick") {
+            params_.forced_repro_priority_per_tick = to_uint(value);
+            return;
+        }
+    } catch (const std::exception& error) {
+        const auto message = name + " = " + value + ": " + error.what();
+        if (strict_ || name == "genome_source_index_count" || name == "genome_sink_index_count")
+            throw std::invalid_argument(message);
+        std::cerr << "[Config] " << message << '\n';
     }
-    if (name == "brain_size_s" && is_u && uval > 0) {
-        params_.brain_size_s = uval;
-        return;
-    }
-    if (name == "brain_size_n" && is_u && uval > 0) {
-        params_.brain_size_n = uval;
-        return;
-    }
-    if (name == "brain_size_y" && is_u && uval > 0) {
-        params_.brain_size_y = uval;
-        return;
-    }
-    if (name == "brain_num_hidden_layers" && is_u && uval >= 1 && uval <= 6) {
-        params_.brain_num_hidden_layers = uval;
-        return;
-    }
-
-    // Simulation
-    if (name == "population" && is_u && uval > 0) {
-        params_.population = uval;
-        return;
-    }
-    if (name == "genome_min_length" && is_u && uval > 0) {
-        params_.genome_min_length = uval;
-        return;
-    }
-    if (name == "genome_max_length" && is_u && uval > 0) {
-        params_.genome_max_length = uval;
-        return;
-    }
-    if (name == "steps_per_generation" && is_u && uval > 0) {
-        params_.steps_per_generation = uval;
-        return;
-    }
-    if (name == "max_generations" && is_u && uval > 0) {
-        params_.max_generations = uval;
-        return;
-    }
-    if (name == "num_threads" && is_u && uval > 0) {
-        params_.num_threads = uval;
-        return;
-    }
-
-    // Mutation / reproduction (float and bool params)
-    const bool is_d = is_double(value);
-    const double dval = is_d ? to_double(value) : 0.0;
-    const bool is_b = is_bool(value);
-
-    if (name == "point_mutation_rate" && is_d && dval >= 0.0 && dval <= 1.0) {
-        params_.point_mutation_rate = dval;
-        return;
-    }
-    if (name == "gene_insertion_deletion_rate" && is_d && dval >= 0.0 && dval <= 1.0) {
-        params_.gene_insertion_deletion_rate = dval;
-        return;
-    }
-    if (name == "deletion_ratio" && is_d && dval >= 0.0 && dval <= 1.0) {
-        params_.deletion_ratio = dval;
-        return;
-    }
-    if (name == "sexual_reproduction" && is_b) {
-        params_.sexual_reproduction = to_bool(value);
-        return;
-    }
-    if (name == "choose_parents_by_fitness" && is_b) {
-        params_.choose_parents_by_fitness = to_bool(value);
-        return;
-    }
-    if (name == "hebbian_inheritance" && is_b) {
-        params_.hebbian_inheritance = to_bool(value);
-        return;
-    }
-    if (name == "brain_serialization_enabled" && is_b) {
-        params_.brain_serialization_enabled = to_bool(value);
-        return;
-    }
-
-    // Directories (resolve relative paths against the INI file location)
-    if (name == "nnets_dir") {
-        params_.nnets_dir = value;
-        resolve_dir(params_.nnets_dir);
-        return;
-    }
-    if (name == "log_dir") {
-        params_.log_dir = value;
-        resolve_dir(params_.log_dir);
-        return;
-    }
-    if (name == "image_dir") {
-        params_.image_dir = value;
-        resolve_dir(params_.image_dir);
-        return;
-    }
-
-    // Physiology (unsigned)
-    if (name == "phy_init_mitochondrions_max" && is_u && uval > 0) {
-        params_.phy_init_mitochondrions_max = uval;
-        return;
-    }
-    if (name == "phy_init_chloroplasts_max" && is_u) {
-        params_.phy_init_chloroplasts_max = uval;
-        return;
-    }
-    if (name == "phy_init_sensitiveness_max" && is_u && uval > 0) {
-        params_.phy_init_sensitiveness_max = uval;
-        return;
-    }
-    if (name == "phy_adipose_stock_max" && is_u && uval > 0) {
-        params_.phy_adipose_stock_max = uval;
-        return;
-    }
-    if (name == "phy_min_chloroplasts" && is_u) {
-        params_.phy_min_chloroplasts = uval;
-        return;
-    }
-    if (name == "phy_max_chloroplasts_ref" && is_u && uval > 0) {
-        params_.phy_max_chloroplasts_ref = uval;
-        return;
-    }
-
-    // Physiology (double) — reuse is_d/dval already computed above
-    if (name == "phy_energy_per_respiration" && is_d && dval >= 0.0) {
-        params_.phy_energy_per_respiration = dval;
-        return;
-    }
-    if (name == "phy_heat_per_respiration" && is_d && dval >= 0.0) {
-        params_.phy_heat_per_respiration = dval;
-        return;
-    }
-    if (name == "phy_respiration_energy_target" && is_d && dval > 0.0 && dval <= static_cast<double>(MaxEnergy)) {
-        params_.phy_respiration_energy_target = dval;
-        return;
-    }
-    if (name == "phy_respiration_demand_band" && is_d && dval > 0.0 && dval <= static_cast<double>(MaxEnergy)) {
-        params_.phy_respiration_demand_band = dval;
-        return;
-    }
-    if (name == "phy_alpha_min" && is_d && dval >= 0.0) {
-        params_.phy_alpha_min = dval;
-        return;
-    }
-    if (name == "phy_alpha_max" && is_d && dval >= 0.0) {
-        params_.phy_alpha_max = dval;
-        return;
-    }
-    if (name == "phy_max_lipids_ref" && is_d && dval > 0.0) {
-        params_.phy_max_lipids_ref = dval;
-        return;
-    }
-    if (name == "phy_init_temperature" && is_d) {
-        params_.phy_init_temperature = dval;
-        return;
-    }
-    if (name == "phy_opt_temperature" && is_d) {
-        params_.phy_opt_temperature = dval;
-        return;
-    }
-    if (name == "phy_photo_min_elevation" && is_d && dval >= 0.0) {
-        params_.phy_photo_min_elevation = dval;
-        return;
-    }
-    if (name == "phy_efficiency_half_range_c" && is_d && dval > 0.0) {
-        params_.phy_efficiency_half_range_c = std::clamp(dval, 0.1, 100.0);
-        return;
-    }
-
-    // New generation controls
-    if (name == "newgen_enabled" && is_b) {
-        params_.newgen_enabled = to_bool(value);
-        return;
-    }
-    if (name == "newgen_interval_ticks" && is_u && uval > 0) {
-        params_.newgen_interval_ticks = uval;
-        return;
-    }
-    if (name == "newgen_survival_ratio" && is_d && dval > 0.0 && dval <= 1.0) {
-        params_.newgen_survival_ratio = dval;
-        return;
-    }
-    if (name == "newgen_min_survivors" && is_u && uval > 0) {
-        params_.newgen_min_survivors = uval;
-        return;
-    }
-
-    // Reproduction throttling
-    if (name == "max_reproducers_per_tick" && is_u) {
-        params_.max_reproducers_per_tick = std::clamp(uval, 1u, 32u);
-        return;
-    }
-    if (name == "max_repro_backlog" && is_u) {
-        params_.max_repro_backlog = std::clamp(uval, 8u, 2048u);
-        return;
-    }
-    if (name == "forced_repro_priority_per_tick" && is_u) {
-        params_.forced_repro_priority_per_tick = std::clamp(uval, 0u, 32u);
-        return;
-    }
-
-    std::cerr << "[Config] Unknown or invalid parameter: " << name << " = " << value << '\n';
 }
 
 void Config::update_from_file(unsigned generation) {
     std::ifstream file(filepath_);
     if (!file.is_open()) {
+        if (strict_)
+            throw std::runtime_error("Cannot open config file: " + filepath_);
         std::cerr << "[Config] Cannot open config file: " << filepath_ << '\n';
         return;
     }
@@ -492,8 +948,11 @@ void Config::update_from_file(unsigned generation) {
             continue;
 
         const auto eq = line.find('=');
-        if (eq == std::string::npos)
+        if (eq == std::string::npos) {
+            if (strict_)
+                throw std::invalid_argument("Expected key=value: " + line);
             continue;
+        }
 
         std::string name_part = line.substr(0, eq);
         std::string value_part = line.substr(eq + 1);
@@ -503,11 +962,20 @@ void Config::update_from_file(unsigned generation) {
         if (at_pos != std::string::npos) {
             const std::string gen_str = trim(name_part.substr(at_pos + 1));
             name_part = name_part.substr(0, at_pos);
-            if (!is_uint(gen_str))
+            if (!is_uint(gen_str)) {
+                if (strict_)
+                    throw std::invalid_argument("Invalid generation override");
                 continue;
+            }
             const unsigned active_from = to_uint(gen_str);
-            if (active_from > generation)
+            if (active_from > generation) {
+                if (strict_) {
+                    const auto saved = params_;
+                    ingest_parameter(name_part, value_part);
+                    params_ = saved;
+                }
                 continue;
+            }
             if (active_from == generation)
                 params_.param_change_generation = generation;
         }

@@ -2,6 +2,7 @@
 #include "i_config.h"
 
 #include <filesystem>
+#include <nlohmann/json.hpp>
 #include <string>
 
 struct ConfigParams {
@@ -12,6 +13,9 @@ struct ConfigParams {
     unsigned brain_num_hidden_layers = 1;
 
     // Simulation
+    unsigned map_size = 120;
+    double max_duration_minutes = 0.0;
+    unsigned gui_fps = 30;
     unsigned population = 100;
     unsigned steps_per_generation = 300;
     unsigned max_generations = 200000;
@@ -76,7 +80,21 @@ struct ConfigParams {
 /// (e.g. `brain_size_n@500 = 8` activates from generation 500 onwards).
 class Config : public IConfig {
   public:
-    explicit Config(const std::string& filepath);
+    explicit Config(const std::string& filepath, bool strict = false);
+    static nlohmann::json schema();
+    nlohmann::json values() const;
+    unsigned get_map_size() const override {
+        return params_.map_size;
+    }
+    double get_max_duration_minutes() const override {
+        return params_.max_duration_minutes;
+    }
+    unsigned get_gui_fps() const override {
+        return params_.gui_fps;
+    }
+    const std::string& path() const {
+        return filepath_;
+    }
     void set_point_mutation_rate(double rate) override;
     unsigned get_brain_size_s() const override;
     unsigned get_brain_size_n() const override;
@@ -137,6 +155,8 @@ class Config : public IConfig {
     /// directory that contains the INI file. Absolute paths are unchanged.
     void resolve_dir(std::string& dir) const;
 
+    bool strict_ = false;
+    void validate() const;
     ConfigParams params_;
     std::string filepath_;
     std::filesystem::path config_dir_;

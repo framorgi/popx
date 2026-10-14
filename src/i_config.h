@@ -7,6 +7,15 @@
 class IConfig {
   public:
     virtual ~IConfig() = default;
+    virtual unsigned get_map_size() const {
+        return 120;
+    }
+    virtual double get_max_duration_minutes() const {
+        return 0;
+    }
+    virtual unsigned get_gui_fps() const {
+        return 30;
+    }
 
     // --- Brain (neural network) layer sizes ----------------------------------
     virtual unsigned get_brain_size_s() const = 0;            ///< Sensor (input) layer
