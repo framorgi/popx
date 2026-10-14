@@ -77,6 +77,8 @@ void Pop::init() {
     total_reproduction_energy_loss_ = 0.0f;
     total_respiration_energy_gain_ = 0.0f;
     total_thermoregolation_energy_loss_ = 0.0f;
+    respiration_credit_ = 0.0;
+    total_respiration_heat_ = 0.0;
     total_respiration_count_ = 0;
     total_photosynthesis_count_ = 0;
     total_energy_cap_loss_ = 0.0;
@@ -830,25 +832,55 @@ void Pop::run_chloroplasts() {
 }
 
 void Pop::run_mitochondrions() {
+    const double target = std::clamp(config_->get_phy_respiration_energy_target(), 0.0,
+                                     static_cast<double>(MaxEnergy));
+    const double band = config_->get_phy_respiration_demand_band();
+    const double width = config_->get_phy_efficiency_half_range_c();
+    const double optimum = config_->get_phy_opt_temperature();
+    if (glucose_ == 0 || o2_ == 0 || phy_.mitochondrions == 0 || energy_ >= target ||
+        !std::isfinite(energy_) || !std::isfinite(temperature_) || !std::isfinite(target) ||
+        !std::isfinite(band) || band <= 0.0 || !std::isfinite(width) || width <= 0.0 || !std::isfinite(optimum)) {
+        respiration_credit_ = 0.0;
+        return;
+    }
+
+    // Mitochondria set capacity, not mandatory fuel consumption. The smooth thermal
+    // response has no cold-start dead zone. Above the optimum a smooth inhibition
+    // reaches zero at optimum + width, preventing fuel-driven overheating there.
+    const double thermal_distance = (temperature_ - optimum) / width;
+    const double thermal_yield = std::exp2(-thermal_distance * thermal_distance);
+    const double hot = std::clamp(thermal_distance, 0.0, 1.0);
+    const double hot_inhibition = 1.0 - hot * hot * (3.0 - 2.0 * hot);
+    const double thermal_activity = thermal_yield * hot_inhibition;
+    if (thermal_activity == 0.0) {
+        respiration_credit_ = 0.0;
+        return;
+    }
+    const double demand = std::clamp((target - energy_) / band, 0.0, 1.0);
+    const double capacity = static_cast<double>(phy_.mitochondrions);
+    respiration_credit_ = std::min(capacity, respiration_credit_ + capacity * demand * thermal_activity);
+    const unsigned reactions = static_cast<unsigned>(std::min(
+        std::floor(respiration_credit_), static_cast<double>(std::min(glucose_, o2_))));
+    // Discard unfulfilled whole capacity when substrate-limited: no catch-up burst.
+    respiration_credit_ -= std::floor(respiration_credit_);
+
     unsigned co2_produced = 0;
-    const float opt_temp = static_cast<float>(config_->get_phy_opt_temperature());
-    const float kEfficiencyHalfRangeC = static_cast<float>(config_->get_phy_efficiency_half_range_c());
-    const float temp_delta = std::abs(static_cast<float>(temperature_) - opt_temp);
-    const float efficiency = std::clamp(1.0f - (temp_delta / kEfficiencyHalfRangeC), 0.0f, 1.0f);
-    for (unsigned i = 0; i < phy_.mitochondrions; ++i) {
-        if (glucose_ == 0 || o2_ == 0)
-            break;
-        // C6H12O6 + O2 -> energy + CO2 + heat
+    for (unsigned i = 0; i < reactions && energy_ < target; ++i) {
+        // Only completed reactions transfer matter and generate useful energy/heat.
         glucose_--;
         o2_--;
-        const float energy_gain = static_cast<float>(config_->get_phy_energy_per_respiration()) * efficiency;
+        const float energy_gain = static_cast<float>(config_->get_phy_energy_per_respiration() * thermal_yield);
         change_energy(energy_gain);
         total_respiration_energy_gain_ += energy_gain;
-        metabolism_heat_ += static_cast<float>(config_->get_phy_heat_per_respiration());
+        const float heat = static_cast<float>(config_->get_phy_heat_per_respiration());
+        metabolism_heat_ += heat;
+        total_respiration_heat_ += heat;
         co2_++;
         co2_produced++;
         ++total_respiration_count_;
     }
+    if (energy_ >= target || glucose_ == 0 || o2_ == 0)
+        respiration_credit_ = 0.0;
     // Release produced CO2 into the cell
     if (co2_produced > 0) {
         auto world = world_.lock();

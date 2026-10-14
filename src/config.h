@@ -49,6 +49,8 @@ struct ConfigParams {
     unsigned phy_max_chloroplasts_ref = 3;
     double phy_energy_per_respiration = 0.2;
     double phy_heat_per_respiration = 0.3;
+    double phy_respiration_energy_target = 100.0;
+    double phy_respiration_demand_band = 25.0;
     double phy_alpha_min = 0.01;
     double phy_alpha_max = 0.5;
     double phy_max_lipids_ref = 80.0;
@@ -107,6 +109,8 @@ class Config : public IConfig {
     unsigned get_phy_max_chloroplasts_ref() const override;
     double get_phy_energy_per_respiration() const override;
     double get_phy_heat_per_respiration() const override;
+    double get_phy_respiration_energy_target() const override;
+    double get_phy_respiration_demand_band() const override;
     double get_phy_alpha_min() const override;
     double get_phy_alpha_max() const override;
     double get_phy_max_lipids_ref() const override;

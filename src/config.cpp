@@ -1,4 +1,5 @@
 #include "config.h"
+#include "common.h"
 
 #include <algorithm>
 #include <cctype>
@@ -140,6 +141,12 @@ double Config::get_phy_energy_per_respiration() const {
 }
 double Config::get_phy_heat_per_respiration() const {
     return params_.phy_heat_per_respiration;
+}
+double Config::get_phy_respiration_energy_target() const {
+    return params_.phy_respiration_energy_target;
+}
+double Config::get_phy_respiration_demand_band() const {
+    return params_.phy_respiration_demand_band;
 }
 double Config::get_phy_alpha_min() const {
     return params_.phy_alpha_min;
@@ -392,6 +399,14 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
     }
     if (name == "phy_heat_per_respiration" && is_d && dval >= 0.0) {
         params_.phy_heat_per_respiration = dval;
+        return;
+    }
+    if (name == "phy_respiration_energy_target" && is_d && dval > 0.0 && dval <= static_cast<double>(MaxEnergy)) {
+        params_.phy_respiration_energy_target = dval;
+        return;
+    }
+    if (name == "phy_respiration_demand_band" && is_d && dval > 0.0 && dval <= static_cast<double>(MaxEnergy)) {
+        params_.phy_respiration_demand_band = dval;
         return;
     }
     if (name == "phy_alpha_min" && is_d && dval >= 0.0) {

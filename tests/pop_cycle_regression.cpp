@@ -166,7 +166,17 @@ void check_bucket_rotation(const std::shared_ptr<ILogger>& logger, const std::sh
     for (const auto tick : first_act)
         require(tick != 0, "agent never completed its first cycle");
 
-    manager.trigger_new_generation(); // Reassigns survivor buckets at arbitrary phase boundaries.
+    std::vector<PositionT> before_positions;
+    for (const auto& pop : pops)
+        before_positions.push_back(pop->get_position());
+    manager.trigger_new_generation();
+    for (std::size_t i = 0; i < pops.size(); ++i) {
+        if (pops[i]->is_alive()) {
+            require(same_position(pops[i]->get_position(), before_positions[i]), "NewGen moved a survivor");
+            require(world->get_cell(before_positions[i])->get_occupant().lock().get() == pops[i].get(),
+                    "NewGen lost survivor occupancy");
+        }
+    }
     require(manager.get_alive_count() >= 8, "NewGen fixture lost too many survivors");
     for (int tick = 0; tick < 8; ++tick)
         manager.update_cycle();

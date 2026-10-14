@@ -138,6 +138,7 @@ class SimulationAudit {
         p->o2_ = 10;
         p->co2_ = 0;
         const auto before = total(*p, *c);
+        p->energy_ = 0.0f; // Full demand at optimal temperature: exactly one reaction.
         const auto e = p->energy_;
         p->run_mitochondrions();
         const auto after = total(*p, *c);
@@ -150,6 +151,7 @@ class SimulationAudit {
         out["reproduction_cost"] = {{"energy_before", pre_cost},
                                     {"energy_after", p->energy_},
                                     {"recorded", p->total_reproduction_energy_loss_}};
+        p->energy_ = 100.0f; // Independent birth fixture: sufficient parental reserve.
         auto manager = std::make_shared<PopsManager>(w, logger, config);
         manager->pops_.push_back(p);
         const auto parent_before = resources(*p);

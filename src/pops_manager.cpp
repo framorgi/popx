@@ -2,12 +2,15 @@
 
 #include <algorithm>
 #include <cmath>
-#include <execution>
+#include <limits>
+#include <tbb/parallel_for.h>
 #include <utility>
 
 PopsManager::PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger,
                          std::shared_ptr<IConfig> config)
-    : world_(std::move(world)), logger_(std::move(logger)), config_(std::move(config)) {
+    : world_(std::move(world)), logger_(std::move(logger)), config_(std::move(config)),
+      phase_arena_(static_cast<int>(std::clamp(config_->get_num_threads(), 1u,
+                                             static_cast<unsigned>(std::numeric_limits<int>::max())))) {
     sense_bucket_.reserve(config_->get_start_population());
     think_bucket_.reserve(config_->get_start_population());
     act_bucket_.reserve(config_->get_start_population());
@@ -57,19 +60,17 @@ bool PopsManager::spawn_population() {
 
 void PopsManager::update_cycle() {
     ++cycle_counter_;
-    // 1. SENSE — read-only on world, writes only per-agent sensor_values_ → safe to parallelise
-    std::for_each(std::execution::par_unseq, sense_bucket_.begin(), sense_bucket_.end(),
-                  [](const std::shared_ptr<Pop>& pop) {
-                      if (pop->is_alive())
-                          pop->sense();
-                  });
-
-    // 2. THINK — pure local brain computation, no shared state → safe to parallelise
-    std::for_each(std::execution::par_unseq, think_bucket_.begin(), think_bucket_.end(),
-                  [](const std::shared_ptr<Pop>& pop) {
-                      if (pop->is_alive())
-                          pop->think();
-                  });
+    // Each parallel phase joins before the next; only per-Pop state is written.
+    phase_arena_.execute([&] {
+        tbb::parallel_for(std::size_t{0}, sense_bucket_.size(), [&](std::size_t i) {
+            if (sense_bucket_[i]->is_alive())
+                sense_bucket_[i]->sense();
+        });
+        tbb::parallel_for(std::size_t{0}, think_bucket_.size(), [&](std::size_t i) {
+            if (think_bucket_[i]->is_alive())
+                think_bucket_[i]->think();
+        });
+    });
 
     // 3. ACT — writes world (move, feromones, kill) → must remain sequential
     for (auto& pop : act_bucket_) {
@@ -282,21 +283,6 @@ double PopsManager::score_pop_for_newgen(const std::shared_ptr<Pop>& pop) const 
     return static_cast<double>(pop->get_offspring_count()) + 0.01 * static_cast<double>(pop->get_energy());
 }
 
-bool PopsManager::try_spawn_random_position(const std::shared_ptr<Pop>& pop, RandomUtility& random_util) {
-    if (!pop) {
-        return false;
-    }
-    constexpr int max_attempts = 2048;
-    for (int attempt = 0; attempt < max_attempts; ++attempt) {
-        int w = random_util.rnd_int(0, world_->get_width());
-        int h = random_util.rnd_int(0, world_->get_height());
-        if (pop->try_spawn(PositionT{w, h})) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void PopsManager::trigger_new_generation() {
     if (pops_.empty()) {
         return;
@@ -323,41 +309,22 @@ void PopsManager::trigger_new_generation() {
     int survivors_n = static_cast<int>(std::round(static_cast<double>(alive.size()) * ratio));
     survivors_n = std::clamp(survivors_n, min_survivors, static_cast<int>(alive.size()));
 
-    std::vector<std::shared_ptr<Pop>> survivors(alive.begin(), alive.begin() + survivors_n);
-
-    for (std::size_t i = 0; i < alive.size(); ++i) {
-        if (i >= static_cast<std::size_t>(survivors_n))
-            alive[i]->die(); // Return reserves of culled agents through the usual death path.
+    // Cull only rejected agents. Survivors keep their cells and phase buckets,
+    // preserving local resource access, signals and pending sense/think decisions.
+    for (std::size_t i = static_cast<std::size_t>(survivors_n); i < alive.size(); ++i) {
+        alive[i]->die();
         world_->remove_entity(alive[i]);
     }
 
     const int culled = static_cast<int>(alive.size()) - survivors_n;
     dead_count_ += culled;
     total_deaths_ += culled;
-    pops_.clear();
-    sense_bucket_.clear();
-    think_bucket_.clear();
-    act_bucket_.clear();
+    const auto is_dead = [](const std::shared_ptr<Pop>& pop) { return !pop->is_alive(); };
+    std::erase_if(pops_, is_dead);
+    std::erase_if(sense_bucket_, is_dead);
+    std::erase_if(think_bucket_, is_dead);
+    std::erase_if(act_bucket_, is_dead);
     clear_reproduction_backlog();
-
-    RandomUtility random_util;
-    for (auto& pop : survivors) {
-        if (!try_spawn_random_position(pop, random_util)) {
-            pop->die();
-            ++dead_count_;
-            ++total_deaths_;
-            continue;
-        }
-        pops_.push_back(pop);
-        const int phase = rand() % 3;
-        if (phase == 0) {
-            sense_bucket_.push_back(pop);
-        } else if (phase == 1) {
-            think_bucket_.push_back(pop);
-        } else {
-            act_bucket_.push_back(pop);
-        }
-    }
 
     ++generation_count_;
     if (config_->get_brain_serialization_enabled()) {

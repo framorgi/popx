@@ -1,4 +1,148 @@
-# PopX — stato tecnico ed evolutivo
+# PopX — stato corrente, validazione e archivio delle indagini
+
+Documento unico di riferimento del progetto. `AGENTS.md` contiene le istruzioni
+operative. Audit e indagini precedenti sono conservati sotto con risultati e
+limiti originali; non descrivono automaticamente il modello attuale.
+
+## Stato corrente — respirazione regolata, 14 ottobre 2026
+
+Implementazione autorizzata dopo i confronti termici: consumo regolato dalla
+riserva energetica, attività termica continua, materia/energia/calore prodotti
+soltanto dalle reazioni realmente eseguite. Nessun premio al movimento, nessuna
+modifica delle azioni o dell'ambiente produttivo. Adattamento evolutivo non dimostrato.
+
+Indice:
+- [Fisiologia implementata](#fisiologia-implementata)
+- [Validazione corrente](#validazione-corrente)
+- [Stato operativo e limiti](#stato-operativo-e-limiti)
+- [Audit e indagini precedenti, sezioni1–22](#stato-storico)
+- [Audit dinamico storico](#audit-dinamico-storico)
+- [Indagini termiche precedenti alla regolazione](#indagini-termiche-storiche)
+- [Pilot successivo alla segnalazione GUI](#pilot-storico)
+
+### Fisiologia implementata
+
+`Pop::run_mitochondrions()` interpreta i mitocondri come capacità massima di
+reazione per tick. Parametri effettivi INI:
+
+| Parametro | Valore | Significato |
+|---|---:|---|
+|`phy_respiration_energy_target`|100|Riserva bersaglio; non assegna energia gratuita|
+|`phy_respiration_demand_band`|25|Richiesta piena a energia<=75, nulla a energia>=100|
+|`phy_opt_temperature`|37 C|Centro della risposta termica|
+|`phy_efficiency_half_range_c`|10 C|Semilarghezza del rendimento e offset dell'inibizione calda|
+|`phy_energy_per_respiration`|0,3|Massima energia utile per reazione|
+|`phy_heat_per_respiration`|0,3|Calore per reazione completata|
+|`phy_alpha_min` / `phy_alpha_max`|0,01 /0,5|Scambio termico; valori produttivi precedenti conservati|
+
+Con `z=(T-37)/10`, `Y=2^(-z²)`, `h=clamp(z,0,1)`:
+
+```
+domanda = clamp((bersaglio - energia) / banda, 0, 1)
+inibizione_calda = 1 - 3*h² + 2*h³
+attività = Y * inibizione_calda
+flusso_richiesto = mitocondri * domanda * attività
+```
+
+Y è continuo e non nullo a25 C. Sul lato caldo l'attività diminuisce fino a zero
+a47 C senza un salto al confine. Il reward termico conserva la banda lineare:
+la sua formula NON è il rendimento respiratorio nuovo. Il parametro condiviso
+è documentato per evitare confusione.
+
+Il flusso frazionario si accumula in un credito <1; sono eseguite solo reazioni
+intere, entro capacità e substrati. Non si accumulano reazioni intere arretrate.
+Esaurimento substrati, riserva soddisfatta e completa inibizione azzerano il
+credito. `init()` e i figli iniziano con credito/calori cumulati nulli. Ogni
+reazione consuma1 glucosio e1 O2, produce1 CO2, energia0,3*Y e calore0,3.
+La riserva può superare il bersaglio di meno di una reazione; il cap energetico
+assoluto400 e il suo ledger rimangono. Il flusso si interrompe al bersaglio.
+I coefficienti sono un modello astratto, non una calibrazione in unità SI.
+
+`total_respiration_heat_` traccia il calore cumulativo; i ledger di energia
+includono trasferimenti, cap e roundoff. Nessun calore o energia per capacità
+non utilizzata. Vita, maturità, costo riproduttivo e donazione parentale restano
+quelli precedenti. La regolazione è fisiologica, non un'azione o un reward nuovo.
+Non garantisce sopravvivenza in ambienti letali o senza risorse.
+
+Una prima curva simmetrica senza inibizione aggiuntiva sul lato caldo lasciava
+M=25 troppo caldo e con scarsa energia; il controllo di recupero ha motivato
+l'inibizione finale. Non è mantenuta una seconda implementazione produttiva
+o un selettore nascosto della vecchia fisiologia.
+
+### Validazione corrente
+
+Comandi ripetibili (standalone, non registrati in CTest):
+
+```sh
+bash scripts/run_regressions.sh
+bash scripts/run_audit.sh data_out/audit/regulated_conservation_2026-10-14.json probes
+bash scripts/run_thermal_comparison.sh data_out/audit/thermal_regulated_2026-10-14.json moderate
+```
+
+- Build Release del target esplicito `popx` riuscita.
+- Regressione respirazione: parametri/invalidi, consumo nullo a riserva soddisfatta,
+  reazioni frazionarie, bilanci e calore, assenza di raffiche dopo scarsità,
+  inibizione calda e reset. Recupero da25 C/energia25 in2000 tick con rifornimento
+  controllato: M=1/5/25 raggiungono energia94,80/99,03/99,76 e corpo28,42/28,36/28,31 C.
+- Un figlio nato con meno di13 energia donata raggiunge maturità mediante1500
+  aggiornamenti reali e può riprodursi. Genitore iniziale maturo per costruzione,
+  rifornimento esplicito: controllo della catena, non discendenza autosostenuta.
+- Regressioni fasi, posizioni NewGen, parallelismo, codifica/eredità e feromoni PASS.
+  Confronto controllato90 tick:1 e4 thread osservati, stati identici.
+- Probe materia/energia/riproduzione/cap/morte/NewGen PASS.
+-180 controlli isolati e144 confronti a risorse finite eseguiti sul modello
+  regolato; bilanci e finitezza verificati. Il JSON identifica `reserve_regulated_v1`.
+  Disegno e limiti delle fixture sono nell'appendice termica e nel codice.
+  Replay esatto dei180 controlli e144 popolazioni sulla build finale: PASS.
+- Pilot nativo2000 tick con INI produttivo:120 vivi finali,137 nascite naturali,
+  0 forzate,97 morti (66 termiche,31 energetiche),5513 movimenti riusciti su18375
+  tentativi. Bilanci PASS; durata diagnostica1,085s. Singola estrazione non appaiata,
+  non confronto causale con i vecchi pilot né benchmark GUI. Clima ancora ostile
+  e cap120 raggiunto: la nuova regolazione non elimina mortalità o censura.
+  Dati in `data_out/audit/regulated_native_pilot_2026-10-14.json`.
+
+Confronto descrittivo a25–32 C, coefficienti termici produttivi precedenti invariati:
+12 condizioni per modello (3 tratti×2 politiche×2 layout),288 fondatori totali.
+
+| Modello | Fondatori vivi | Nascite naturali | Figli vivi | Morti termiche | Morti energetiche |
+|---|---:|---:|---:|---:|---:|
+|Vecchia respirazione obbligatoria|96|192|192|192|0|
+|Respirazione regolata|288|1152|1152|0|0|
+
+A18–32 C il modello nuovo conserva288 fondatori,1157 nascite,1152 figli vivi,
+0 morti termiche e5 energetiche. Il controllo estremo0–50 C conserva177/288
+fondatori: non rende ogni nicchia abitabile. I conteggi aggregano condizioni
+costruite, non sono probabilità stimate su popolazioni casuali.
+
+Nel controllo25–32 C/pattuglia/layout0/M=5, nei tick1500–2000 il modello nuovo
+produce1394,96 energia a fronte di1399,83 costi (riserva vicino al bersaglio),
+contro zero nella vecchia variante0,1/0,02. Il cap120 e la censura al tick2000
+limitano i conteggi riproduttivi. Politiche imposte, genoma vuoto, mutazione0
+solo nella fixture, eredità true ma senza pesi attivi: nessuna prova qui di
+apprendimento efficace, adattamento, cooperazione o stabilità indefinita.
+I dati locali restano ignorati da Git; script, fixture e protocollo sono versionati.
+
+### Stato operativo e limiti
+
+- Mutazione produttiva INI0,01 (prima0,05); vale anche per i tratti PHY.
+- Eredità dei pesi true per esplicita richiesta attuale dell'utente, superando la
+  preferenza contraria degli audit storici; non modificata dalla regolazione.
+- NewGen mantiene selezione/culling ma conserva celle, ordine e fasi dei superstiti.
+- `num_threads` controlla l'arena TBB di sense/think;1=seriale,4=fino a4 thread.
+  Azioni, fisiologia e mondo sono sequenziali. Nessuna accelerazione garantita.
+- GUI a tick10 ms; nessuna modalità infinita/acceleratore nuova in questo intervento.
+- RNG produttive non centralizzate: un solo seed non rende riproducibili i pilot nativi.
+- `old/` archivio locale escluso da codice, prove e commit; layout UI locali esclusi.
+- Il remoto aveva `master` e nessun `main`: la pubblicazione richiesta crea `main`
+  dalla storia corrente, senza riscrivere `master` o cambiare il default remoto.
+
+Le sezioni successive sono fotografie storiche. "Nessuna modifica fisiologica",
+num_threads ignorato, par_unseq, teletrasporto NewGen o rendimento lineare
+descrivono versioni precedenti, non lo stato attuale.
+
+<a id="stato-storico"></a>
+## Archivio: stato tecnico e indagini precedenti
+
 
 ## Feromoni completati e nuove run brevi — 14 ottobre 2026
 
@@ -66,7 +210,7 @@ materiali0; ledger energetico finale0 dopo arrotondamenti esplicitamente misurat
 Persistono sink alla morte per capacità finite, documentati separatamente.
 
 Dettagli, risultati, protocollo, limiti e comandi in
-[DYNAMIC_AUDIT_2026-10-14.md](DYNAMIC_AUDIT_2026-10-14.md).
+[audit dinamico storico](#audit-dinamico-storico).
 Le sezioni1–17 sottostanti restano l'audit storico precedente alle correzioni;
 le frasi “nessun esperimento condotto” e i problemi risolti appartengono a quella
 fotografia, non allo stato successivo riportato nel nuovo documento.
@@ -1831,3 +1975,689 @@ Replay600 richiede il corpus salvato, stessa build/config e seed. Il completamen
 espande la distribuzione genetica automatica da37 a49 sorgenti: isolare questa
 modifica da clima, densità, geometria e learning nelle comparazioni future.
 Nessuna lunga evoluzione eseguita, nessun risultato sociale inventato.
+
+
+## 22. Termica e consumo; continuità spaziale e thread — 14 ottobre 2026
+
+Vedere [indagini termiche storiche](#indagini-termiche-storiche):
+360 controlli deterministici con bilanci e replay. Isolamento lipidico e calore
+respiratorio possono causare morte prima della maturità; risorse abbondanti non
+eliminano questo ostacolo e possono alimentarlo. Nessuna modifica termica globale.
+Su richiesta: mutazione INI0,01, NewGen senza riposizionamento/riassegnazione fasi,
+num_threads effettivo nell'arena TBB di sense/think. Eredità dei pesi mantenuta true
+per esplicita preferenza attuale dell'utente, che aggiorna quella precedente.
+Build, regressioni fasi/posizioni/thread e probe di conservazione PASS. Le descrizioni
+precedenti di par_unseq, num_threads ignorato e teletrasporto sono ora storiche.
+
+
+<a id="audit-dinamico-storico"></a>
+## Appendice: Audit dinamico storico
+
+### PopX — analisi dinamica breve e correzioni dei bilanci
+
+Data: 14 ottobre 2026. Revisione di partenza:
+`015d3f4da0e2c19628bb6b2afbb9d7d095e408f7`, più le modifiche descritte qui.
+Configurazione `config/popx.ini` invariata. Il developer ha autorizzato la run,
+la correzione degli scompensi e la donazione di **1/8 anche di energia, O2 e lipidi**.
+
+## Conclusione
+
+La variazione delle scelte neurali è osservabile e la copia genetica senza
+mutazione preserva le scelte nel controllo comune. Non è dimostrata efficacia
+adattiva dell'ecosistema. Il problema più evidente in queste prove è la
+**sopravvivenza termica prima della maturità**, che restringe fortemente i candidati
+alla selezione riproduttiva. Ereditabilità sotto mutazione/plasticità e traduzione
+del movimento in fitness richiedono ancora confronti controllati.
+
+Sono state eliminate creazioni gratuite di risorse/energia e incongruenze di
+trasferimento e di contabilizzazione. Il ledger finale distingue reazioni,
+rigenerazione, trasferimenti, capacità delle celle, morti e arrotondamenti.
+
+Le run non sono state prolungate oltre il budget breve: continuare senza controllo
+delle RNG e senza un confronto causale di strategie non avrebbe dimostrato adattamento.
+
+## Protocollo ed esecuzioni effettive
+
+Harness [tools/popx_audit.cpp](../tools/popx_audit.cpp), collegato agli oggetti
+Release del simulatore corrente. Nessuna GUI, modifica di genomi durante la run,
+ricompensa di movimento o variazione dell'INI. Usa `Simulator::init/update` con
+PopsManager/Pop/Brain/Cell di produzione. `AuditWorld::update_cycle` misura le
+rigenerazioni attraverso somme prima/dopo la chiamata alla versione di produzione.
+
+L'harness conserva riferimenti agli individui morti per registrare età, prole e
+contatori finali. Non li reintroduce nel mondo; serializzazione reti disattivata
+nell'INI. Traccia richieste di movimento prima della fase act e distanza dopo il
+tick, genealogia e nascite normali/forzate. Campioni ogni100 tick, tutti gli eventi
+di nascita, tutti gli individui incontrati, genomi e ambiente iniziale dove previsto.
+
+RNG di produzione ancora da `random_device`: **non sono run a seed riproducibile**.
+Il seed C 20261014 controlla soltanto `rand()`. Ambienti/genomi differenti fra i
+pilot: **nessuna differenza prima/dopo è una stima causale dell'effetto delle fix**.
+Il JSON include INI, variante, revisione e questa limitazione. Anche l'ordine dei
+probe prima della run fa parte del protocollo; le fixture sono separate dall'ecosistema.
+
+| Esecuzione | Tick | Condizione e risultato |
+|---|---:|---|
+| Preflight iniziale | 0 |80 vivi,0 occupanti corrispondenti: arresto immediato. Corretto init mondo prima dello spawn. |
+| Pilot con vecchi trasferimenti |2000 | Init corretto, risorse ancora difettose; termine al budget.76 nascite,74 normali e2 forzate. |
+| Pilot dopo correzioni risorse |2000 | Termine al budget;73 nascite,71 normali e2 forzate. Bilancio materiale senza residui non spiegati. |
+| Validazione contabile finale |200 | Solo controllo della precisione dopo accumulatori double/roundoff; non prova evolutiva. Ledger materiale ed energetico senza residui non spiegati. |
+| Fixture trasferimenti e NewGen | nessun ciclo ecosistema | Test prima/dopo, compreso riposizionamento impossibile; controlli finali PASS. |
+| Fixture termiche | massimo 150 tick/individuo |18 combinazioni ambiente/mitocondri/lipidi, senza azioni o learning; diagnostica fisiologica. |
+
+Il timer dei pilot misura loop e assay finali; esclude init/compilazione/rendering
+e serializzazione del JSON. Le durate di 2,81 e 1,06 secondi dei due pilot non sono un benchmark
+comparabile. Budget max 2000 tick,30 secondi wall-time; arresto anticipato per
+estinzione, invariante griglia violato, probe risorse fallito o assenza di nascite
+normali oltre la finestra di maturazione (da 1200 tick). Non è stata eseguita una
+nuova run lunga dopo la validazione contabile finale.
+
+## Risultati osservati
+
+| Misura | Vecchi trasferimenti, init corretto | Trasferimenti corretti |
+|---|---:|---:|
+| Fondatori |80 |80 |
+| Firme di azione distinte sul pannello comune |68 |69 |
+| Richieste di movimento eseguibili nel gruppo act |5495 |3671 |
+| Richieste con distanza effettiva>0 |849 (15.45%) |656 (17.87%) |
+| Morti termiche entro100 tick |53 |53 |
+| Fondatori arrivati ad età > 1000 |18 |18 |
+| Fondatori con almeno un figlio, inclusa forzatura |7 |12 |
+| Nascite totali, esclusi fondatori |76 |73 |
+| Vivi al termine |66 |42 |
+| Morti termiche totali |90 |103 |
+| Morti per energia totali |0 |8 |
+
+La mortalità di 53/80 entro100 tick precede di molto la soglia riproduttiva
+età > 1000. Il movimento è richiesto ed eseguito, ma molto spesso non produce
+displacement. Non sono registrate tutte le cause del fallimento: non si può
+ripartire il restante82.13% fra bordi, pendenza, occupazione, direzione o richiesta
+random nulla. Il campione mostra casi1/2 del problema movimento distinguibili;
+non dimostra un vantaggio di acquisizione o riproduzione (casi3/4).
+
+I due53/80 sono osservazioni separate, non repliche equivalenti a seed abbinato.
+Il cap120 non è la spiegazione esclusiva del risultato: nel pilot corretto la
+popolazione resta sotto120 nei campioni. Non si esclude un blocco spaziale locale.
+NewGen periodico50000 e refresh termico 5000 non sono raggiunti nei pilot; NewGen
+è stato verificato separatamente nelle fixture.
+
+### Variazione ed ereditabilità
+
+Firma: 37 decisioni argmax per rete su un vettore zero, quattro vettori uniformi
+0.25/0.5/0.75/1 e 32 vettori one-hot. Assay senza learning, identico per tutte le
+reti. È una misura di differenza nelle **scelte neurali**, non fitness, output
+completi o strategie efficaci; alcuni input sintetici non rappresentano uno stato
+ecologico realmente incontrabile.
+
+Nel pilot corretto:
+
+- 69 firme diverse per80 genomi fondatori: assenza totale di variazione esclusa
+  per questo controllo.
+- Copia del genoma originale con mutazione 0: concordanza100% sui 37 input nei16
+  individui testati. Questo verifica la fedeltà della codifica/copertura dell'assay.
+- Figli realmente nati: concordanza media85.60% con il pannello del genoma originale
+  del genitore,73 coppie. Include eredità dei pesi appresi, mutazione e possibili
+  rate aumentati nel regime di bassa popolazione; non isola le loro cause.
+- Assay supplementare16 individui: genoma appreso/originale99.32% di concordanza
+  media; figlio diagnostico/originale87.84%, rate 0.05. Campione scelto per ordine
+  lessicografico degli ID, non rappresentativo o casuale; comprende stati di vita diversi.
+- 3 nascite normali sono da nonfondatori: trasmissione e riproduzione di discendenti
+  sono avvenute, ma sono troppo poche per stabilire un trend evolutivo.
+
+Resta `hebbian_inheritance=true`; nessuna politica lamarckiana è stata modificata.
+Copia fedele del genoma originale non dimostra identico comportamento nella vita,
+che dipende da stato, tratti, ambiente, random, plasticità e opportunità.
+
+### Selezione e correlazioni
+
+Nei80 fondatori del pilot corretto, Pearson distanza cumulativa–figli=0.0462;
+con distanza/età diventa−0.1763; fra soli 18 fondatori maturi, distanza/età–figli=0.1063.
+Sono statistiche descrittive, non test di causalità: censura dei vivi, habitat,
+tratti e durata delle opportunità riproduttive non sono pienamente controllati.
+Il cambiamento con la normalizzazione mostra perché il solo indicatore grezzo
+non identifica un vantaggio del movimento.
+
+Un limite di credito dell'apprendimento resta nel codice: reward e learning sono
+calcolati in `Pop::update` prima della riproduzione del manager. Il delta energetico
+del reward non include quindi la donazione e il costo riproduttivo successivi;
+il livello energetico li riflette nel tick seguente. È un limite architetturale
+non misurato come causa del risultato e non è stato modificato arbitrariamente.
+
+Non si può attribuire l'andamento demografico alle correzioni da due run non
+abbinate. Si può invece dimostrare causalmente nelle fixture che, prima delle
+correzioni, un singolo figlio aumentava energia globale di 100, O2 e lipidi di20:
+fitness e crescita erano sostenute anche da una fonte artificiale non contabilizzata.
+
+Grafico del singolo pilot e dei controlli termici separati:
+[dynamic_summary.png](../data_out/audit/dynamic_summary.png).
+I vivi al tick150 nelle fixture sono censurati;150 non è la loro durata di vita.
+
+## Scompensi identificati e correzioni verificate
+
+| Problema | Evidenza prima | Correzione/verifica finale |
+|---|---|---|
+| Deposito glucosio su cella vuota | Richiesta10,ritorno0,stock0. | Deposito10,ritorno10,stock10. |
+| Depositi e cap | Acqua con2 posti liberi: aumenta2 ma ritorna10; somme unsigned potevano overflow. | Tutti i give_* restituiscono quantità accettata usando capacità residua; test cap e UINT_MAX su tutte le6 risorse. |
+| LEAVE_* crea risorse | Glucosio/acqua/calcio: totale agente+cella aumenta10 senza consumo. | Si trasferisce min(10,riserva,capacità); totale invariato e quantità non accettata resta nell'agente. |
+| CO2 respiratorio duplicato |1 glucosio e1 O2 consumati,2 CO2 creati. |1 CO2 prodotto; quanto accettato dalla cella viene rimosso dall'agente, resto trattenuto. |
+| O2 fotosintetico perso a cella piena | Riscontro statico: give clampava e il resto non era conservato. | Prodotto1 O2 totale anche con cella piena, resto interno; fixture PASS. |
+| Costo riproduttivo fittizio | Contatore+0.3,energia invariata. | Costo reale detratto e registrato; nessun costo su spawn fallito, nessuna nascita se non finanziabile. |
+| Dotazione gratuita neonato |+100 energia,+20 O2,+20 lipidi per nascita. | Donazione1/8 di tutte le6 riserve e dell'energia residua dopo costo; materia globale invariata, energia totale−0.3. |
+| Stock lipidico ignora tratto | Riscontro statico: uptake oltre adipose_stock_max. | Init/uptake rispettano capacità; test80 lipidi e30 in cella lascia entrambi invariati. |
+| Morte/rilascio ripetibile | Riserve non decrementate, nessun guard contro die ripetuto. | Solo una restituzione, sottrazione degli importi accettati e resto disponibile al ledger come overflow terminale. |
+| NewGen elimina senza restituzione | Riscontro statico del percorso di culling. | Usa die prima della rimozione; test10→9 senza perdita materiale. |
+| NewGen fallisce riposizionamento | Fixture tutta bloccata:−900 G,−900 acqua,−180 O2,−180 lipidi;0 vivi ma1 morte contata. | Posizione precedente preservata su spawn fallito, restituzione riserve e conteggio di tutte10 morti; residui0. |
+| Minimo superstiti superiore ai vivi | Precondizione clamp violata con3 vivi,minimo8. | Minimo limitato alla popolazione; fixture3→3 PASS. |
+| Statistiche energetiche numeriche | Residuo0.06069 nel pilot lungo con cumulati float. | Cumulati double; change_energy registra arrotondamento reale del float; validazione 200 tick: differenza0.007195 interamente spiegata dal roundoff, residuo0. |
+| Popolazione non registrata | Preflight80 vivi,0 occupanti. | Init ambiente prima dello spawn;80 corrispondenze nei pilot successivi. |
+
+La donazione energetica è un trasferimento, **non dissipazione**: non si aggiunge
+al contatore “reproduction loss”. La dissipazione è il costo 0.3 già previsto dal
+codice/INI. Le riserve intere donate sono arrotondate per difetto, con resto al
+mittente; l'energia è divisa come float. Cambia quindi realmente la demografia
+rispetto al modello precedente con dotazioni gratuite.
+
+## Ledger e perdite esplicite
+
+Ordine vettori: glucosio,acqua,calcio,CO2,O2,lipidi. Totali includono mondo e
+agenti vivi; i morti sono mantenuti solo per misurare riserve terminali non accettate.
+Equazioni nel modello semplificato attuale:
+
+```text
+Delta_G   = regen_G + fotosintesi - respirazioni - overflow_morti_G
+Delta_H2O = -fotosintesi - overflow_morti_H2O
+Delta_Ca  = -overflow_morti_Ca
+Delta_CO2 = respirazioni - fotosintesi - overflow_morti_CO2
+Delta_O2  = regen_O2 + fotosintesi - respirazioni - overflow_morti_O2
+Delta_Lip = -overflow_morti_Lip
+Delta_E = income_resp - basale - movimento - termoregolazione - riproduzione
+          - surplus_cap - energia_dei_morti + arrotondamento_float
+```
+
+Sono conteggi delle unità del modello, non conservazione di atomi/massa fisica
+con una stechiometria biologica completa. Non è stata introdotta una nuova chimica.
+
+Pilot corretto 2000 tick: 55339 respirazioni,18072 fotosintesi,28769 G e28744 O2
+rigenerati. Residui non spiegati delle6 risorse: **[0,0,0,0,0,0]**.
+Costo riproduttivo realmente detratto21.9 (73×0.3); nessuna energia nascita gratuita.
+
+Le capacità finite comportano ancora **uscite del sistema alla morte** quando la
+cella non accetta tutte le riserve. Nel pilot corretto: [1229,2334,2066,7587,1500,333]
+unità. Sono perdite quantificate separatamente, non trasferimenti conservativi
+completi né discrepanze nascoste. Eliminarle richiederebbe decidere una regola
+ulteriore per cadaveri, overflow o ridistribuzione; non è stata inventata durante
+questa correzione. Le perdite vanno incluse nell'interpretazione ecologica della fitness.
+
+Validazione contabile 200 tick sulla versione finale del ledger: residui materiali0,
+energia iniziale 8000,energia finale vivi 1862.84810,roundoff+0.00719533,
+**residuo energetico non spiegato0**. È una verifica contabile, non confronto
+causale con il pilot2000 tick o prova che la popolazione abbia migliorato fitness.
+
+## Diagnostica termica controllata
+
+18 fixture con genoma vuoto, nessuna azione/learning, corpo iniziale25°C,
+mitocondri 1/5/25,lipidi fissi 20/80,ambiente 0/25/37°C. Cloroplasti0 e nessun lipide
+ambientale. Glucosio/O2 nella cella reintegrati per isolare la fisiologia termica;
+l'assorbimento automatico resta5/tick, quindi25 mitocondri non implicano25
+respirazioni sostenibili ogni tick. Nessuna riproduzione; orizzonte massimo 150 tick.
+
+Esempi osservati:
+
+| Ambiente | Mitocondri | Lipidi | Esito |
+|---:|---:|---:|---|
+|0°C |1 |20 | Morte per freddo al tick 3,corpo 6.63°C. |
+|0°C |1 |80 | Vivo a150 tick,corpo 28.89°C. |
+|25°C |5 |20 | Vivo a150 tick,corpo 28.97°C. |
+|25°C |5 |80 | Morte per caldo al tick 41,corpo 75.66°C. |
+|37°C |5 |20 | Vivo a150 tick,corpo 40.97°C. |
+|37°C |5 |80 | Morte per caldo al tick 37,corpo 75.31°C. |
+
+Questo isola un effetto **non neurale** forte: l'isolamento può proteggere dal
+freddo e impedire di smaltire calore respiratorio. Non è automaticamente un bug,
+né prova che una rete possa evolvere la strategia per gestirlo. Non modificati
+heat,alpha,soglie di morte o parametri per “far funzionare” l'ecosistema.
+
+## Artefatti e ripetizione dei controlli
+
+Dati locali in `data_out/audit/` (directory ignorata da Git):
+
+- `baseline.json`: fallimento iniziale e prime fixture dei difetti.
+- `legacy_resources_pilot.json`: primo pilot valido con trasferimenti vecchi.
+- `corrected_pilot.json`: pilot2000 tick con trasferimenti corretti.
+- `accounting_validation.json`: verifica200 tick con contabilità finale.
+- `newgen_failure_before.json`: regressione fallita prima della fix del riposizionamento.
+- `conservation_regression.json`: fixture finali PASS e 18 prove termiche.
+- `summary.json`: analisi descrittiva riproducibile dei JSON salvati.
+- `manifest.json`: dimensioni e SHA256; `final_source_diff.patch`: modifiche di produzione.
+- `dynamic_summary.png/svg`: figura statica generata da `scripts/plot_audit.py`.
+
+Comandi, dalla root (Bash, toolchain/dependency cache già disponibili):
+
+```sh
+bash scripts/run_audit.sh /tmp/conservation_checks.json probes
+bash scripts/run_audit.sh /tmp/short_pilot.json 2000
+python3 scripts/analyze_audit.py data_out/audit
+python3 scripts/plot_audit.py data_out/audit
+```
+
+Il primo ricontrolla fixture e termica senza run ecosistemica. Il secondo esegue
+un **nuovo** pilot casuale: non riproduce i numeri di questa sessione. Exit1 se
+falliscono fixture, invariante iniziale o ledger; JSON comunque conservato per diagnosi.
+Lo script usa target `popx`, evitando `format ALL`; nessuna nuova dipendenza.
+Sono passati anche build/link Release e `tests/pop_cycle_regression.cpp` già esistente.
+CTest rimane senza test registrati: questi controlli sono standalone.
+
+## Prossimo esperimento con maggior valore informativo
+
+Common garden a temperatura/risorse controllate e stessi tratti, confrontando
+strategie/genomi già osservati, con seed/replay completo e ledger validato.
+Separare: richiesta→successo movimento, uptake→energia utilizzabile,
+sopravvivenza→tempo idoneo, figli→discendenti sopravvissuti. Annotare forzatura,
+mutazione aumentata e plasticità; effettuare repliche e controlli per habitat/età.
+
+La priorità è verificare **quale strategia sia selezionabile in condizioni in cui
+può arrivare alla maturità**, poi quanto fedelmente venga trasmessa. Non aggiungere
+premi di movimento, nuovi sensori o learning prima di questa discriminazione.
+
+
+<a id="indagini-termiche-storiche"></a>
+## Appendice: Indagini termiche prima della regolazione
+
+### Termica, consumo, continuità spaziale e parallelismo — 14 ottobre 2026
+
+Analisi e interventi richiesti dopo la segnalazione della run GUI di140000 tick.
+Quella traiettoria non è stata acquisita. Le prove sotto sono controlli causali
+di fisiologia, non una replica della run e non esperimenti di adattamento.
+
+## Dinamica implementata
+
+Ogni tick, prima della morte e dell'apprendimento:
+
+1. Prelievo automatico dalla cella: fino a5 glucosio,5 acqua,2 calcio,5 CO2,
+   5 ossigeno;1 lipide se sotto la capacità adiposa. Nessuna scelta neurale richiesta.
+2. Fotosintesi, se permessa da cloroplasti, luce e riserve: al massimo una reazione.
+3. Fino a M reazioni respiratorie, limitate da glucosio e ossigeno disponibili.
+   Per reazione: -1 glucosio,-1 O2,+1 CO2,+0,3 calore; energia +0,3×efficienza.
+4. Aggiornamento temperatura, costo basale0,02 e costi delle azioni; cap energia400.
+5. Morte per energia<=0, età>200000 o temperatura<=10 / >=75 C.
+
+L'efficienza è `max(0, 1 - abs(T_corpo - 37)/10)`:
+zero a27 C o meno e47 C o più. È calcolata prima dell'aggiornamento termico.
+La quantità di reazioni e il loro calore NON diminuiscono quando l'efficienza
+scende a zero, né quando l'energia raggiunge il cap. Le reazioni possono quindi
+esaurire risorse senza guadagno energetico, o dissipare energia per saturazione.
+Questo è comportamento effettivo del modello; non dimostra un bug contabile.
+
+`T_next = T + alpha*(T_ambiente-T) + 0,3*reazioni + calore_azione`
+
+`alpha = clamp(0,5 - 0,49*min(lipidi/80,1), 0,01, 0,5)`.
+Con20 lipidi alpha=0,3775; con80 alpha=0,01. A produzione di calore costante,
+l'equilibrio matematico sarebbe `T_ambiente + 0,3*reazioni/alpha`:
+con5 reazioni e80 lipidi è150 C sopra l'ambiente; la morte interviene prima.
+Con1 reazione e80 lipidi è30 C sopra l'ambiente. Il numero di reazioni effettivo
+non coincide sempre con i mitocondri: l'assorbimento passivo di O2 è5/tick,
+quindi25 mitocondri esauriscono presto la riserva iniziale20 e diventano limitati
+anche dall'ossigeno. Le azioni possono cambiare il glucosio disponibile.
+
+L'azione termoregolatrice aggiunge0,5 calore al costo0,05 energia; non raffredda.
+Il raffreddamento deriva dallo scambio ambientale. Non esiste qui un'azione
+per espellere lipidi o regolare direttamente la respirazione. I lipidi vengono
+assorbiti automaticamente e possono spostare rapidamente il corpo da una
+condizione dissipativa a una molto isolata. L'ambiente genera lipidi casuali
+nelle celle; il test ne isola l'effetto, non ne stima la frequenza nella run GUI.
+
+La maturità riproduttiva richiede età>1000, energia>50 e glucosio>20.
+I fondatori partono con energia100: senza guadagni né azioni il solo costo
+basale impiega circa5000 tick a consumarla. Sopravvivere2000 tick o raggiungere
+l'idoneità una volta non dimostra quindi autosostentamento riproduttivo.
+I figli ricevono risorse donate e ripartono dalla temperatura iniziale configurata25 C;
+non ereditano la temperatura del genitore. Vanno misurati separatamente dai fondatori.
+La rigenerazione locale produttiva di glucosio/O2 è1 ogni1000 tick per cella,
+ben inferiore a una respirazione per tick per un individuo fermo senza altre fonti.
+
+## Protocollo eseguito
+
+`bash scripts/run_thermal_comparison.sh data_out/audit/thermal_comparison_2026-10-14.json`
+
+360 condizioni deterministiche, fino a2000 tick ciascuna, stop alla morte:
+5 temperature ambientali costanti (0,15,25,37,50 C),3 valori di mitocondri (1,5,25),
+2 riserve lipidiche iniziali (20,80),2 modalità risorse,6 varianti.
+
+Ogni controllo usa un individuo isolato, genoma configurato vuoto, cloroplasti0,
+sensibilità1, capacità adiposa80, energia100, glucosio100, O2 20, acqua100;
+cella con500 glucosio,1000 O2,1000 acqua, quota0, calcio/CO2/lipidi0.
+Le modalità sono risorse finite e reintegro esplicito di glucosio/O2 fino al cap
+prima di ogni tick. Il reintegro misura un limite favorevole, NON è produzione,
+e gli apporti effettivi sono registrati; dopo una morte l'esposizione è più breve.
+Nessun movimento, decisione, apprendimento, nascita o aggiornamento del mondo.
+L'eredità Hebbian resta true nella configurazione, ma qui non avvengono nascite.
+Non si usa RNG nella fisiologia misurata; i valori casuali residui dei costruttori
+non influenzano la fixture. Lo stato completo di quelle RNG inutilizzate non è salvato.
+
+Varianti, una alla volta rispetto alla baseline:
+- temperatura iniziale corporea37 anziché25;
+- calore respiratorio0,03 anziché0,3;
+- semilarghezza del rendimento20 anziché10 C;
+- scambio minimo alpha0,05 anziché0,01;
+-80 lipidi ambientali iniziali anziché0, assorbiti con le API reali.
+
+Bilanci glucosio/O2 ed energia (cap e roundoff inclusi) e finitezza verificati
+in tutte360 le condizioni. Replay esatto di tutti i risultati. I dati locali
+ignorati da Git includono INI, commit+stato working tree, hash dei sorgenti,
+compilatore, comandi di compilazione e costanti; harness e script sono nel repository.
+Questi sono casi deterministici, non360 repliche stocastiche indipendenti.
+
+## Risultati principali
+
+Baseline, risorse reintegrate, nessun lipide ambientale:
+
+| Ambiente | Mitocondri | Lipidi iniziali | Esito entro2000 tick | Temperatura finale |
+|---|---:|---:|---|---:|
+|0 C|1|20|Morte termica al tick3|6,63 C|
+|0 C|1|80|Vivo, energia226,42|30,00 C|
+|25 C|1|20|Vivo, energia60,01; rendimento nullo tutti2000 tick|25,79 C|
+|25 C|5|20|Vivo, energia400|28,97 C|
+|25 C|5|80|Morte termica al tick41|75,66 C|
+|37 C|5|20|Vivo, energia400|40,97 C|
+|37 C|5|80|Morte termica al tick37|75,31 C|
+
+A37 C,5 mitocondri,20 lipidi iniziali: aggiungere80 lipidi alla cella cambia
+l'esito da vivo a2000 tick a morte termica al tick73, con energia124,58.
+A25 C la stessa aggiunta porta a morte al tick85, energia140,42.
+È un effetto causale del controllo lipidico nella fixture, non della selezione.
+
+Su30 combinazioni per variante CON reintegro:
+
+| Variante | Vivi a2000 | Almeno una idoneità riproduttiva |
+|---|---:|---:|
+|Baseline|16/30|16/30|
+|Corpo iniziale37|16/30|16/30|
+|Calore0,03|26/30|26/30|
+|Semilarghezza20|16/30|16/30|
+|Alpha minimo0,05|24/30|24/30|
+|Lipidi nella cella80|7/30|7/30|
+
+Le frazioni descrivono questo pannello, non probabilità di sopravvivenza nella
+popolazione reale. Uguali conteggi non significano identiche traiettorie/energie.
+SENZA reintegro nessuna delle180 condizioni raggiunge idoneità riproduttiva:
+la singola cella non sostiene l'approvvigionamento fino alla maturità. Alcuni
+individui rimangono vivi con riserve energetiche, ma senza glucosio sufficiente.
+Nessuna discendenza è stata misurata: il manager riproduttivo è escluso.
+
+Le modifiche non migliorano ogni nicchia. A0 C,1 mitocondrio,80 lipidi, la baseline
+arriva viva a2000 tick; calore0,03 porta a morte fredda al tick114 e alpha minimo0,05
+al tick31. Un mondo uniformemente37 C non elimina il surriscaldamento.
+Allargare il rendimento aumenta l'energia in alcuni casi ma non elimina la
+produzione di calore, dunque non basta a rimuovere le morti termiche del pannello.
+
+## Valutazione e prossima discriminante
+
+Il sistema impone una selezione termica molto rapida: morte in decine di tick
+contro maturità oltre1000. Il comportamento neurale può avere poco tempo per
+compensare tramite movimento; e non dispone di controllo diretto del consumo,
+del raffreddamento attivo o dell'isolamento acquisito. Questo può privilegiare
+fortemente posizioni e tratti fisiologici iniziali prima di strategie utili.
+
+La scarsità e la temperatura sono due ostacoli distinti: dare risorse può
+sostenere la riproduzione, ma anche alimentare il surriscaldamento. Migliorare
+la temperatura non risolve da solo il rifornimento. Ridurre il calore o aumentare
+lo scambio minimo sono candidati da confrontare con popolazioni e risorse finite,
+in ambienti eterogenei, prima di adottarli globalmente. Nessun parametro termico
+produttivo è stato modificato in questo intervento. Non sono introdotti nuovi
+meccanismi, reward o attrazione sociale. Mancano ancora prove di adattamento.
+
+## Modifiche produttive autorizzate
+
+- INI: mutazione0,05→0,01. Mediamente1–7 sostituzioni su100–700 geni anziché5–35.
+  Lo stesso parametro riduce anche la probabilità di mutazione di ciascun tratto
+  fisiologico; può rallentare l'esplorazione fisiologica oltre a preservare circuiti.
+  Default fallback Config resta0,001; il valore produttivo INI è0,01.
+- Eredità dei pesi mantenuta true, come esplicitamente richiesto ora dall'utente:
+  questa preferenza aggiorna quella contraria riportata negli audit precedenti.
+- NewGen conserva la selezione periodica e il criterio, ma non teletrasporta né
+  riassegna i bucket dei superstiti. Restano posizioni, identità, fasi pendenti e
+  ordine dei sopravvissuti. I morti restituiscono riserve e liberano le celle.
+  Il criterio di abbattimento rimane un intervento esplicito, non selezione puramente ecologica.
+- Parallelismo: i precedenti oggetti contenevano già il backend TBB di par_unseq.
+  num_threads era ignorato; ora un'arena TBB del manager applica il massimo
+  configurato a parallel_for di sense e think.1=seriale,4=fino a4 thread inclusa
+  la partecipazione del chiamante. Le fasi terminano prima delle scritture nel mondo.
+  Azioni, fisiologia e ambiente restano sequenziali per preservare l'ordine degli scambi.
+  Poche decine di individui per bucket, lavoro sequenziale e attesa GUI possono
+  rendere poco visibile il parallelismo. Non è stato dimostrato un aumento di velocità.
+
+## Validazione eseguita
+
+- `cmake --build build-release --target popx -j 2`: PASS.
+- `tests/pop_cycle_regression.cpp`: PASS, inclusa conservazione posizioni/occupazioni NewGen.
+- `tests/parallel_phase_regression.cpp`: PASS,1 e4 thread osservati durante le
+  fasi reali, identità esatta degli stati controllati dopo90 tick con120 individui;
+  NewGen conserva108 superstiti e relativi bucket/fasi/celle, rimuove i12 eliminati.
+- `bash scripts/run_audit.sh /tmp/popx_after_spatial_parallel_probes.json probes`:
+  PASS trasferimenti, riproduzione, cap, death e NewGen. Nella fixture con tutte
+  le celle bloccate da calcio, NewGen ora conserva9/10: non deve più respawnare.
+-360 controlli termici e replay: PASS.
+
+Regressione parallela compilata con:
+
+```sh
+clang++ -std=c++23 -O2 -Isrc tests/parallel_phase_regression.cpp build-release/src/CMakeFiles/popx.dir/{brain,cell,config,console_logger,gene,genome,grid_world,pop,pops_manager,random_utility}.cpp.o -ltbb -lstdc++fs -o /tmp/popx_parallel_regression
+/tmp/popx_parallel_regression
+```
+
+Controlli standalone, non registrati in CTest. Nessuna suite generale o lunga
+run evolutiva dichiarata. Le modifiche produttive richiedono riavvio del programma.
+
+## Seconda indagine: ambiente moderato e sostenibilità — 14 ottobre 2026
+
+Richiesta successiva: verificare un ambiente più moderato e valutare una revisione
+fisiologica. Questo aggiornamento usa lo stesso documento; nessun nuovo Markdown.
+Nessuna modifica alla fisiologia o all'ambiente produttivi in questa indagine.
+
+### Confronti effettivamente eseguiti
+
+```sh
+bash scripts/run_thermal_comparison.sh data_out/audit/thermal_moderate_final_2026-10-14.json moderate
+/tmp/popx_thermal_comparison config/popx.ini /tmp/popx_moderate_replay.json moderate
+```
+
+180 controlli isolati: ambiente18/22/25/28/32 C; mitocondri1/5/25;
+20 lipidi iniziali e80 nella cella; risorse finite oppure reintegro esplicito;
+6 varianti (baseline, calore0,1, calore0,2, alpha_min0,02, alpha_min0,05,
+calore0,1+alpha_min0,02). Altri dettagli come nella prima indagine.
+
+144 confronti finali di popolazione, tutti con risorse finite:
+-24 fondatori su24×24 celle; genoma vuoto configurato, tratti M/0/1/80, energia100,
+  glucosio100, ossigeno20, acqua100, lipidi20, temperatura iniziale25 C.
+-Per cella:500 glucosio,1000 ossigeno e acqua,80 lipidi; calcio/CO2 iniziali0,
+  quota0; niente fotosintesi, rigenerazione o aggiornamento climatico.
+-Temperature con gradiente lineare lungo x:0–50 C (controllo estremo costruito),
+  18–32 C e25–32 C. Non sono riproduzioni delle RBF native: si confrontano gli
+  stessi profili spaziali riscalati, non nuove estrazioni ambientali casuali.
+-Varianti baseline, calore0,1, alpha_min0,02, combinazione0,1/0,02;
+  M=1/5/25; immobilità oppure pattuglia orizzontale;2 collocazioni speculari.
+-Fondatore i: y=i, x=1+(7*i)%22; nel secondo layout x→23-x e direzione invertita.
+  Un fondatore per riga evita ingorghi iniziali tra pattuglie. Nuove collisioni
+  dovute alle nascite restano reali. Politiche imposte, non evolute né ottimali.
+-Fasi sense/think/act ordinate in base all'età, fisiologia reale ogni tick.
+  L'azione viene sovrascritta SOLO in questa fixture; sensori/reti non decidono
+  la politica. Learning ed eredità restano abilitati, ma il genoma vuoto non ha
+  pesi attivi: non si verifica qui l'effetto della plasticità o della sua eredità.
+-FIFO e riproduzione reali, costi, donazioni, controllo di maturità e cap120;
+  nascite forzate e NewGen esclusi. Mutazione0 solo nella fixture per confronti
+  appaiati a fisiologia ereditaria uguale. INI produttivo resta0,01/eredità true.
+-Direzione e lazyness dei figli normalizzate per la politica imposta. Nessuna
+  estrazione casuale influenza i risultati; assegnazione casuale ai bucket non
+  usata nel ciclo di questa fixture. Stato RNG inutilizzato non serializzato.
+-Ogni confronto termina a2000 tick o all'estinzione, con limite30s per run.
+  Nessun figlio può superare1000 tick di età: non dimostra riproduzione di seconda
+  generazione, stabilità di lungo periodo o adattamento evolutivo.
+
+Tutte le324 condizioni finali verificano finitezza e bilanci glucosio/O2/energia;
+per popolazioni sono inclusi morti, eccedenze restituite/rimaste nei morti,
+trasferimenti parentali, saturazione e roundoff. Replay esatto dei180 controlli e
+144 confronti, inclusi eventi di nascita e campioni temporali, senza confrontare
+metadata di build. Build del target popx PASS. Nessuna suite CTest dichiarata.
+
+Dati finali nel JSON sopra, ignorato da Git, con provenienza di build e hash.
+Un pannello esplorativo precedente collocava6 fondatori sulla stessa riga:
+le pattuglie si bloccavano precocemente e non raggiungevano nuove risorse.
+È conservato in `data_out/audit/thermal_moderate_2026-10-14.json`, ma NON viene
+usato come prova di inefficacia del movimento. Il layout finale è esplicito
+nell'harness e nei metadata; le2 collocazioni sono controlli spaziali, non
+repliche stocastiche indipendenti o una stima statistica della popolazione reale.
+
+### Risultati a25–32 C
+
+Aggregazione descrittiva delle12 condizioni per variante (3 tratti×2 politiche×
+2 layout,288 fondatori iniziali). I conteggi dei figli includono il loro diverso
+tempo d'esposizione; non sono probabilità comparabili direttamente ai fondatori.
+
+| Variante | Fondatori vivi /288 | Nascite naturali | Figli vivi a fine run | Morti termiche totali | Morti energetiche totali |
+|---|---:|---:|---:|---:|---:|
+|Attuale|96|192|192|192|0|
+|Calore0,1|192|192|192|96|0|
+|Alpha minimo0,02|96|192|192|192|0|
+|Calore0,1 + alpha minimo0,02|288|576|519|0|57|
+
+Con fisiologia attuale e ambienti moderati18–32 o25–32 C sopravvivono tutti i
+fondatori M=1; muoiono tutti quelli M=5/25 nelle due politiche. Moderare soltanto
+l'ambiente non basta. Nel primo layout25–32 C le pattuglie M=5/25 si estinguono
+entro il tick82. Le pattuglie M=1 generano96 figli per run e raggiungono il cap.
+Questa discendenza non dimostra sostenibilità: nel caso baseline M=1/layout0,
+nei tick1500–2000 l'energia prodotta è69,32 contro costi1399,83; energia media
+dei96 figli vivi finale10,50. Si stanno consumando riserve accumulate/donate.
+
+Con solo calore0,1 gli immobili M=5/25 restano vivi; le pattuglie M=5/25 muoiono
+termicamente (nel layout0 entro il tick319). Gli immobili esauriscono il glucosio
+locale e cessano di scaldarsi. Il movimento continua a procurare combustibile e
+alimenta il surriscaldamento. Sopravvivere consumando poco perché non si trova
+cibo è diverso dall'acquisizione efficiente. È un effetto del controllo di politica,
+non una dimostrazione di selezione spontanea contro il movimento.
+
+La combinazione0,1/0,02 elimina le morti termiche in entrambi i pannelli moderati,
+ma a18–32 C si osservano267 morti energetiche, a25–32 C57, tutte fra i figli
+(i fondatori sopravvivono). Non si può scegliere un parametro dalla sola mortalità
+termica. Il cap demografico viene raggiunto in varie run e censura nuove nascite.
+
+### Perché la combinazione non risolve il modello
+
+Caso25–32 C, calore0,1/alpha_min0,02, M=5, pattuglia, layout0:
+
+| Tick | Vivi | Nascite cumulative | Reazioni cumulative | Energia prodotta cumulativa |
+|---|---:|---:|---:|---:|
+|500|24|0|60000|1891,80|
+|1000|24|0|120000|1891,80|
+|1500|120|96|162780|7870,82|
+|2000|120|96|162780|7870,82|
+
+Fra500 e1000:60000 reazioni e ZERO energia, con corpi fuori dalla banda utile.
+Non è scarsità: i substrati vengono realmente bruciati senza ritorno energetico.
+Fra1500 e2000:ZERO reazioni, perché il glucosio corporeo finale è zero e gli
+individui non accedono più a un rifornimento sufficiente; costi1399,83.
+Temperatura finale28,65–32 C, quindi la cessazione della produzione di calore
+riporta il corpo verso l'ambiente. Restano risorse in altre celle, ma disponibilità
+totale non equivale ad accessibilità sotto queste politiche e collisioni.
+
+Con M=1 nella stessa combinazione/layout/politica, la finestra1500–2000 produce
+9631,32 energia contro1399,83 costi. È sostentamento positivo in quella finestra,
+non prova di permanenza indefinita, né fitness evolutiva dimostrata.
+
+### Valutazione e soluzione proposta (non implementata)
+
+La prova indica due limiti strutturali distinti:
+1. I mitocondri sono trattati come numero di reazioni obbligatorie, non capacità
+   massima. Il consumo non riceve feedback dal fabbisogno energetico o dal fatto
+   che il corpo sia fuori dalla banda di rendimento utile.
+2. L'efficienza termica riduce soltanto l'energia ricavata, lasciando intatti flusso
+   e calore. Questo rende possibile consumo sostenuto completamente improduttivo;
+   insieme all'assorbimento lipidico automatico può penalizzare acquisizione efficace.
+
+Non è dimostrato un errore aritmetico: i ledger passano. È una scelta modellistica
+che può imporre una pressione molto forte e poco controllabile dalla rete.
+Calore0,1/alpha_min0,02 è un buon controllo per allargare la finestra di vita, ma
+non una correzione fisiologica completa. Non è stato trasferito alla produzione.
+
+Proposta concreta per un prossimo prototipo separato:
+-Interpretare M come capacità; determinare il flusso effettivo con feedback negativo
+  della riserva energetica e con disponibilità di substrati. Quando la riserva è
+  sufficiente, ridurre la respirazione; quando viene consumata, aumentarla fino
+  alla capacità. Nessun reward né modifica dei geni/azioni richieste.
+-Far agire la temperatura anche sull'attività respiratoria, con risposta continua,
+  evitando che un corpo già surriscaldato continui a bruciare a pieno regime.
+  Non usare il rendimento attuale come interruttore secco: a25 C esso è zero e
+  questo potrebbe impedire il recupero iniziale. La risposta al freddo va verificata.
+-Per ogni reazione effettivamente eseguita, mantenere trasferimenti e costi
+  espliciti e registrare energia utile e calore. Separare capacità metabolica,
+  rendimento, produzione di calore e dispersione; non compensare con energia gratuita.
+-Prima fissare criteri di accettazione: niente consumo al massimo su riserva satura;
+  consumo proporzionato a richieste/costi; assenza di surriscaldamento autoalimentato
+  a riserva sufficiente; possibilità di recupero da25 C in nicchie praticabili;
+  bilanci chiusi; figli che raggiungono maturità e si riproducono in prove dedicate.
+
+Scala utile: a rendimento1 una reazione dà0,3 energia e il costo basale è0,02/tick.
+Senza altri costi basta mediamente1 reazione ogni15 tick per il solo mantenimento;
+M=1 oggi può eseguirne1 ogni tick. Le frazioni di flusso richiedono un accumulatore
+(o probabilità controllata) per non arrotondare sempre a zero. Riserva bersaglio,
+ampiezza del feedback e curva termica sono parametri ancora da calibrare, non
+valori ottimali già determinati. Riproduzione e movimento aggiungono domanda.
+
+Preferenza: prototipo di regolazione metabolica prima di altre lunghe run native.
+Non rendere ogni nicchia abitabile, non garantire la sopravvivenza: consentire che
+l'acquisizione di risorse possa sostenere bisogni e discendenza senza imporre
+automaticamente consumo massimale. Nessuna nuova fisiologia è stata implementata
+in questa richiesta, che chiede test e una proposta.
+
+
+<a id="pilot-storico"></a>
+## Appendice: Pilot storico successivo alla segnalazione GUI
+
+### Indagine successiva alla segnalazione di 140000 tick
+
+La run GUI segnalata non è stata acquisita: nessuna conclusione sulla sua traiettoria.
+Verifica del codice e pilot separato del 2026-10-14, configurazione produttiva invariata.
+
+Comando: `bash scripts/run_audit.sh /tmp/popx_followup_audit.json 2000`.
+Build del target popx riuscito; diagnostico exit 0, validation_passed=true.
+80 fondatori, 2000 tick in 1,228 s, 22 vivi finali; 29 nascite naturali e 5 forzate;
+92 morti: 72 termiche e 20 energetiche. 870 movimenti riusciti /3497 tentativi.
+Bilanci e probe superati. RNG non riproducibili globalmente; singolo pilot,
+non confronto causale, benchmark GUI o esperimento di adattamento.
+JSON temporaneo con INI, commit, stato working tree, costanti, genomi iniziali,
+ambiente e ledger; non contiene lo stato completo di tutti i generatori.
+
+## Vincoli verificati e ipotesi da distinguere
+
+- Respirazione: rendimento nullo a temperature corporee <=27 o >=47 C,
+  ma consumo di glucosio/O2 e produzione di calore proseguono. Morte termica
+  <=10 o >=75 C. Il costo ecologico va valutato, non corretto arbitrariamente.
+- NewGen ogni50000 tick conserva circa90% e riposiziona casualmente i vivi:
+  possibile interruzione di nicchie e strutture spaziali, non dimostrata qui.
+- Cap120 e riproduzione forzata sotto20 influenzano il ricambio. La persistenza
+  numerica non implica autosostentamento mediante sole nascite naturali.
+- Mutazione0,05 sostituisce geni interi; 100–700 geni implicano in media5–35
+  sostituzioni per figlio. Possibile distruzione di circuiti utili da misurare.
+- Eredità Hebbian attiva: discrepanza con la preferenza per sola eredità genetica.
+- Fotosintesi può sostenere strategie immobili; immobilità non prova fallimento.
+
+## Durata e velocità
+
+Il loop GUI non usa max_generations come arresto: continua fino a estinzione,
+Stop o chiusura. MaxAge200000 limita il singolo individuo. Storico statistiche
+limitato a50000 campioni; contatori cumulativi int richiedono revisione per run
+molto lunghe e occorrono checkpoint con stato RNG per ripresa fedele.
+La GUI usa tick di10 ms, circa100 tick/s. Il pilot senza rendering ha eseguito
+circa1629 tick/s, su una coorte specifica e con strumentazione diagnostica.
+Un acceleratore deve eseguire più tick invariati, con budget per frame;
+non aumentare il passo biologico. num_threads non configura il backend attuale.
+
+## Prossimi confronti discriminanti (non eseguiti)
+
+Prima centralizzare/registrare RNG e corpus, poi repliche appaiate con stessa
+coorte e risorse; variare un fattore alla volta: clima dinamico/fisso,
+NewGen attivo/disattivo, mutazione0,05/ridotta, learning ed eredità separati.
+Misurare cause di morte, nascite naturali/forzate, genealogia, tempo al cap,
+acquisizione, azioni e movimenti riusciti, includendo morti e censura.
+Clima favorevole e accesso sensoriale alle risorse sono controlli diagnostici,
+non premi di movimento o prove di adattamento. Per segnali e cooperazione,
+verificare prima un beneficio ecologico causale a risorse equivalenti.

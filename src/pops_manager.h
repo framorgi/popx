@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
+#include <tbb/task_arena.h>
 class PopsManager : public IAgentsManager {
   public:
     PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config);
@@ -64,6 +65,8 @@ class PopsManager : public IAgentsManager {
     std::shared_ptr<IWorld> world_;
     std::shared_ptr<ILogger> logger_;
     std::shared_ptr<IConfig> config_;
+    /// @brief Bounds concurrency of the read-only-world sense/think phases.
+    tbb::task_arena phase_arena_;
     int dead_count_ = 0;
     int total_births_ = 0;
     int total_deaths_ = 0;
@@ -101,5 +104,4 @@ class PopsManager : public IAgentsManager {
     void clear_reproduction_backlog();
 
     [[nodiscard]] double score_pop_for_newgen(const std::shared_ptr<Pop>& pop) const;
-    bool try_spawn_random_position(const std::shared_ptr<Pop>& pop, RandomUtility& random_util);
 };

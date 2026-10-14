@@ -50,6 +50,8 @@ class IConfig {
     virtual unsigned get_phy_max_chloroplasts_ref() const = 0;
     virtual double get_phy_energy_per_respiration() const = 0;
     virtual double get_phy_heat_per_respiration() const = 0;
+    virtual double get_phy_respiration_energy_target() const = 0;
+    virtual double get_phy_respiration_demand_band() const = 0;
     virtual double get_phy_alpha_min() const = 0;
     virtual double get_phy_alpha_max() const = 0;
     virtual double get_phy_max_lipids_ref() const = 0;

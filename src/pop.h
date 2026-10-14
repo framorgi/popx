@@ -437,6 +437,9 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     double total_thermoregolation_energy_loss_ = 0.0;
 
     /// @brief Reaction counts and discarded energy for exact resource/energy accounting.
+    /// @brief Fractional reaction capacity; never stores fuel, energy or whole deferred reactions.
+    double respiration_credit_ = 0.0;
+    double total_respiration_heat_ = 0.0;
     uint64_t total_respiration_count_ = 0;
     uint64_t total_photosynthesis_count_ = 0;
     double total_energy_cap_loss_ = 0.0;
