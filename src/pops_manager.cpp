@@ -261,8 +261,9 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
 }
 
 void PopsManager::rotate_buckets() {
-    std::swap(sense_bucket_, think_bucket_);
+    // Move each group to its next phase: sense -> think -> act -> sense.
     std::swap(think_bucket_, act_bucket_);
+    std::swap(sense_bucket_, think_bucket_);
 }
 
 int PopsManager::get_alive_count() const {

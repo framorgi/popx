@@ -277,6 +277,9 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// ---------------------------------------------------------------------------
     State current_state_ = State::SENSE;
 
+    /// @brief Next permitted phase; keeps random bucket assignment from skipping sense/think.
+    State next_phase_ = State::SENSE;
+
     /// ---------------------------------------------------------------------------
     /// @brief INternal counter of steps taken in the current state.
     /// ---------------------------------------------------------------------------

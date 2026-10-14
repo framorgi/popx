@@ -54,6 +54,13 @@ Pop::~Pop() {
 void Pop::init() {
     const bool inherit_phy = inherit_phy_;
     alive_ = true;
+    current_state_ = State::SENSE;
+    next_phase_ = State::SENSE;
+    first_run_ = true;
+    last_action_ = -1;
+    // Uniform choice among the eight neighbouring directions; never start with (0, 0).
+    constexpr PositionT initial_directions[] = {{0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}};
+    last_direction_ = initial_directions[random_util_->rnd_int(0, 7)];
     lazyness_ = random_util_->rnd_float(0.0f, 1.0f);
     glucose_ = 100;
     water_ = 100;
@@ -213,6 +220,8 @@ void Pop::despawn() {
 
 // be sure return sensor values in range [0,1]
 void Pop::sense() {
+    if (next_phase_ != State::SENSE)
+        return;
     current_state_ = State::SENSE;
 
     // lock the world weak pointer to access the world safely
@@ -414,12 +423,16 @@ void Pop::sense() {
         }
         sensor_values_[i] = val;
     }
+    next_phase_ = State::THINK;
 }
 
 void Pop::think() {
+    if (next_phase_ != State::THINK)
+        return;
     current_state_ = State::THINK;
-    // sensor_values_ filled by sense() in the current cycle.
+    // Consume the sensors from the preceding sense phase.
     last_action_ = brain_->feed_forward(sensor_values_);
+    next_phase_ = State::ACT;
     first_run_ = false; // Clear the first-run guard after the initial think() to allow learning in subsequent cycles
 }
 
@@ -431,7 +444,10 @@ void Pop::serialize_brain(unsigned generation) const {
 }
 
 void Pop::act() {
+    if (next_phase_ != State::ACT)
+        return;
     current_state_ = State::ACT;
+    next_phase_ = State::SENSE;
 
     if (last_action_ < 0 || last_action_ > static_cast<int>(Action::KILL_FORWARD)) {
         return;

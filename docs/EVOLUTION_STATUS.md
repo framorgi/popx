@@ -1,5 +1,45 @@
 # PopX — stato tecnico ed evolutivo
 
+## Aggiornamento tecnico successivo all'audit — 14 ottobre 2026
+
+Su richiesta del developer sono state corrette la rotazione delle fasi e la
+direzione iniziale. Le sezioni **1–17 restano la fotografia dell'audit sul commit
+indicato**, prima delle correzioni: i relativi riferimenti di riga e giudizi su
+ordine invertito/direzione zero non descrivono più questi punti del working tree.
+Le osservazioni e gli altri difetti dell'audit sono conservati, non cancellati.
+
+| Aspetto | Comportamento dopo la correzione | Verifica |
+|---|---|---|
+| Rotazione | Prima swap(think, act), poi swap(sense, think): ciascun gruppo passa S→T→A→S. | Test del manager con24 fondatori, assegnazione casuale e8 tick; prima act nei tick3–5, poi ogni3 tick. |
+| Ordine all'avvio/riposizionamento | `Pop::next_phase_` consente soltanto la fase successiva. Gruppi iniziali casuali possono attendere il primo sense, senza think/act anticipati. Dopo NewGen il ciclo pendente viene rispettato. | Chiamate fuori ordine e duplicate; breve controllo NewGen/ridistribuzione. |
+| Direzione iniziale | `Pop::init` sorteggia uniformemente N/NE/E/SE/S/SW/W/NW, escludendo(0,0); vale anche per figli e reinit. |48 primi movimenti forward/left/right, da centro di griglia piatta libera, con i costruttori a genoma e a genoma+PhyT. |
+| Reinit | Reset di fase attesa, `first_run_` e `last_action_`; nessuna decisione pendente riutilizzata. | Ciclo prima/dopo init; chiamate anticipate non spostano l'agente. |
+| Swap/carico | Tre gruppi conservati, azione circa ogni3 tick a regime, swap dei vettori senza copia degli agenti; sense/think ancora paralleli, act sequenziale. | Non eseguito benchmark: beneficio quantitativo non misurato. |
+
+Implementazione: `src/pops_manager.cpp`, `PopsManager::rotate_buckets`;
+`src/pop.cpp`, `Pop::init/sense/think/act`; `src/pop.h`, `next_phase_`.
+Test persistente: [tests/pop_cycle_regression.cpp](../tests/pop_cycle_regression.cpp).
+
+Build Release con target esplicito `popx`: ricompilazione e link completati.
+Test standalone: **PASS: phase guards, bucket rotation, initial relative movement**.
+Riproduzione dei controlli, dalla root con Bash:
+
+```sh
+cmake --build build-release --target popx -j 2
+clang++ -std=c++23 -O0 -g -Isrc tests/pop_cycle_regression.cpp build-release/src/CMakeFiles/popx.dir/{brain,cell,config,console_logger,gene,genome,grid_world,pop,pops_manager,random_utility}.cpp.o -ltbb -lstdc++fs -o /tmp/popx_cycle_regression
+/tmp/popx_cycle_regression
+```
+
+Le fixture usano getter di configurazione dedicati e risorse/termica controllate,
+senza cambiare `config/popx.ini`, senza rendering o simulazioni evolutive lunghe.
+Non asseriscono frequenze casuali o fitness: gli invarianti devono valere per
+qualsiasi direzione sorteggiata. CTest rimane privo di test registrati; il controllo
+si esegue separatamente. Non è stata risolta la riproducibilità stocastica generale.
+
+Il bias di argmax, l'inizializzazione delle occupazioni, i trasferimenti,
+l'eredità Hebbiana e i limiti delle statistiche restano questioni separate.
+Questa modifica non dimostra che il movimento emergerà per selezione naturale.
+
 ## 1. Sintesi esecutiva
 
 PopX implementa agenti con genomi di connessioni neurali, rete feedforward sparsa,

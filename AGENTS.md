@@ -42,9 +42,13 @@ le osservazioni storiche e le ipotesi non sono risultati sperimentali.
 
 - `Simulator::init()` registra gli agenti prima di `GridWorld::init()`, che cancella
   gli occupanti. Non presumere coerenza tra popolazione, densità e rendering.
-- `rotate_buckets()` produce `sense → act → think → sense` per ciascun agente.
-- I sensori del glucosio 33–36 non sono codificabili con indici a 5 bit; le
-  direzioni relative iniziali sono zero. Le parità nell'argmax favoriscono indice 0.
+- `rotate_buckets()` ora produce `sense → think → act → sense`. I tre gruppi
+  restano distribuiti su tick differenti; `Pop::next_phase_` impedisce fasi fuori
+  ordine anche alla nascita e dopo assegnazione casuale dei gruppi in NewGen.
+- `Pop::init()` sceglie uniformemente una direzione tra gli otto vicini, mai (0,0),
+  e resetta fase attesa, prima esecuzione e decisione pendente.
+- I sensori del glucosio 33–36 non sono codificabili con indici a 5 bit.
+  Le parità nell'argmax continuano a favorire indice 0.
 - `hebbian_inheritance=true` nell'INI corrente: i figli possono ereditare pesi
   appresi. La preferenza progettuale resta escludere l'eredità lamarckiana: segnalare
   questa discrepanza; non correggere silenziosamente la configurazione.
@@ -71,6 +75,21 @@ Il primo ha restituito `ninja: no work to do`; il secondo ha trovato zero test.
 Le 17 unità di traduzione di `src/` sono state inoltre ricompilate con
 `-fsyntax-only`, usando i comandi di `build-release/compile_commands.json`, senza
 errori. Questo verifica la compilabilità sintattica, non la correttezza della simulazione.
+
+Dopo le correzioni autorizzate di rotazione/direzione, il build Release ha
+ricompilato e collegato il target `popx`. Esiste ora un controllo standalone
+`tests/pop_cycle_regression.cpp`, senza dipendenze aggiuntive e senza rendering:
+
+```sh
+cmake --build build-release --target popx -j 2
+clang++ -std=c++23 -O0 -g -Isrc tests/pop_cycle_regression.cpp build-release/src/CMakeFiles/popx.dir/{brain,cell,config,console_logger,gene,genome,grid_world,pop,pops_manager,random_utility}.cpp.o -ltbb -lstdc++fs -o /tmp/popx_cycle_regression
+/tmp/popx_cycle_regression
+```
+
+Comandi eseguiti con esito PASS. La brace expansion richiede Bash; CTest non
+registra questo controllo. Le fixture sovrascrivono i getter di configurazione
+senza cambiare l'INI e usano una griglia piccola e piatta. Verificano invarianti
+indipendenti dall'esito delle RNG; non sono esperimenti evolutivi o benchmark.
 
 I preset di configurazione sono `Application Debug` e `Application Release`;
 una nuova configurazione non è stata verificata e può usare la rete con FetchContent.
