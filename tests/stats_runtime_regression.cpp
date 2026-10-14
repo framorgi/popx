@@ -39,6 +39,7 @@ class SimulationAudit {
         auto world = std::make_shared<GridWorld>(24, 24, log);
         auto manager = std::make_shared<PopsManager>(world, log, config);
         Simulator sim(world, manager, log);
+        sim.set_duration(1);
         sim.init();
         sim.command("pause", {});
         sim.update();
@@ -50,6 +51,28 @@ class SimulationAudit {
         require(sim.state() == "finished" && sim.reason() == "extinction" && sim.tick() == 1, "extinction boundary");
         sim.update();
         require(sim.tick() == 1, "finished simulation advanced");
+    }
+    static void endless_recovery() {
+        auto log = std::make_shared<ConsoleLogger>();
+        log->set_level(LogLevel::Error);
+        auto config = std::make_shared<Config>("config/popx.ini");
+        auto world = std::make_shared<GridWorld>(24, 24, log);
+        auto manager = std::make_shared<PopsManager>(world, log, config);
+        auto stats = std::make_shared<Stats>();
+        stats->begin_session({{"kind", "endless_recovery_fixture"}});
+        manager->set_stats(stats);
+        Simulator sim(world, manager, log);
+        sim.set_duration(0);
+        sim.init();
+        for (auto& pop : manager->pops_)
+            pop->die();
+        sim.update();
+        require(sim.state() == "running" && sim.reason().empty(), "endless extinction ended the run");
+        require(manager->get_alive_count() == MinPopulationAllowed, "endless extinction did not reseed forced births");
+        require(sim.tick() == 1, "endless recovery changed the tick counter");
+        stats->sample(sim.tick(), *manager, *world);
+        require(stats->latest()["counts"]["forced_births"] == MinPopulationAllowed,
+                "endless recovery was not recorded as forced births");
     }
     static void pending_action() {
         auto log = std::make_shared<ConsoleLogger>();
@@ -83,6 +106,7 @@ int main() {
     try {
         SimulationAudit::pending_action();
         SimulationAudit::extinction();
+        SimulationAudit::endless_recovery();
         for (uint64_t tick = 0; tick < 1000000; ++tick)
             require(!RunClock::expired(tick, 0), "infinite duration stopped");
         require(!RunClock::expired(5999, 1) && RunClock::expired(6000, 1), "duration boundary");

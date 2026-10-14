@@ -29,12 +29,15 @@ void Simulator::update() {
 
     // simulator tick finished
     tick_count_++;
-    if (agents_manager_->get_alive_count() == 0) {
-        state_ = "finished";
-        reason_ = "extinction";
-    } else if (RunClock::expired(tick_count_, duration_minutes_)) {
+    if (RunClock::expired(tick_count_, duration_minutes_)) {
         state_ = "finished";
         reason_ = "duration";
+    } else if (agents_manager_->get_alive_count() == 0) {
+        if (duration_minutes_ == 0 && agents_manager_->recover_from_extinction()) {
+            return;
+        }
+        state_ = "finished";
+        reason_ = "extinction";
     }
     // std::this_thread::sleep_for(std::chrono::milliseconds(20)); // Simulate work with a sleep
 }
@@ -73,6 +76,8 @@ void Simulator::command(const std::string& name, const nlohmann::json& arguments
     } else if (name == "newgen" && state_ != "finished") {
         agents_manager_->trigger_new_generation();
         if (agents_manager_->get_alive_count() == 0) {
+            if (duration_minutes_ == 0 && agents_manager_->recover_from_extinction())
+                return;
             state_ = "finished";
             reason_ = "extinction";
         }

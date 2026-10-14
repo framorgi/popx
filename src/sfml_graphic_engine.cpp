@@ -1,10 +1,34 @@
 #include "sfml_graphic_engine.h"
 
+#include <X11/Xlib.h>
 #include <imgui-SFML.h>
 #include <imgui.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <filesystem>
+
+namespace {
+void request_maximize(sf::RenderWindow& window) {
+    Display* display = XOpenDisplay(nullptr);
+    if (!display)
+        return;
+    const auto state = XInternAtom(display, "_NET_WM_STATE", False);
+    const auto horizontal = XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_HORZ", False);
+    const auto vertical = XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_VERT", False);
+    XEvent event{};
+    event.xclient.type = ClientMessage;
+    event.xclient.window = window.getSystemHandle();
+    event.xclient.message_type = state;
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = 1; // _NET_WM_STATE_ADD
+    event.xclient.data.l[1] = static_cast<long>(horizontal);
+    event.xclient.data.l[2] = static_cast<long>(vertical);
+    XSendEvent(display, DefaultRootWindow(display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
+    XFlush(display);
+    XCloseDisplay(display);
+}
+} // namespace
 
 SfmlGraphicEngine::SfmlGraphicEngine(std::shared_ptr<ILogger> logger) : logger_(std::move(logger)) {}
 
@@ -16,11 +40,36 @@ SfmlGraphicEngine::~SfmlGraphicEngine() {
 }
 
 void SfmlGraphicEngine::create_window(std::string title, int width, int height) {
-    const auto desktop = sf::VideoMode::getDesktopMode();
-    window_.create(desktop, title + " [" + std::to_string(getpid()) + "]", sf::Style::None);
-    const float side = std::min(float(desktop.height), std::max(1.f, float(desktop.width) - 320.f));
+    Display* display = XOpenDisplay(nullptr);
+    const auto screen = display ? DefaultScreen(display) : 0;
+    const auto screen_width = display ? DisplayWidth(display, screen) : sf::VideoMode::getDesktopMode().width;
+    const auto screen_height = display ? DisplayHeight(display, screen) : sf::VideoMode::getDesktopMode().height;
+    Window root, child;
+    int root_x = 0, root_y = 0, window_x, window_y;
+    unsigned mask;
+    if (display)
+        XQueryPointer(display, DefaultRootWindow(display), &root, &child, &root_x, &root_y, &window_x, &window_y,
+                      &mask);
+    if (display)
+        XCloseDisplay(display);
+
+    const auto initial_width = std::min(1280u, screen_width);
+    const auto initial_height = std::min(720u, screen_height);
+    window_.create(sf::VideoMode(initial_width, initial_height), title + " [" + std::to_string(getpid()) + "]",
+                   sf::Style::Default);
+    window_.setPosition(
+        {std::clamp(root_x - static_cast<int>(initial_width / 2), 0, static_cast<int>(screen_width - initial_width)),
+         std::clamp(root_y - static_cast<int>(initial_height / 2), 0,
+                    static_cast<int>(screen_height - initial_height))});
+    request_maximize(window_);
     world_view_.reset({0, 0, float(width), float(height)});
-    world_view_.setViewport({0, 0, side / desktop.width, side / desktop.height});
+    const auto client_size = window_.getSize();
+    update_world_viewport(client_size.x, client_size.y);
+}
+
+void SfmlGraphicEngine::update_world_viewport(unsigned client_width, unsigned client_height) {
+    const float side = std::min(float(client_height), std::max(1.f, float(client_width) - 320.f));
+    world_view_.setViewport({0, 0, side / client_width, side / client_height});
 }
 
 void SfmlGraphicEngine::clear(const Color& color) {
@@ -40,6 +89,8 @@ void SfmlGraphicEngine::poll_event() {
     while (window_.pollEvent(event)) {
         event_pending_ = true;
         ImGui::SFML::ProcessEvent(window_, event);
+        if (event.type == sf::Event::Resized)
+            update_world_viewport(event.size.width, event.size.height);
         if (event.type == sf::Event::Closed) {
             window_.close();
             logger_->info("Window closed by user.");

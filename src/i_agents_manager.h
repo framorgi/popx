@@ -13,6 +13,9 @@ class IAgentsManager {
     /// @brief Create and register a new agent
     virtual bool spawn_population() = 0;
 
+    /// @brief Seed forced births after a total extinction, without resetting the run.
+    virtual bool recover_from_extinction() = 0;
+
     /// @brief Advance one simulation cycle
     virtual void update_cycle() = 0;
 

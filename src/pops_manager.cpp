@@ -83,6 +83,57 @@ bool PopsManager::spawn_population() {
     return true;
 }
 
+bool PopsManager::recover_from_extinction() {
+    if (!pops_.empty())
+        return true;
+
+    clear_reproduction_backlog();
+    const auto capacity =
+        static_cast<std::size_t>(world_->get_width()) * static_cast<std::size_t>(world_->get_height());
+    const auto target = std::min<std::size_t>(MinPopulationAllowed, capacity);
+    if (target == 0)
+        return false;
+
+    auto random_util = std::make_shared<RandomUtility>();
+    for (std::size_t i = 0; i < target; ++i) {
+        auto pop = std::make_shared<Pop>(world_, logger_, config_);
+        pop->set_birth_provenance("", true);
+
+        bool spawned = false;
+        for (unsigned attempt = 0; attempt < 1000 && !spawned; ++attempt) {
+            spawned = pop->try_spawn(
+                {random_util->rnd_int(0, world_->get_width()), random_util->rnd_int(0, world_->get_height())});
+        }
+        for (int y = 0; y < world_->get_height() && !spawned; ++y)
+            for (int x = 0; x < world_->get_width() && !spawned; ++x)
+                spawned = pop->try_spawn({x, y});
+        if (!spawned)
+            return false;
+
+        pops_.push_back(pop);
+        switch (rand() % 3) {
+            case 0:
+                sense_bucket_.push_back(pop);
+                break;
+            case 1:
+                think_bucket_.push_back(pop);
+                break;
+            default:
+                act_bucket_.push_back(pop);
+                break;
+        }
+        ++total_births_;
+        if (stats_) {
+            auto event = pop->telemetry(true);
+            event["recovery_seed"] = true;
+            stats_->record_event({LifeEvent::Birth, std::move(event)});
+        }
+    }
+    forced_respawn_active_ = true;
+    logger_->warning("Endless run recovered from extinction with " + std::to_string(target) + " forced births.");
+    return true;
+}
+
 void PopsManager::update_cycle() {
     ++cycle_counter_;
     // Each parallel phase joins before the next; only per-Pop state is written.

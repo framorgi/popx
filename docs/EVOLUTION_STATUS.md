@@ -38,8 +38,11 @@ propaga i segnali e raccoglie entrambi i figli.
 
 Nuovi parametri INI: `map_size=120`, `max_duration_minutes=0`, `gui_fps=30`.
 La durata è in **minuti simulati**, con scadenza al tick
-`ceil(minuti * 6000)`; zero disabilita soltanto il limite temporale. Estinzione
-e Stop concludono comunque la run. Non è stata identificata la causa della
+`ceil(minuti * 6000)`. Con valore zero la run è endless: all'estinzione il mondo
+resta in memoria e il manager inserisce fino a20 semi di nascita forzata, marcati
+`forced=true`, `recovery_seed=true` e senza genitore; tick e statistiche non si
+resettano. Se la durata è limitata, l'estinzione e Stop concludono la run.
+Non è stata identificata la causa della
 vecchia interruzione attorno a704.200 tick: l'ultimo campione con19 vivi non
 contiene il motivo terminale. Non esiste un limite speciale a704.000 tick.
 
@@ -110,7 +113,9 @@ SQLite e, in sola lettura, vecchi report JSON; non scrivono nuovi JSON statistic
 
 ### Interfacce
 
-SFML/ImGui: desktop senza bordi, mondo quadrato scalato uniformemente a sinistra,
+SFML/ImGui: finestra massimizzata sul display X predefinito, con barra del titolo
+di sistema trascinabile; non è un fullscreen senza bordi che possa aprirsi a
+cavallo fra due monitor. Mondo quadrato scalato uniformemente a sinistra,
 widget modulari nella fascia destra, tema scuro/verde acqua. Stato, tempi,
 popolazione, prestazioni, connessione, comandi e livelli mappa; nessun chart né
 inspector. Geometrie e buffer vengono riutilizzati. `gui_fps` è il massimo;

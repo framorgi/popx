@@ -19,6 +19,7 @@ class PopsManager : public IAgentsManager {
     PopsManager(std::shared_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config);
     /// @brief Create and register a new agent
     bool spawn_population() override;
+    bool recover_from_extinction() override;
 
     /// @brief Remove an agent
     void update_cycle() override;

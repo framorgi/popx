@@ -47,6 +47,7 @@ class SfmlGraphicEngine : public IGraphicEngine {
     void imgui_render() override;
 
   private:
+    void update_world_viewport(unsigned client_width, unsigned client_height);
     std::shared_ptr<ILogger> logger_;
     sf::RenderWindow window_;
     sf::VertexArray quad_vertices_;
