@@ -57,6 +57,9 @@ class PopsManager : public IAgentsManager {
     void reset_population_state() override;
 
   private:
+    // Narrow access for the standalone dynamic audit and its regression fixtures.
+    friend class SimulationAudit;
+
     std::vector<std::shared_ptr<Pop>> pops_;
     std::shared_ptr<IWorld> world_;
     std::shared_ptr<ILogger> logger_;

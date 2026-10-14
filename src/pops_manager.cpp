@@ -214,6 +214,9 @@ void PopsManager::clear_reproduction_backlog() {
 }
 
 void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
+    const float reproduction_energy_loss = static_cast<float>(config_->get_phy_energy_per_respiration());
+    if (parent->get_energy() <= reproduction_energy_loss)
+        return; // Even forced reproduction must leave energy to transfer to a living child.
     // Temporarily increase mutation rate for offspring creation, then reset to original rate
     auto old_mutation_rate = config_->get_point_mutation_rate();
     if (pops_.size() < MinPopulationAllowed) {
@@ -222,6 +225,7 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
     }
     auto child =
         std::make_shared<Pop>(world_, logger_, config_, parent->make_offspring_genome(), parent->make_offspring_phy());
+    child->set_birth_provenance(parent->get_pop_id(), !parent->wants_to_reproduce());
 
     config_->set_point_mutation_rate(old_mutation_rate);
     // Try all 8 adjacent cells (cardinal first, then diagonal)
@@ -232,11 +236,11 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
     for (int i = 0; i < 8; ++i) {
         PositionT candidate{pp.x + dx[i], pp.y + dy[i]};
         if (child->try_spawn(candidate)) {
-            unsigned g = 0, w = 0, ca = 0, co2 = 0;
-            parent->donate_resources(g, w, ca, co2);
-            child->set_resources(g, w, ca, co2);
-            const float reproduction_energy_loss = static_cast<float>(config_->get_phy_energy_per_respiration());
+            unsigned g = 0, w = 0, ca = 0, co2 = 0, o2 = 0, lipids = 0;
+            float energy = 0.0f;
             parent->add_reproduction_energy_loss(reproduction_energy_loss);
+            parent->donate_resources(g, w, ca, co2, o2, lipids, energy);
+            child->set_resources(g, w, ca, co2, o2, lipids, energy);
 
             pops_.push_back(child);
             const int phase = rand() % 3;
@@ -314,14 +318,17 @@ void PopsManager::trigger_new_generation() {
     });
 
     const auto ratio = std::clamp(config_->get_newgen_survival_ratio(), 0.01, 1.0);
-    const int min_survivors = std::max(1u, config_->get_newgen_min_survivors());
+    const int min_survivors =
+        std::min(static_cast<int>(alive.size()), static_cast<int>(std::max(1u, config_->get_newgen_min_survivors())));
     int survivors_n = static_cast<int>(std::round(static_cast<double>(alive.size()) * ratio));
     survivors_n = std::clamp(survivors_n, min_survivors, static_cast<int>(alive.size()));
 
     std::vector<std::shared_ptr<Pop>> survivors(alive.begin(), alive.begin() + survivors_n);
 
-    for (auto& pop : alive) {
-        world_->remove_entity(pop);
+    for (std::size_t i = 0; i < alive.size(); ++i) {
+        if (i >= static_cast<std::size_t>(survivors_n))
+            alive[i]->die(); // Return reserves of culled agents through the usual death path.
+        world_->remove_entity(alive[i]);
     }
 
     const int culled = static_cast<int>(alive.size()) - survivors_n;
@@ -336,6 +343,9 @@ void PopsManager::trigger_new_generation() {
     RandomUtility random_util;
     for (auto& pop : survivors) {
         if (!try_spawn_random_position(pop, random_util)) {
+            pop->die();
+            ++dead_count_;
+            ++total_deaths_;
             continue;
         }
         pops_.push_back(pop);

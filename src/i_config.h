@@ -21,6 +21,9 @@ class IConfig {
     virtual unsigned get_start_population() const = 0;
     virtual unsigned get_genome_min_length() const = 0;
     virtual unsigned get_genome_max_length() const = 0;
+    /// Endpoint domain counts; 0 follows the relevant configured layer widths.
+    virtual unsigned get_genome_source_index_count() const = 0;
+    virtual unsigned get_genome_sink_index_count() const = 0;
     virtual unsigned get_steps_per_generation() const = 0;
     virtual unsigned get_max_generations() const = 0;
     virtual unsigned get_num_threads() const = 0;

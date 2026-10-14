@@ -58,14 +58,16 @@ RUN apt update && apt install -y \
     python3-pip\
     libusb-1.0-0-dev\
     libsfml-dev \
-    libgl1-mesa-dev
+    libtbb-dev \
+    libgl1-mesa-dev \
+    nodejs \
+    npm
 
 
 # Install CodeChecker
 RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+ENV PATH="/opt/venv/bin:/usr/local/bin:$PATH"
 RUN pip install codechecker
-
 
 
 # Compile CA certificates
@@ -80,7 +82,6 @@ RUN echo 'ubuntu:!ubuntu!' | chpasswd && \
  
  
 CMD ["bash"]
-
 
 
 

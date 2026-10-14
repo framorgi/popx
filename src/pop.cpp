@@ -20,7 +20,8 @@ constexpr float thermoregulation_heat_gain = 0.5f;
 
 Pop::Pop(std::weak_ptr<IWorld> world, std::shared_ptr<ILogger> logger, std::shared_ptr<IConfig> config)
     : genome_(Genome(RandomUtility().rnd_int(static_cast<int>(config->get_genome_min_length()),
-                                             static_cast<int>(config->get_genome_max_length())))),
+                                             static_cast<int>(config->get_genome_max_length())),
+                     Genome::encoding_from_config(*config))),
       world_(std::move(world)), logger_(std::move(logger)), config_(std::move(config)),
       brain_(std::make_unique<Brain>(config_)), pos_{0, 0}, age_(0), energy_(100.0f), last_direction_{0, 0},
       random_util_(std::make_shared<RandomUtility>()) {
@@ -76,6 +77,10 @@ void Pop::init() {
     total_reproduction_energy_loss_ = 0.0f;
     total_respiration_energy_gain_ = 0.0f;
     total_thermoregolation_energy_loss_ = 0.0f;
+    total_respiration_count_ = 0;
+    total_photosynthesis_count_ = 0;
+    total_energy_cap_loss_ = 0.0;
+    total_energy_roundoff_ = 0.0;
     lifetime_distance_ = 0.0;
     if (!inherit_phy) {
         phy_.mitochondrions = static_cast<unsigned>(
@@ -86,23 +91,25 @@ void Pop::init() {
             random_util_->rnd_int(1, static_cast<int>(config_->get_phy_init_sensitiveness_max())));
         phy_.adipose_stock_max = config_->get_phy_adipose_stock_max();
     }
+    lipids_ = std::min(lipids_, phy_.adipose_stock_max);
     sensor_values_.assign(brain_->get_size_s(), 0.0f);
     brain_->wire(genome_);
     serialize_brain(0);
 }
 
 void Pop::die() {
-    // TODO: Implement death logic (cleanup, final actions, mark as dead)
+    if (!alive_)
+        return;
 
     auto world = world_.lock();
     if (world) {
         auto cell = world->get_cell(pos_);
-        cell->give_glucose(glucose_);
-        cell->give_water(water_);
-        cell->give_o2(o2_);
-        cell->give_co2(co2_);
-        cell->give_calcium(calcium_);
-        cell->give_lipids(lipids_);
+        glucose_ -= cell->give_glucose(glucose_);
+        water_ -= cell->give_water(water_);
+        o2_ -= cell->give_o2(o2_);
+        co2_ -= cell->give_co2(co2_);
+        calcium_ -= cell->give_calcium(calcium_);
+        lipids_ -= cell->give_lipids(lipids_);
     }
     alive_ = false;
     // remove serialized brain file for this pop
@@ -112,12 +119,16 @@ void Pop::die() {
 }
 
 bool Pop::try_spawn(PositionT p) {
-    pos_ = p;
     auto world = world_.lock();
     if (!world) {
         return false; // World no longer exists
     }
-    return world->add_entity(shared_from_this());
+    const PositionT previous = pos_;
+    pos_ = p;
+    if (world->add_entity(shared_from_this()))
+        return true;
+    pos_ = previous; // A failed placement must not lose the last valid position.
+    return false;
 }
 
 float Pop::calculate_reward() const {
@@ -279,6 +290,10 @@ void Pop::sense() {
     // gradient: clamp((dir - here) * 0.5 + 0.5, 0, 1) → [0,1] where 1=rising
     auto gradient = [](float here, float dir) -> float { return std::clamp((dir - here) * 0.5f + 0.5f, 0.0f, 1.0f); };
 
+    auto signal_gradient = [&](FeromoneT type, int dx, int dy) {
+        return gradient(fero_at(pos_, type), fero_scan(dx, dy, type));
+    };
+
     // Distance to boundaries, normalized to [0,1] with 0.5=center and 1=at boundary.
     const float bx = (W > 1) ? static_cast<float>(std::min(pos_.x, W - 1 - pos_.x)) / (W * 0.5f) : 0.0f;
     const float by = (H > 1) ? static_cast<float>(std::min(pos_.y, H - 1 - pos_.y)) / (H * 0.5f) : 0.0f;
@@ -382,6 +397,25 @@ void Pop::sense() {
             case Sensor::SENSE_SIGNAL_DRV_S:
                 val = gradient(fero_at(pos_, FeromoneT::FOOD_FEROMONE), fero_scan(0, 1, FeromoneT::FOOD_FEROMONE));
                 break;
+            case Sensor::SENSE_DANGER_DRV_N:
+            case Sensor::SENSE_DANGER_DRV_W:
+            case Sensor::SENSE_DANGER_DRV_E:
+            case Sensor::SENSE_DANGER_DRV_S:
+            case Sensor::SENSE_MATE_DRV_N:
+            case Sensor::SENSE_MATE_DRV_W:
+            case Sensor::SENSE_MATE_DRV_E:
+            case Sensor::SENSE_MATE_DRV_S:
+            case Sensor::SENSE_HOME_DRV_N:
+            case Sensor::SENSE_HOME_DRV_W:
+            case Sensor::SENSE_HOME_DRV_E:
+            case Sensor::SENSE_HOME_DRV_S: {
+                const unsigned offset = i - static_cast<unsigned>(Sensor::SENSE_DANGER_DRV_N);
+                constexpr FeromoneT types[] = {DANGER_FEROMONE, MATE_FEROMONE, HOME_FEROMONE};
+                constexpr int dx[] = {0, -1, 1, 0};
+                constexpr int dy[] = {-1, 0, 0, 1};
+                val = signal_gradient(types[offset / 4], dx[offset % 4], dy[offset % 4]);
+                break;
+            }
             case Sensor::GLUCOSE_DENSITY_N:
                 val = scan(0, -1, [](const std::shared_ptr<ICell>& c) {
                     return static_cast<float>(c->get_glucose()) / MaxC6h12o6;
@@ -418,6 +452,7 @@ void Pop::sense() {
             case Sensor::RANDOM:
                 val = static_cast<float>(random_util_->rnd_int(0, 10000)) / 10000.0f;
                 break;
+            case Sensor::RESERVED_INPUT:
             case Sensor::NUM_SENSES:
                 break;
         }
@@ -512,16 +547,16 @@ void Pop::act() {
             break;
         // ── feromone signalling ─────────────────────────────────────────────
         case Action::EMIT_SIGNAL_FOOD:
-            emit_feromone(FeromoneT::FOOD_FEROMONE, RandomUtility().rnd_int(70, 100));
+            emit_feromone(FeromoneT::FOOD_FEROMONE, random_util_->rnd_int(70, 100));
             break;
         case Action::EMIT_SIGNAL_DANGER:
-            emit_feromone(FeromoneT::DANGER_FEROMONE, RandomUtility().rnd_int(70, 100));
+            emit_feromone(FeromoneT::DANGER_FEROMONE, random_util_->rnd_int(70, 100));
             break;
         case Action::EMIT_SIGNAL_MATE:
-            emit_feromone(FeromoneT::MATE_FEROMONE, RandomUtility().rnd_int(70, 100));
+            emit_feromone(FeromoneT::MATE_FEROMONE, random_util_->rnd_int(70, 100));
             break;
         case Action::EMIT_SIGNAL_HOME:
-            emit_feromone(FeromoneT::HOME_FEROMONE, RandomUtility().rnd_int(70, 100));
+            emit_feromone(FeromoneT::HOME_FEROMONE, random_util_->rnd_int(70, 100));
             break;
         // ── resource acquisition ────────────────────────────────────────────
         case Action::GET_GLUCOSE:
@@ -531,7 +566,7 @@ void Pop::act() {
             break;
         case Action::LEAVE_GLUCOSE:
             if (world) {
-                world->get_cell(pos_)->give_glucose(10);
+                glucose_ -= world->get_cell(pos_)->give_glucose(std::min(10u, glucose_));
             }
             break;
         case Action::GET_H2O:
@@ -542,7 +577,7 @@ void Pop::act() {
 
         case Action::LEAVE_H2O:
             if (world) {
-                world->get_cell(pos_)->give_water(10);
+                water_ -= world->get_cell(pos_)->give_water(std::min(10u, water_));
             }
             break;
         case Action::GET_CALCIUM:
@@ -552,7 +587,7 @@ void Pop::act() {
             break;
         case Action::LEAVE_CALCIUM:
             if (world) {
-                world->get_cell(pos_)->give_calcium(10);
+                calcium_ -= world->get_cell(pos_)->give_calcium(std::min(10u, calcium_));
             }
             break;
         case Action::BURN_CALORIES:
@@ -568,6 +603,7 @@ void Pop::act() {
             responsiveness_ = std::clamp(responsiveness_ + 0.001f, 1.0f, 2.0f);
             break;
         // ── sentinels ────────────────────────────────────────────────────────────
+        case Action::RESERVED_ACTION:
         case Action::NUM_ACTIONS:
             break;
         case Action::KILL_FORWARD: {
@@ -652,11 +688,11 @@ Genome Pop::make_offspring_genome() const {
     if (config_->get_hebbian_inheritance()) {
         if (auto lg = brain_->get_learned_genome()) {
             if (!lg->get_genes().empty()) {
-                return lg->mutated(config_->get_point_mutation_rate());
+                return lg->mutated(config_->get_point_mutation_rate(), Genome::encoding_from_config(*config_));
             }
         }
     }
-    return genome_.mutated(config_->get_point_mutation_rate());
+    return genome_.mutated(config_->get_point_mutation_rate(), Genome::encoding_from_config(*config_));
 }
 
 PhyT Pop::make_offspring_phy() const {
@@ -678,22 +714,33 @@ PhyT Pop::make_offspring_phy() const {
     return offspring;
 }
 
-void Pop::donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_co2) {
+void Pop::donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_co2,
+                           unsigned& out_o2, unsigned& out_lipids, float& out_energy) {
     out_glucose = glucose_ / 8;
     out_water = water_ / 8;
     out_calcium = calcium_ / 8;
     out_co2 = co2_ / 8;
+    out_o2 = o2_ / 8;
+    out_lipids = lipids_ / 8;
+    out_energy = energy_ / 8.0f;
+    o2_ -= out_o2;
+    lipids_ -= out_lipids;
+    change_energy(-out_energy);
     glucose_ -= out_glucose;
     water_ -= out_water;
     calcium_ -= out_calcium;
     co2_ -= out_co2;
 }
 
-void Pop::set_resources(unsigned glucose, unsigned water, unsigned calcium, unsigned co2) {
+void Pop::set_resources(unsigned glucose, unsigned water, unsigned calcium, unsigned co2, unsigned o2, unsigned lipids,
+                        float energy) {
     glucose_ = glucose;
     water_ = water;
     calcium_ = calcium;
     co2_ = co2;
+    o2_ = o2;
+    lipids_ = lipids;
+    energy_ = energy;
 }
 
 void Pop::update_last_direction(PositionT new_pos, PositionT old_pos) {
@@ -731,7 +778,8 @@ void Pop::update_physiology() {
     water_ += world->get_cell(pos_)->take_water(5);
     calcium_ += world->get_cell(pos_)->take_calcium(2);
     co2_ += world->get_cell(pos_)->take_co2(5);
-    lipids_ += world->get_cell(pos_)->take_lipids(1);
+    if (lipids_ < phy_.adipose_stock_max)
+        lipids_ += world->get_cell(pos_)->take_lipids(1);
     o2_ += world->get_cell(pos_)->take_o2(5);
 
     // Biological reactions
@@ -741,13 +789,14 @@ void Pop::update_physiology() {
     thermoregulation_heat_ = 0.0f;
 
     // Metabolism cost
-    energy_ -= basal_metabolism_cost;
+    change_energy(-basal_metabolism_cost);
     total_metabolism_energy_loss_ += basal_metabolism_cost;
-    energy_ -= energy_cost_; // Additional cost from actions
-                             // reset energy cost for this cycle
+    change_energy(-energy_cost_); // Additional cost from actions
+                                  // reset energy cost for this cycle
     energy_cost_ = 0;
     // cap energy to MaxEnergy
     if (energy_ > MaxEnergy) {
+        total_energy_cap_loss_ += static_cast<double>(energy_ - MaxEnergy);
         energy_ = MaxEnergy;
     }
 }
@@ -775,7 +824,9 @@ void Pop::run_chloroplasts() {
     co2_--;
     water_--;
     glucose_++;
-    world->get_cell(pos_)->give_o2(1);
+    ++total_photosynthesis_count_;
+    // Keep any oxygen the cell cannot accept, instead of silently losing it.
+    o2_ += 1u - world->get_cell(pos_)->give_o2(1);
 }
 
 void Pop::run_mitochondrions() {
@@ -791,17 +842,18 @@ void Pop::run_mitochondrions() {
         glucose_--;
         o2_--;
         const float energy_gain = static_cast<float>(config_->get_phy_energy_per_respiration()) * efficiency;
-        energy_ += energy_gain;
+        change_energy(energy_gain);
         total_respiration_energy_gain_ += energy_gain;
         metabolism_heat_ += static_cast<float>(config_->get_phy_heat_per_respiration());
         co2_++;
         co2_produced++;
+        ++total_respiration_count_;
     }
     // Release produced CO2 into the cell
     if (co2_produced > 0) {
         auto world = world_.lock();
         if (world)
-            world->get_cell(pos_)->give_co2(co2_produced);
+            co2_ -= world->get_cell(pos_)->give_co2(co2_produced);
     }
 }
 
@@ -835,6 +887,13 @@ void Pop::increment_offspring_count() {
 
 void Pop::add_reproduction_energy_loss(float energy_loss) {
     if (energy_loss > 0.0f) {
-        total_reproduction_energy_loss_ += energy_loss;
+        const float actual_loss = std::min(energy_loss, std::max(energy_, 0.0f));
+        change_energy(-actual_loss);
+        total_reproduction_energy_loss_ += actual_loss;
     }
+}
+void Pop::change_energy(float delta) {
+    const double before = energy_;
+    energy_ += delta;
+    total_energy_roundoff_ += static_cast<double>(energy_) - before - static_cast<double>(delta);
 }

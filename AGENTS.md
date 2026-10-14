@@ -40,20 +40,34 @@ le osservazioni storiche e le ipotesi non sono risultati sperimentali.
 
 ## Avvertenze operative verificate
 
-- `Simulator::init()` registra gli agenti prima di `GridWorld::init()`, che cancella
-  gli occupanti. Non presumere coerenza tra popolazione, densità e rendering.
+- `Simulator::init()` ora inizializza il mondo prima dello spawn. Verificare
+  comunque identità e corrispondenza unica popolazione–occupazioni nei test.
 - `rotate_buckets()` ora produce `sense → think → act → sense`. I tre gruppi
   restano distribuiti su tick differenti; `Pop::next_phase_` impedisce fasi fuori
   ordine anche alla nascita e dopo assegnazione casuale dei gruppi in NewGen.
 - `Pop::init()` sceglie uniformemente una direzione tra gli otto vicini, mai (0,0),
   e resetta fase attesa, prima esecuzione e decisione pendente.
-- I sensori del glucosio 33–36 non sono codificabili con indici a 5 bit.
-  Le parità nell'argmax continuano a favorire indice 0.
+- Gli indici genetici sorgente/destinazione sono ora uint32 senza troncamento
+  a5 bit. L'INI abilita49 input: glucosio33–36, gradienti DANGER/MATE/HOME37–48;
+  32 resta riservato, FOOD direzionale mantiene24–27.
+  `genome_source_index_count`/`genome_sink_index_count` limitano generazione e
+  sostituzioni mutate;0 segue max larghezza input/hidden o output/hidden.
+  `brain_size_s/y` limita invece gli endpoint attivi; geni fuori rete restano
+  silenti senza modulo. Ridurre il dominio genetico non riscrive geni ereditati.
+  L'INI mantiene21 uscite;23 include l'azione esistente22 KILL_FORWARD,21 riservato.
+  Nuove dimensioni oltre le implementazioni non creano sensori/azioni nuovi.
+  Le parità nell'argmax continuano a favorire indice0.
 - `hebbian_inheritance=true` nell'INI corrente: i figli possono ereditare pesi
   appresi. La preferenza progettuale resta escludere l'eredità lamarckiana: segnalare
   questa discrepanza; non correggere silenziosamente la configurazione.
-- Il contatore del costo riproduttivo non sottrae energia. Non usarlo come prova
-  di una spesa reale. Le statistiche dei soli vivi non descrivono vite completate.
+- Il costo riproduttivo ora sottrae energia. Dopo il costo, il genitore dona1/8
+  di tutte le riserve e dell'energia al figlio; niente dotazioni gratuite ai figli.
+  La donazione è un trasferimento, distinto dal costo dissipato.
+- Tutti i `Cell::give_*` restituiscono la quantità effettivamente accettata. Chi
+  trasferisce deve sottrarre solo quella quantità. Death/NewGen restituiscono le
+  riserve; eccedenze oltre capacità alla morte sono sink espliciti nel ledger.
+- Cumulati energetici double, reazioni/cap/roundoff tracciati nei Pop per l'audit.
+  Le statistiche GUI dei soli vivi continuano a non descrivere vite completate.
 - `sexual_reproduction`, inserzione/delezione, `choose_parents_by_fitness`,
   `num_threads`, `max_generations` e reload `@N` non controllano i rispettivi
   comportamenti nel percorso applicativo attuale. `steps_per_generation` scala
@@ -131,3 +145,92 @@ suffisso `_`, interfacce `I*`, ownership tramite smart pointer, override esplici
 commenti Doxygen. `.clang-format` usa 4 spazi e limite 120 colonne; il suo riferimento
 C++17 non cambia il requisito C++23 del build. Evitare rifattorizzazioni estranee.
 Non sovrascrivere documentazione incompatibile: registrare le discrepanze.
+
+## Diagnostica dinamica breve
+
+Vedere `docs/DYNAMIC_AUDIT_2026-10-14.md` per misure reali, varianti e limiti.
+`tools/popx_audit.cpp` ha accesso friend ristretto per osservazione e fixture:
+non usare questi accessi per cambiare strategie durante i pilot.
+
+```sh
+bash scripts/run_audit.sh /tmp/conservation.json probes
+bash scripts/run_audit.sh /tmp/pilot.json 2000
+python3 scripts/analyze_audit.py data_out/audit
+```
+
+I probe sono standalone, con output JSON e exit nonzero sui bilanci errati.
+Le run hanno limiti2000 tick/30s e stop anticipati. Dataset locali in
+`data_out/audit` ignorati da Git. RNG ancora non riproducibili globalmente:
+non confrontare pilot diversi come effetto causale di una correzione.
+Variazione osservata e clone fedele non equivalgono ad adattamento dimostrato.
+
+### Confronto controllato delle strategie
+
+Protocollo e risultati in `docs/EVOLUTION_STATUS.md`, sezione18.
+`tools/popx_strategy_comparison.cpp` e `scripts/run_strategy_comparison.sh`
+sono diagnostici standalone: politiche imposte, tratti uguali per blocco,
+temperatura ambientale37°C, mutazione/plasticità disattivate nella fixture.
+Non trasferire questi controlli alla produzione senza richiesta del developer.
+Distinguere richieste, spostamenti riusciti, celle nuove, acquisizione, censura
+di sopravvivenza e discendenti; non usare sola distanza o energia come fitness.
+Queste prove mostrano un vantaggio possibile dell'esplorazione, non adattamento
+evoluto. Cap demografico, spazio di nascita e fotosintesi influenzano il confronto.
+I replay neurali usano RNG produttive non seedate: evidenza esplorativa.
+
+La verifica della sezione19 usa80 genomi e240 figli geneticamente mutati con
+learning congelato: risorse est/ovest non cambiano azioni/percorsi, bordo e
+occupazione cambiano alcune decisioni. Copie senza mutazione identiche;
+molti mutanti conservano azioni, senza dimostrare fitness adattiva.
+Distinguere ostacoli fisici da occupanti percepibili e cambi dopo fallimento da
+evitamento causale. Dataset/harness temporanei in `/tmp/popx_context_*`:
+Il replay osservato riproduceva il pannello salvato, non l'estrazione originaria
+dei figli, che usa `random_device`. Rettifica sezione21: il vecchio tentativo
+di washout con `set_feromone(type,0)` non cancellava segnali. Essendo additive,
+le API Cell/World richiedono un delta negativo pari al valore presente per
+cancellare il campo. Non dichiarare quella fixture priva di segnali.
+
+### Codifica genetica configurabile — aggiornamento successivo alle prove
+
+Vedere sezione20 di `docs/EVOLUTION_STATUS.md`; i risultati delle sezioni18–19
+sono precedenti alla nuova codifica e non provano inefficacia della versione attuale.
+`Genome::encoding_from_config` deve essere usato per fondatori, sostituzioni mutate
+e genomi ricostruiti da pesi. Le copie preservano gli endpoint e i limiti memorizzati;
+`mutated(rate, encoding)` applica i limiti correnti alle sole sostituzioni.
+I costruttori standalone senza encoding mantengono il dominio legacy32/32 per
+compatibilità: non usarli per generare genomi produttivi configurati.
+Gli indici storici restano stabili; snapshot includono metadati encoding versione2.
+Modifiche dimensionali dell'INI richiedono riavvio: non è implementato un rewire
+automatico delle reti viventi. Profondità hidden ancora configurabile1…6.
+
+```sh
+cmake --build build-release --target popx -j 2
+clang++ -std=c++23 -O0 -g -Isrc -Ibuild-release/_deps/eigen3-src -Ibuild-release/_deps/nlohmann_json-src/include tests/genome_encoding_regression.cpp build-release/src/CMakeFiles/popx.dir/{brain,cell,config,console_logger,gene,genome,grid_world,pop,pops_manager,random_utility}.cpp.o -ltbb -lstdc++fs -o /tmp/popx_encoding_regression
+/tmp/popx_encoding_regression
+```
+
+Controllo standalone, non registrato in CTest: domini configurati, invalidi,
+mutazione/eredità, endpoint oltre31/65535, export e rewire, sensori glucosio→
+azioni→movimento, attuatore22 con23 uscite e compatibilità degli indici legacy.
+
+### Feromoni e prove brevi successive
+
+Vedere sezione21 di `docs/EVOLUTION_STATUS.md`. Tutti i quattro canali hanno
+sensore locale0…1 e gradienti cardinali centrati in0,5. Campo additivo limitato
+0…100, decadimento0,9995/tick, niente diffusione; scansione lungo quattro raggi
+di4 celle. Le etichette FOOD/DANGER/MATE/HOME non impongono significati o risposte.
+Emissione usa ora la RNG del Pop; RNG genetiche/ambientali restano non centralizzate.
+Non confondere emissioni, esposizioni, reazioni causali a segnali, aggregazione
+per spazio/nascite e coordinamento collettivo evoluto. La run controllata mostra
+associazione movimento-discendenza, non selezione evolutiva dimostrata.
+
+```sh
+clang++ -std=c++23 -O0 -g -Isrc tests/pheromone_regression.cpp build-release/src/CMakeFiles/popx.dir/{brain,cell,config,console_logger,gene,genome,grid_world,pop,pops_manager,random_utility}.cpp.o -ltbb -lstdc++fs -o /tmp/popx_pheromone_regression
+/tmp/popx_pheromone_regression
+```
+
+PASS su4 emissioni/sensori locali,16 gradienti/decisioni, avvicinamento reale,
+campo uniforme senza gradienti spurii, cap/finitezza/decadimento e washout.
+Harness `/tmp/popx_signal_probe.cpp` e dataset temporanei `/tmp/popx_signal_*`:
+confronti600 tick appaiati riprodotti esattamente; run2200 con mutazioni/nascite
+non garantita riproducibile. Gruppi nelle fixture con reti costruite non sono
+gruppi spontaneamente evoluti. L'INI corrente resta21 azioni e reward invariati.

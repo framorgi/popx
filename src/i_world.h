@@ -92,10 +92,10 @@ class IWorld {
     [[nodiscard]] virtual double get_feromone_magnitude(PositionT p, FeromoneT type) const = 0;
 
     ///----------------------------------------------------------------------
-    /// @brief    Set the feromone level of a specific type at a given position
+    /// @brief    Add a bounded feromone amount at a position (historical additive API)
     /// @param    p The position to set
     /// @param    type The type of feromone
-    /// @param    value The value to set
+    /// @param    value Amount to add; negative removes, zero does not clear
     ///----------------------------------------------------------------------
     virtual void set_feromone(PositionT p, FeromoneT type, float value) = 0;
 

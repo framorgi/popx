@@ -20,6 +20,8 @@ struct ConfigParams {
     // Genome
     unsigned genome_min_length = 24;
     unsigned genome_max_length = 24;
+    unsigned genome_source_index_count = 0;
+    unsigned genome_sink_index_count = 0;
 
     // Mutation / reproduction
     double point_mutation_rate = 0.001;
@@ -82,6 +84,8 @@ class Config : public IConfig {
     unsigned get_start_population() const override;
     unsigned get_genome_min_length() const override;
     unsigned get_genome_max_length() const override;
+    unsigned get_genome_source_index_count() const override;
+    unsigned get_genome_sink_index_count() const override;
     unsigned get_steps_per_generation() const override;
     unsigned get_max_generations() const override;
     unsigned get_num_threads() const override;

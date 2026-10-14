@@ -131,14 +131,16 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     [[nodiscard]] PhyT make_offspring_phy() const;
 
     ///----------------------------------------------------------------------------
-    /// @brief Halves the parent's internal reserves and writes the donated amounts to the out params.
+    /// @brief Donate one eighth of each reserve and energy, without creating resources.
     ///----------------------------------------------------------------------------
-    void donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_co2);
+    void donate_resources(unsigned& out_glucose, unsigned& out_water, unsigned& out_calcium, unsigned& out_co2,
+                          unsigned& out_o2, unsigned& out_lipids, float& out_energy);
 
     ///----------------------------------------------------------------------------
     /// @brief Sets internal reserves directly (used to initialise offspring with parent donation).
     ///----------------------------------------------------------------------------
-    void set_resources(unsigned glucose, unsigned water, unsigned calcium, unsigned co2);
+    void set_resources(unsigned glucose, unsigned water, unsigned calcium, unsigned co2, unsigned o2, unsigned lipids,
+                       float energy);
 
     ///---------------------------------------------------------------------------
     /// @brief Gets the render state of the Pop for visualization.
@@ -234,7 +236,16 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
 
     void add_reproduction_energy_loss(float energy_loss);
 
+    /// @brief Record the successful birth's parent and whether eligibility was bypassed.
+    void set_birth_provenance(const std::string& parent_id, bool forced) {
+        parent_id_ = parent_id;
+        birth_was_forced_ = forced;
+    }
+
   private:
+    // Narrow access for the standalone dynamic audit and its regression fixtures.
+    friend class SimulationAudit;
+
     ///----------------------------------------------------------------------------
     /// @brief guard flag to avoid some action at first run
     ///---------------------------------------------------------------------------
@@ -308,6 +319,10 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Unique string identifier for this Pop instance.
     /// ---------------------------------------------------------------------------
     std::string pop_id_;
+
+    /// @brief Birth provenance for scientific diagnostics (empty for founders).
+    std::string parent_id_;
+    bool birth_was_forced_ = false;
     /// ---------------------------------------------------------------------------
     /// @brief Last action index produced by the brain (-1 = no action).
     /// ---------------------------------------------------------------------------
@@ -403,23 +418,30 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// ---------------------------------------------------------------------------
     /// @brief Lifetime cumulative movement energy losses.
     /// ---------------------------------------------------------------------------
-    float total_movement_energy_loss_ = 0.0f;
+    double total_movement_energy_loss_ = 0.0;
     /// ---------------------------------------------------------------------------
     /// @brief Lifetime cumulative basal metabolism energy losses.
     /// ---------------------------------------------------------------------------
-    float total_metabolism_energy_loss_ = 0.0f;
+    double total_metabolism_energy_loss_ = 0.0;
     /// ---------------------------------------------------------------------------
     /// @brief Lifetime cumulative reproduction energy losses.
     /// ---------------------------------------------------------------------------
-    float total_reproduction_energy_loss_ = 0.0f;
+    double total_reproduction_energy_loss_ = 0.0;
     /// ---------------------------------------------------------------------------
     /// @brief Lifetime cumulative respiration energy gains.
     /// ---------------------------------------------------------------------------
-    float total_respiration_energy_gain_ = 0.0f;
+    double total_respiration_energy_gain_ = 0.0;
     /// ---------------------------------------------------------------------------
     /// @brief Lifetime cumulative thermoregulation energy losses.
     /// ---------------------------------------------------------------------------
-    float total_thermoregolation_energy_loss_ = 0.0f;
+    double total_thermoregolation_energy_loss_ = 0.0;
+
+    /// @brief Reaction counts and discarded energy for exact resource/energy accounting.
+    uint64_t total_respiration_count_ = 0;
+    uint64_t total_photosynthesis_count_ = 0;
+    double total_energy_cap_loss_ = 0.0;
+    double total_energy_roundoff_ = 0.0;
+    void change_energy(float delta);
     ///---------------------------------------------------------------------------
     /// @brief Updates the last movement direction based on new and old positions.
     /// @param new_pos The new position after movement.

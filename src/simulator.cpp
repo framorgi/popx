@@ -10,8 +10,9 @@ Simulator::Simulator(std::shared_ptr<IWorld> world, std::shared_ptr<IAgentsManag
                      std::shared_ptr<ILogger> logger)
     : world_(std::move(world)), agents_manager_(std::move(agents_manager)), logger_(std::move(logger)) {}
 void Simulator::init() {
-    agents_manager_->spawn_population();
+    // Initialise cells before registering agents; world init clears occupants.
     world_->init();
+    agents_manager_->spawn_population();
 }
 void Simulator::update() {
     // start simulator tick

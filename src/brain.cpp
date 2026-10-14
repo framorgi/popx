@@ -95,8 +95,8 @@ void Brain::wire(const Genome& genome) {
         }
 
         // Reject genes whose num field exceeds the actual layer size.
-        // Using modulo would create a coverage bias:  e.g. with sizeY=19 and
-        // a 5-bit num field (0-31), indices 0-12 would be selected twice as
+        // Using modulo would create a coverage bias: e.g. with sizeY=19 and
+        // a domain of 32 indices, indices 0-12 would be selected twice as
         // often as 13-18.  Rejection keeps the distribution uniform.
         // Index-overflow genes are preserved as silent genes: they may become
         // active in future generations if layer sizes grow via structural mutation.
@@ -212,6 +212,11 @@ void Brain::serialize(const std::string& pop_id, unsigned generation) const {
     doc["sizeN"] = size_n_;
     doc["sizeY"] = size_y_;
     doc["num_hidden_layers"] = num_hidden_;
+    const auto encoding = Genome::encoding_from_config(*config_);
+    doc["gene_encoding"] = {{"version", 2},
+                            {"index_bits", 32},
+                            {"source_index_count", encoding.source_index_count},
+                            {"sink_index_count", encoding.sink_index_count}};
 
     json connections = json::array();
     const unsigned nl = num_layers_;
@@ -501,7 +506,7 @@ std::shared_ptr<const Genome> Brain::get_learned_genome() const {
 
 void Brain::rebuild_genome_from_weights() {
     const unsigned nl = num_layers_;
-    auto genome = std::make_shared<Genome>(0);
+    auto genome = std::make_shared<Genome>(0, Genome::encoding_from_config(*config_));
 
     // For every active synapse, create one gene encoding the current learned weight.
     for (unsigned src = 0; src < nl; ++src) {
@@ -520,8 +525,8 @@ void Brain::rebuild_genome_from_weights() {
                     const float clamped = std::clamp(it.value() * 8192.0f, -32768.0f, 32767.0f);
                     const int16_t w_int = static_cast<int16_t>(clamped);
 
-                    genome->add_gene(Gene(static_cast<uint16_t>(src), static_cast<uint16_t>(it.col()), sink_type,
-                                          static_cast<uint16_t>(it.row()), w_int));
+                    genome->add_gene(Gene(static_cast<uint16_t>(src), static_cast<uint32_t>(it.col()), sink_type,
+                                          static_cast<uint32_t>(it.row()), w_int));
                 }
             }
         }

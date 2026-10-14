@@ -5,6 +5,7 @@
 #include "gene.h"
 
 #include <vector>
+class IConfig;
 /// -----------------------------------------------------------------------------
 /// @class Genome
 /// @brief Represents the genetic makeup of an entity, consisting of multiple genes.
@@ -20,6 +21,9 @@ class Genome {
     /// @param size The size of the genome (number of genes).
     ///----------------------------------------------------------------------------
     Genome(int size);
+    Genome(int size, GeneEncoding encoding);
+    [[nodiscard]] static GeneEncoding encoding_from_config(const IConfig& config);
+    [[nodiscard]] const GeneEncoding& get_encoding() const;
     ///----------------------------------------------------------------------------
     /// @brief Retrieves the genetic color for visualization purposes.
     /// @return The genetic color.
@@ -42,6 +46,7 @@ class Genome {
     /// @param point_mutation_rate Probability [0,1] of each gene being replaced by a new random gene.
     ///----------------------------------------------------------------------------
     [[nodiscard]] Genome mutated(double point_mutation_rate) const;
+    [[nodiscard]] Genome mutated(double point_mutation_rate, GeneEncoding encoding) const;
 
   private:
     ///----------------------------------------------------------------------------
@@ -52,13 +57,9 @@ class Genome {
     /// @brief          Vector of genes that make up the genome.
     //--------------------------------------------------------------------------
     std::vector<Gene> genes_;
+    GeneEncoding encoding_;
     //--------------------------------------------------------------------------
     /// @brief          Genetic color value for visualization purposes.
     //--------------------------------------------------------------------------
     Color genetic_color_value_ = {0, 0, 0};
-
-    //--------------------------------------------------------------------------
-    /// @brief          Size of the genome (number of genes, so the number of connections).
-    //--------------------------------------------------------------------------
-    int genome_size_ = 0;
 };

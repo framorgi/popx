@@ -1,5 +1,76 @@
 # PopX — stato tecnico ed evolutivo
 
+## Feromoni completati e nuove run brevi — 14 ottobre 2026
+
+Completati gradienti direzionali DANGER/MATE/HOME, aggiunti agli input37…48;
+INI49 input,21 uscite. Emissione con RNG individuale del Pop, campo protetto da
+valori non finiti, nessun nuovo reward. Test dei quattro canali e regressioni PASS.
+Run nativa2000 tick:284 movimenti riusciti su6423 richieste,47 nascite naturali,
+forte mortalità termica. Run controllata con risorse vicine2200 tick:9032 movimenti,
+48 nascite naturali, prelievo netto18250 glucosio, nessuna morte termica.
+Fondatori mossi45 figli diretti, immobili0: associazione senza prova causale.
+Feromoni cambiano alcune scelte nei controlli appaiati, senza vantaggio coerente
+di esplorazione. Gruppo diagnosticamente possibile, coordinamento evoluto non
+dimostrato. Dettagli e rettifica del vecchio washout in sezione21.
+
+## Codifica genetica configurabile — aggiornamento del 14 ottobre 2026
+
+Su richiesta del developer rimossa la barriera a5 bit per gli indici genetici:
+ora uint32 per sorgenti e destinazioni, domini di generazione/mutazione da INI,
+37 input correnti comprendenti i sensori glucosio33…36. Uscite correnti21,
+configurabili; indici storici preservati. Fixture genetica controllata verifica
+glucosio est→MOVE_EAST e glucosio ovest→MOVE_WEST con spostamenti reali.
+È raggiungibilità funzionale dimostrata, non adattamento spontaneo. Le prove
+delle sezioni18–19 si riferiscono alla codifica precedente. Dettagli in sezione20.
+
+## Risposte al contesto e figli mutati — nuova verifica del 14 ottobre 2026
+
+Eseguite2400 esposizioni brevi e replay esatto dello stesso dataset:80 genomi
+originali,80 copie senza mutazione,240 figli genetici mutati,6 contesti ciascuno.
+Le risorse a est/ovest cambiano l'acquisizione ma non azioni o percorsi di alcun
+genotipo nel controllo senza apprendimento. Bordo/occupazione sono percepibili,
+ma cambiano le sequenze di pochi genomi.195/240 figli mutati mantengono l'intera
+sequenza delle azioni parentali in tutti i contesti. Evidenza di scarsa variazione
+comportamentale contestuale utile, non assenza di variazione né dimostrazione
+di inefficacia evolutiva generale. Metodo, misure e limiti in sezione19.
+
+## Confronto controllato di strategie — 14 ottobre 2026
+
+**Nuova evidenza:** a tratti uguali e temperatura ambientale costante, esplorare
+può aumentare acquisizione e discendenza. L'immobilità non è inevitabilmente la
+strategia favorita. Nel controllo senza fotosintesi gli immobili sopravvivono
+3000 tick ma non si riproducono; la camminata casuale lascia mediamente109
+discendenti vivi con glucosio uniforme e94,5 con glucosio localizzato.
+Con fotosintesi anche gli immobili si riproducono. Le strategie sono interventi
+diagnostici prescritti, **non comportamenti evoluti spontaneamente**.
+
+Le reti genetiche originali mostrano spesso una singola azione ripetuta e molti
+tentativi bloccati al bordo. Questo sposta l'attenzione, dopo aver controllato la
+mortalità termica, verso variazione comportamentale utile e capacità di cambiare
+azione, senza stabilire definitivamente il collo evolutivo. Protocollo completo,
+misure, limiti e riproduzione in sezione18. I risultati termici delle run precedenti
+restano validi per le loro condizioni: non vengono smentiti dal controllo a37°C.
+
+## Analisi dinamica e bilanci — aggiornamento del 14 ottobre 2026
+
+Eseguite due run headless di2000 tick e una validazione contabile di200 tick,
+oltre a fixture di trasferimento/NewGen e18 controlli termici brevi. Variazione
+neurale presente e clone senza mutazione fedele nel pannello comune; efficacia
+adattiva ancora non dimostrata. Mortalità termica prima della maturità è il
+vincolo osservato più forte, senza prova di causalità evolutiva generale.
+
+Corrette inizializzazione griglia, creazione/duplicazione di risorse, dotazioni
+gratuitamente create nei figli (donazione1/8 autorizzata), costo riproduttivo reale,
+cap lipidico, restituzioni Death/NewGen e fallimenti di riposizionamento. Residui
+materiali0; ledger energetico finale0 dopo arrotondamenti esplicitamente misurati.
+Persistono sink alla morte per capacità finite, documentati separatamente.
+
+Dettagli, risultati, protocollo, limiti e comandi in
+[DYNAMIC_AUDIT_2026-10-14.md](DYNAMIC_AUDIT_2026-10-14.md).
+Le sezioni1–17 sottostanti restano l'audit storico precedente alle correzioni;
+le frasi “nessun esperimento condotto” e i problemi risolti appartengono a quella
+fotografia, non allo stato successivo riportato nel nuovo documento.
+
 ## Aggiornamento tecnico successivo all'audit — 14 ottobre 2026
 
 Su richiesta del developer sono state corrette la rotazione delle fasi e la
@@ -989,3 +1060,774 @@ verificato non prova da solo che abbia causato una specifica osservazione storic
 
 Aggiornare questo documento dopo verifiche nuove, riportando revisione, protocollo,
 risultati e incertezza; non convertire automaticamente le ipotesi in fatti.
+
+## 18. Strategie con tratti uguali e ambiente termico controllato
+
+### 18.1 Domanda e protocollo effettivamente eseguito
+
+Data14 ottobre2026; base Git `015d3f4da0e2c19628bb6b2afbb9d7d095e408f7`
+con le correzioni già documentate, nel working tree. Nessuna modifica aggiuntiva
+alla fisiologia, alla selezione o a `config/popx.ini` per questo confronto.
+Harness standalone `tools/popx_strategy_comparison.cpp`, classe `SimulationAudit`:
+usa le implementazioni reali `Pop::sense/think/act/update`, `PopsManager::try_reproduce`,
+`GridWorld`, `Cell`, `Brain`; controlli applicati solo nella fixture.
+
+64 prove:4 strategie ×2 distribuzioni ×2 fisiologie ×4 seed(17,29,43,61).
+Durata3000 tick ciascuna; tempo totale misurato7,252s. Fermate al termine del
+confronto: prolungarle, con cap demografico e politiche prescritte, non avrebbe
+dimostrato evoluzione. Sono stati eseguiti anche due replay neurali di120 tick
+e un controllo del bordo3000 tick, non una simulazione evolutiva lunga.
+
+| Controllo | Valore e motivazione |
+|---|---|
+| Ambiente |16×16, temperatura delle celle37°C, quota31 uniforme; niente aggiornamento climatico/rigenerazione. |
+| Fisiologia comune in ogni blocco |1 mitocondrio, sensibilità1, capacità adiposa80;0 oppure14 cloroplasti. I due blocchi fotosintetici sono confronti separati. |
+| Fondatore |Posizione(3,8), energia100, lipidi20, temperatura corporea37°C, direzione est, lazyness0; stessi valori per tutte le strategie. |
+| Glucosio totale iniziale |32768 in entrambi i layout. Uniforme128/cella; localizzato nelle72 celle x8…15,y4…12,456 ciascuna eccetto l'ultima392; fondatore fuori dalla zona. |
+| Altre risorse |Acqua1000/cella e CO₂1000/cella, finite; calcio e lipidi ambientali0. O₂ riportato a1000/cella ogni tick: serbatoio esterno dichiarato, uguale per tutte le strategie. |
+| Genetica/plasticità |Genoma vuoto nelle politiche prescritte, mutazione0, apprendimento congelato; nessuna eredità dei pesi appresi. Tratti copiati senza mutazione. |
+| Ciclo |sense→think→act, una fase/tick per agente; fisiologia ogni tick. Fasi determinate dall'età, senza bucket paralleli del manager. |
+| Riproduzione |Condizione reale E>50, età>1000, glucosio>20; costo e donazione1/8 reali; collocazione adiacente reale. Massimo3 tentativi/tick, cap120. No NewGen/riproduzione forzata. |
+| Ordine riproduttivo |Scansione stabile dei genitori, non FIFO produttiva; stesso criterio tra strategie. |
+| Discendenti |Ricevono est, lazyness0 e la politica familiare per intervento diagnostico; questa trasmissione della politica non dimostra ereditabilità genetica. |
+
+Politiche: **immobile** impone nessuna azione, mantenendo fisiologia e assorbimento;
+**sempre est** impone MOVE_EAST; **pattuglia** inverte est/ovest ai bordi della riga;
+**casuale** sceglie uniformemente le quattro direzioni cardinali a ogni act.
+Quest'ultima usa mt19937 distinto per agente, seed base+104729×seriale di nascita.
+È diversa da MOVE_RANDOM produttivo, che ammette anche diagonali e bersaglio nullo.
+L'immobile è un controllo metabolico, non l'output naturale del genoma vuoto.
+
+I controlli immobile/est/pattuglia sono deterministici nelle condizioni scelte:
+le quattro ripetizioni coincidono e **non sono quattro repliche indipendenti**.
+Per casuale si riportano medie e intervalli osservati dei quattro seed, non
+intervalli di confidenza. ID e RNG produttive non sono globalmente seedabili;
+nei confronti prescritti le decisioni stocastiche rilevanti sono controllate
+(foto con probabilità1, mutazione0, azioni cardinali esterne). I replay neurali
+restano esplorativi per RANDOM e altre RNG produttive non controllate.
+
+### 18.2 Movimento → acquisizione → sopravvivenza → discendenti
+
+Glucosio indica acquisizione **ambientale cumulativa**; non comprende quello
+prodotto internamente dalla fotosintesi. Movimenti/acquisizione totali includono
+fondatore e discendenti: sono conseguenze dell'espansione familiare, non misure
+di efficienza per individuo. Per evitare questa confusione si riporta anche
+l'acquisizione del solo fondatore. Conteggi casuali sono medie, quindi frazionari.
+
+| Foto | Risorse | Strategia | Movimenti riusciti famiglia | Glucosio fondatore | Glucosio famiglia | Figli diretti fondatore | Discendenti nati | Discendenti vivi a3000 | Morti energetiche |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+|No|Uniformi|Immobile|0|128|128|0|0|0|0|
+|No|Uniformi|Sempre est|12|303|303|0|0|0|0|
+|No|Uniformi|Pattuglia|427|2048|4112|19|19|11|8|
+|No|Uniformi|Casuale|27160,25|5663,5|32768|34|149,5|109|40,5|
+|No|Localizzate|Immobile|0|0|0|0|0|0|0|
+|No|Localizzate|Sempre est|12|561|561|0|0|0|0|
+|No|Localizzate|Pattuglia|423|2556|10121|20|20|18|2|
+|No|Localizzate|Casuale|18048,5|1463,5|32762,75|31,75|117,5|94,5|23|
+|Sì|Uniformi|Immobile|0|128|3200|8|24|24|0|
+|Sì|Uniformi|Sempre est|12|303|2065|5|14|14|0|
+|Sì|Uniformi|Pattuglia|428|2048|5498|20|32|32|0|
+|Sì|Uniformi|Casuale|28660|5684,5|32768|53,25|119,25|119|0,25|
+|Sì|Localizzate|Immobile|0|0|0|8|8|8|0|
+|Sì|Localizzate|Sempre est|12|561|6915|5|14|14|0|
+|Sì|Localizzate|Pattuglia|428|2556|15108|20|32|32|0|
+|Sì|Localizzate|Casuale|26976,25|534,75|32768|34,75|119|119|0|
+
+Tutti i64 fondatori vivi al tick3000; nessuna morte termica nella famiglia.
+Temperature corporee osservate nell'intero confronto37…37,794702°C: ambiente
+controllato non significa temperatura corporea bloccata artificialmente.
+La sopravvivenza del fondatore è quindi censurata: **non è misurata la longevità
+completa né dimostrato un vantaggio di sopravvivenza del fondatore**.
+Discendenti vivi casuali senza foto:98…118(uniforme),42…119(localizzato).
+Con foto:119 in tutti i seed/layout; insieme al fondatore raggiungono cap120.
+Discendenti che hanno raggiunto età>1000, anche se poi morti: senza foto
+0/0/16/29,25(uniforme),0/0/19/16(localizzato); con foto
+8/5/20/50,5(uniforme),8/5/20/31,25(localizzato), nell'ordine delle strategie.
+
+**Interpretazione causale limitata alla fixture:**
+
+- Senza foto, sopravvivere stazionari è possibile nell'orizzonte, ma il glucosio
+  manca alla maturità e impedisce figli. Movimento esplorativo può collegare
+  acquisizione e discendenza; muoversi soltanto inizialmente non basta.
+- Sempre est accumula più energia del controllo immobile (fondatore141,35 contro
+  103,02 uniforme;212,60 contro67,69 localizzato), ma senza foto resta senza figli:
+  blocco al bordo e soglia riproduttiva sul glucosio separano energia e fitness.
+- La pattuglia acquisisce risorse, poi si blocca sui propri figli:10636 tentativi
+  falliti per occupazione senza foto/uniforme e13379 senza foto/localizzato.
+  La camminata casuale favorisce anche disponibilità di celle adiacenti per
+  nuove nascite. Non attribuire tutto il vantaggio alla sola energia.
+- Con foto, gli immobili si riproducono persino fuori dalla zona con glucosio:
+  CO₂/acqua e quota favorevole permettono produzione interna. Questo riduce la
+  necessità del movimento; non rende l'immobilità la strategia vincente qui.
+- Il cap120 limita soprattutto casuale: medie787/421 tick al cap senza foto
+  (uniforme/localizzato),958/949 con foto. Non stimare crescita libera o optimum
+  dalle famiglie saturate. Un confronto in arene separate non misura invasione
+  competitiva, selezione di frequenze genetiche o cooperazione.
+
+### 18.3 Il costo disincentiva il movimento?
+
+Costo attuale verificato `src/pop.cpp:16`:0,01 per **tentativo**, compresi falliti;
+basale0,02 per tick. Con un act ogni3 tick,3000 tick comportano1000 richieste:
+costo10, contro60 basali, incremento16,7% rispetto al basale. Il precedente valore
+storico0,1 non descrive il codice attuale. Respirazione configurata0,3 per
+mitocondrio/reazione (`config/popx.ini:57`), moltiplicata per efficienza termica.
+Con risorse sufficienti e temperature corporee osservate, un mitocondrio può
+produrre circa0,276…0,3/tick, contro0,02333/tick di basale+movimento medio.
+È un confronto condizionale della formula, non il reddito medio misurato di
+ogni famiglia: fame, donazioni, riproduzione e cap energia cambiano i bilanci.
+
+Il costo non elimina il vantaggio osservato dell'esplorazione. Disincentiva
+tentativi inutili, che persistono al bordo. Ridurre arbitrariamente il costo
+non è giustificato da questi risultati. L'assorbimento automatico a ogni tick
+(`Pop::update_physiology`, `src/pop.cpp:750`) permette reddito senza GET_GLUCOSE;
+foto e risorse diffuse possono rendere superfluo esplorare per un certo tempo.
+Niente bilancio globale chiuso in questo confronto: O₂ è esterno e foto/respirazione
+trasformano risorse. I residui conservativi della precedente validazione restano
+documentati separatamente; glucosio iniziale uguale non implica produzione totale
+uguale quando cambiano cloroplasti o popolazione.
+
+### 18.4 Reti reali: richieste, spostamenti ed esplorazione
+
+Replay degli80 genomi iniziali della run precedente, ciascuno isolato in un mondo
+uniforme con stessa fisiologia(1,0,1,80), temperatura37°C, direzione est e lazyness0.
+120 tick/40 decisioni, nessuna override dell'azione, nessuna riproduzione, learning
+congelato. I genomi sono quelli alla nascita, non reti modificate di adulti.
+
+Due letture esplorative con RNG produttive non seedate: prima69/80 genomi con
+un'unica azione,45 senza richiesta di movimento,1290 richieste/618 riuscite;
+seconda69/80 con un'unica azione,43 senza movimento,1343 richieste/626 riuscite.
+La seconda distingue703 fallimenti al bordo e14 richieste con bersaglio uguale
+alla posizione attuale.10 genomi che muovono con una sola azione visitano al
+massimo4 celle: rotazioni ripetute possono fare piccoli circuiti. Distanza
+percorsa, varietà di azioni ed esplorazione spaziale non sono equivalenti.
+
+Controllo aggiuntivo120×120,3000 tick, fisiologia uguale, un gene reale
+`(source_type=1,source_num=0,sink_type=7,sink_num=4,weight=8192)`:
+produce MOVE_EAST con esecuzione neurale reale, senza controller prescritto.
+Parte(60,60), termina(119,60):1000 richieste,59 spostamenti,941 fallimenti;
+primo fallimento tick180, costo movimento10, basale60. La trappola del bordo
+esiste anche alla dimensione ordinaria, non solo nel mondo piccolo del confronto.
+Questo dimostra raggiungibilità della singola azione, non ereditabilità di
+un'esplorazione utile o adattamento spontaneo. Nessuna riproduzione in questo probe.
+
+Riscontri statici pertinenti: argmax seleziona un solo vincitore e preferisce
+l'indice più basso nei pareggi (`src/brain.cpp:154`); sensori glucosio33…36 oltre
+gli indici0…31 codificabili (`src/neuron.h`, `src/gene.h:38`); AGE satura alla
+scala configurata300, prima della maturità1000; mancano sensori diretti di fame,
+energia interna e temperatura corporea. Sono limiti confermati, ma non è
+dimostrato che uno specifico limite causi i69 output costanti. Altri sensori
+possono comunque influenzare decisioni.120 tick non coprono sviluppo/maturità
+né plasticità attiva; il freeze isola la componente genetica iniziale.
+
+### 18.5 Collo evolutivo e osservazione sui gruppi
+
+| Livello | Evidenza aggiornata | Cosa resta aperto |
+|---|---|---|
+|Variazione|Genomi diversi producono azioni diverse e movimento è raggiungibile. Molti però ripetono un'unica azione, rimangono al bordo o girano in poche celle.|Frequenza di strategie esplorative utili e mutazioni che le generano; risposta effettiva a contesti diversi. Candidato principale sotto controllo termico, non verdetto definitivo.|
+|Ereditabilità|Copia senza mutazione fedele nel pannello precedente; nella fixture i tratti sono identici e le politiche imposte ai figli.|La politica prescritta non è eredità genetica. Non misurata persistenza di esplorazione funzionale con mutazione, plasticità e INI corrente (`hebbian_inheritance=true`).|
+|Selezione|Ambiente/fisiologia consentono differenze riproduttive legate alla strategia; casuale supera immobile nei controlli.|Non dimostrata selezione evolutiva nella popolazione normale, né competizione tra strategie. Foto, rigenerazione, cap e mortalità termica possono cambiare il vantaggio.|
+
+L'osservazione del developer (poco movimento, poche scelte individuali visibili)
+è compatibile con output costanti e richieste bloccate, non prova assenza totale
+di variazione. I controlli mostrano che muoversi può servire: non è necessario
+premiarlo artificialmente. Assorbimento passivo e foto spiegano una convenienza
+condizionale dello stare fermi, mentre costi di fallimento e occupazione possono
+penalizzare controller poco flessibili.
+
+Gruppi visivi possono formarsi semplicemente perché i figli nascono adiacenti;
+anche la famiglia immobile fotosintetica cresce. Non sono prove di cooperazione,
+comunicazione o scelta sociale. Né movimento scarso né movimento abbondante
+permettono da soli di concludere sul comportamento di gruppo. Questo confronto
+non testa segnali/feromoni o interazioni sociali selezionate.
+
+**Prossima verifica con massimo valore informativo:** confrontare le risposte
+dei medesimi genomi a più contesti sensoriali controllati (interno, bordo,
+occupazione, risorse localizzate), distinguendo output neurali, bersagli,
+spostamenti e celle nuove visitate. Campionare anche mutazioni/figli con seed
+espliciti, senza reward al movimento: determinare se la variazione genetica
+produce e conserva controller che cambiano azione quando la corrente fallisce.
+Solo dopo, confronto competitivo di controller geneticamente codificati con
+termica uguale, mortalità censurata e cap non saturato. Nessuna implementazione
+di questi esperimenti futuri è inclusa nelle prove descritte.
+
+### 18.6 Artefatti, verifica e limiti
+
+Artefatti locali in `data_out/audit` (ignorata da Git):
+`strategy_comparison.json`(64 prove e primo replay), `strategy_network_trace.json`
+(secondo replay), `strategy_boundary_probe.json`, `strategy_summary.json`,
+`strategy_comparison.png/.svg`. Il JSON delle nascite della prima raccolta aveva
+depth0 come placeholder: profondità ricostruita deterministicamente da
+parent_serial; le misure primarie non sono cambiate. Il codice attuale calcola
+depth alla nascita. Non interpretare la ricostruzione come nuova simulazione.
+
+```sh
+bash scripts/run_strategy_comparison.sh /tmp/strategy_comparison.json data_out/audit/corrected_pilot.json
+python3 scripts/analyze_strategy_comparison.py data_out/audit
+python3 scripts/plot_strategy_comparison.py data_out/audit
+# Dopo compilazione dello harness: modalità brevi senza ripetere le64 prove
+/tmp/popx_strategy_comparison data_out/audit/corrected_pilot.json /tmp/replay.json replay
+/tmp/popx_strategy_comparison data_out/audit/corrected_pilot.json /tmp/boundary.json boundary
+```
+
+Lo script costruisce solo target `popx`, poi collega lo harness standalone.
+Non usare build globale: target format ALL modifica sorgenti. Dipendenze già
+presenti, nessuna installazione. Analizzatore verifica64 prove, stessi budget,
+assenza morti termiche, sopravvivenza fondatori, identità tentativi=riusciti+
+fallimenti, conteggi nascite/vivi e ledger delle richieste nel replay.
+Probe bordo contiene assert su1000 richieste/59 successi. Grafico ispezionato.
+Ripetizione completa di verifica in7,540s: tutte le64 prove coincidono con la
+prima raccolta in ogni campo, ordinando gli individui per seriale, comprese le
+profondità genealogiche ricostruite. Il replay neurale non è incluso in questa
+affermazione di riproducibilità. Controlli sintattici Bash/Python superati.
+
+Limiti: mappa piccola, condizioni favorevoli/risorse finite, O₂ esterno, niente
+rigenerazione, ordine riproduttivo semplificato, no plasticità/mutazione/forzature,
+controller esterni, quattro seed e orizzonte censurato. Cap120 e disponibilità
+di spazio confondono stima della sola convenienza energetica. La foto rende
+diverso il budget di glucosio prodotto, pur a stesso glucosio ambientale iniziale.
+Non estrapolare rapporti numerici alla GUI/ecosistema120×120. Nessuna dimostrazione
+di adattamento spontaneo, selezione genetica nel tempo o comportamento sociale.
+
+## 19. Esposizioni degli stessi genomi a contesti differenti e figli mutati
+
+### 19.1 Protocollo effettivo
+
+Data14 ottobre2026, commit base invariato
+`015d3f4da0e2c19628bb6b2afbb9d7d095e408f7`, working tree già corretto.
+Nessuna modifica produttiva né all'INI. Harness temporaneo
+`/tmp/popx_context_probe.cpp`, analizzatore `/tmp/analyze_context_probe.py`:
+usano l'accesso friend diagnostico esistente. Build target `popx` verificato:
+`ninja: no work to do`; harness C++23 compilato contro gli oggetti reali.
+
+80 genomi originali di `data_out/audit/corrected_pilot.json`, sezione
+`run.initial_genomes`. Per ogni genoma: genitore, copia tramite `Genome::mutated(0)`,
+3 figli genetici tramite **`Pop::make_offspring_genome()` reale**, rate INI0,05.
+Nella fixture `hebbian_inheritance=false` e learning congelato per escludere
+plasticità e pesi acquisiti. È una verifica di trasmissione/mutazione genetica:
+**non nascite ecologiche**, nessun costo/donazione/maturità/fertilità imposto ai
+figli di questo pannello. Non sono nuovi individui selezionati da una run lunga.
+
+400 genotipi ×6 contesti =2400 esposizioni indipendenti,240 tick/80 decisioni
+ognuna. Non sono2400 repliche genetiche indipendenti: genitori/figli sono appaiati
+e copie/contesti costituiscono controlli. Tre figli per genitore non bastano a
+stimare con precisione probabilità di innovazione evolutiva.
+
+Condizioni comuni:16×16, quota31, ambiente e corpo iniziale37°C,
+PhyT(1 mitocondrio,0 cloroplasti,sensibilità1,capacità adiposa80), energia100,
+lipidi20, lazyness0, direzione est, acqua/O₂1000 per cella iniziali, CO₂/calcio/
+lipidi ambientali0 salvo barriera dichiarata. Niente rigenerazione o world update,
+nessuna riproduzione, fisiologia reale ogni tick, sense→think→act a tick separati.
+Le cellule occupate sono Pop statici che non consumano risorse o agiscono;
+riserve azzerate, mantenuti vivi senza update, rimossi dal mondo se uccisi.
+Nessuna uccisione osservata in questo dataset.
+
+| Contesto | Posizione iniziale e manipolazione |
+|---|---|
+|Interno|Posizione(8,8), glucosio128/cella, totale32768.|
+|Bordo|Posizione(15,8), stessa disponibilità uniforme: davanti a est fuori mappa.|
+|Barriera fisica|Interno, cinque celle(9,y),y6…10 con calcio=MaxCaco3, bloccate da `GridWorld::is_free`.|
+|Celle occupate|Interno, cinque Pop statici nelle stesse celle della barriera; stimolo di densità rilevabile dai sensori esistenti.|
+|Risorse est|Interno, glucosio256/cella per x≥8,0 altrove; stesso totale32768.|
+|Risorse ovest|Interno, glucosio256/cella per x<8,0 altrove; stesso totale32768.|
+
+La posizione iniziale diversa al bordo comporta un percorso assoluto diverso:
+non usare questo semplice fatto come prova di risposta comportamentale.
+Indicatori contestuali sono prima azione e sequenza delle azioni, confrontate
+con lo stesso genotipo nell'interno; input della prima sense salvati nel JSON.
+
+RNG di Pop sostituita **solo nella fixture** da una sottoclasse mt19937 con seed
+20261014+indice famiglia, identico tra contesti/genitore/figli. Predictor copia
+la stessa RNG prima di MOVE_RANDOM, senza consumare lo stato reale. Mutazione
+produttiva crea RNG autonome da random_device: il primo campionamento dei figli
+non è seedabile. Tutti i loro geni sono salvati integralmente, poi riutilizzati
+nel replay: riproducibilità condizionata al pannello estratto, non della sua
+rigenerazione. Divergenze successive di azioni possono consumare RNG in modo
+diverso: la prima decisione appaiata ha controllo più stretto della traiettoria.
+
+**Rettifica successiva, verificata nella sezione21:** in questa versione le
+emissioni usavano `RandomUtility()` separata (`src/pop.cpp:525`). Il tentativo
+di lavare i segnali con `set_feromone(type,0)` era inefficace: il setter somma
+un delta, quindi0 non cancella nulla. Non erano controlli privi di signaling;
+retroazione da emissioni non seedate poteva restare. I conteggi osservati e
+il replay effettivamente uguale rimangono registrati, ma non costituiscono
+garanzia generale di riproducibilità o isolamento dalla comunicazione.
+La prima decisione, prima delle emissioni, mantiene il controllo appaiato.
+
+### 19.2 Risultati dei genitori
+
+Nuove celle = posizioni distinte visitate **escludendo la cella iniziale**;
+totali sommano80 esposizioni, media nuova esplorazione per genoma.
+"Azioni diverse" confronta sequenze complete con interno, non numero di tipi di
+azione. "Cambio dopo blocco" conta un'azione differente alla decisione seguente
+un tentativo fallito; associazione temporale, non prova di evitamento causale.
+
+| Contesto | Genomi con prima azione diversa /80 | Genomi con sequenza diversa /80 | Richieste movimento | Spostamenti riusciti | Fallimenti bordo | Fallimenti ostacolo | Nuove celle medie | Cambi totali di azione |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+|Interno|0|0|2509|981|1498|0|3,675|265|
+|Bordo|6|8|2508|883|1595|0|2,550|241|
+|Barriera fisica|0|1|2509|873|742|864|2,525|252|
+|Celle occupate|3|4|2592|882|734|945|2,625|254|
+|Risorse est|0|0|2509|981|1498|0|3,675|265|
+|Risorse ovest|0|0|2509|981|1498|0|3,675|265|
+
+Nel contesto interno69/80 usano una sola azione per80 decisioni e46/80 non
+richiedono mai movimento.70/80 hanno sequenze identiche in tutti e6 i contesti;
+72/80 non cambiano la prima azione tra contesti. Input iniziali diversi dal
+controllo per72 genomi al bordo,37 con occupanti,0 per barriera fisica/risorse.
+La rete dunque riceve alcuni cambiamenti percepibili ma spesso il vincitore
+dell'argmax non cambia. Non è stata misurata l'ampiezza delle variazioni dei
+singoli valori di output: stabilità dell'azione non implica rete numericamente
+identica o geni inutili.
+
+Interno:69 cambi di azione su1507 occasioni successive a fallimento(4,58%),
+distribuiti su5 genomi. Bordo:78/1604(4,86%),6 genomi. Gli altri fallimenti
+sono seguiti dalla stessa azione. Una nuova azione può comunque fallire o
+derivare da RANDOM/oscillatore/età; questi rapporti non sono successi di
+evitamento. Richieste con bersaglio nullo:30 interno/bordo/barriera,31 occupati;
+altri fallimenti0. Le identità dei ledger tornano in ogni esposizione.
+
+### 19.3 Figli mutati e confronto appaiato
+
+240 figli,95811 geni ereditati totali,4839 sostituzioni effettivamente diverse
+(5,051%); media20,1625 cambi/figlio, intervallo1…51. La mutazione reale
+sostituisce un gene con nuova connessione/peso casuali; non modifica un singolo
+bit né aggiunge/rimuove geni (`src/genome.cpp:29`, `src/gene.cpp:41`).
+
+Copie senza mutazione: **identità esatta in tutti i480 confronti contestuali**,
+comprese azioni, percorsi, input iniziali e misure fisiologiche.
+Figli mutati:195/240(81,25%) mantengono le sequenze parentali intere in **tutti
+i6 contesti**;45/240 cambiano almeno una sequenza.205/240 mantengono la prima
+azione parentale in ogni contesto.210/240 hanno la stessa sequenza tra tutti
+i contesti della propria prova,216/240 la stessa prima azione.
+
+| Contesto | Figli con prima azione diversa da interno /240 | Figli con sequenza diversa da interno /240 | Nuove celle medie | Figli con più / meno / stesse nuove celle del genitore |
+|---|---:|---:|---:|---|
+|Interno|0|0|3,579|9 /15 /216|
+|Bordo|19|24|2,725|8 /7 /225|
+|Barriera fisica|0|5|2,492|6 /9 /225|
+|Celle occupate|6|11|2,596|7 /8 /225|
+|Risorse est|0|0|3,579|9 /15 /216|
+|Risorse ovest|0|0|3,579|9 /15 /216|
+
+Interno206/240 figli usano una sola azione,142/240 non richiedono movimento.
+147 cambi dopo blocco su4200 occasioni(3,50%). Le mutazioni possono alterare
+comportamento ed esplorazione, ma in questo pannello dominano azioni conservate
+e bassa sensibilità al contesto. I miglioramenti di copertura non sono ancora
+miglioramenti di fitness; nessuna selezione dei figli è stata eseguita.
+Nel contesto interno6 figli iniziano a richiedere movimento rispetto a un
+genitore che non lo richiede;10 perdono il movimento.26/80 genitori e73/240 figli
+visitano più di4 nuove celle. Sono conteggi del pannello, non probabilità generali
+di innovazione o una stima di selezione direzionale.
+
+### 19.4 Risorse: differenza ecologica senza risposta neurale osservata
+
+Est contro ovest: **0/80 genitori e0/240 figli cambiano input iniziali, sequenza
+di azioni o percorso**, pur acquisendo quantità diverse di glucosio. Media di
+assorbimento automatico cumulato per genitore366,75 est contro89,9125 ovest;
+figli361,079 est contro94,371 ovest. Questa misura conta solo auto-take prima di
+update, non i GET_GLUCOSE aggiuntivi eventualmente eseguiti come azione.
+Tutti gli agenti sono vivi a240 tick: niente selezione o censura differenziale
+per morte in questo pannello breve. Diverse riserve e fisiologia possono
+tradursi in fitness più tardi senza essere percepite direttamente dalla rete.
+
+Evidenza statica concordante: sensori glucosio33…36 fuori dall'indirizzamento
+a5 bit (`src/neuron.h`, `src/gene.h:38`); input diretti di energia/fame assenti.
+Non è possibile con la sola mutazione attuale raggiungere quegli indici.
+Questa verifica conferma **insensibilità diretta alla distribuzione di glucosio
+nelle condizioni provate**, non incapacità di evolvere esplorazione aperta,
+seguire un segnale FOOD correlato o beneficiare di selezione energetica.
+Learning attivo, termica diversa e signaling non sono valutati qui.
+
+Barriera di carbonato: movimento impedito ma nessun input iniziale cambia,
+perché la densità misura occupanti, non quel materiale. Occupanti:37 genitori
+ricevono input iniziali diversi,3 cambiano prima azione. Un ostacolo può quindi
+essere reale per l'esecuzione e invisibile ai sensori disponibili. Il singolo
+cambio di sequenza successivo nella barriera non dimostra percezione del calcio:
+posizione/direzione e storia delle azioni possono cambiare dopo il blocco.
+
+### 19.5 Valutazione aggiornata e prossima discriminante
+
+- **Variazione utile:** presente ma limitata nel pannello; molte sostituzioni
+  genetiche non cambiano argmax/azioni. Insensibilità al glucosio è ora verificata
+  dinamicamente in questo controllo. Evitamento flessibile di bordo/ostacoli
+  resta raro; non attribuire automaticamente ogni cambio dopo blocco al contesto.
+- **Ereditabilità:** copia genetica fedele dimostrata e molte azioni persistono
+  anche con5% di sostituzioni. Non è sostenuta l'ipotesi che ogni riproduzione
+  distrugga necessariamente il comportamento. Stabilità di un comportamento
+  poco utile non equivale a ereditabilità di una strategia adattiva complessa.
+- **Selezione:** il confronto precedente mostra un vantaggio possibile
+  dell'esplorazione. Questa prova non misura figli ecologici o crescita di
+  frequenze: non permette di escludere selezione debole nell'ecosistema normale.
+
+Il candidato principale nelle condizioni controllate è **accesso all'informazione
+ecologica e generazione di controller contestualmente utili**, più che perdita
+universale dei comportamenti all'eredità. Il collo generale resta condizionale:
+la termica delle run normali può eliminare individui prima della maturità.
+Nessuna modifica a sensori/rete/costi è stata introdotta.
+
+Prossima discriminante: selezionare dal pannello esistente genomi con maggiore
+copertura e copie mutate che la conservano, confrontarli con genomi immobili
+in condizioni termiche uguali fino a maturità, con nascite reali e cap non
+saturato. Separare adattamento tramite esplorazione non guidata da vera risposta
+a risorse. Qualsiasi esperimento di espansione dei sensori sarebbe una modifica
+architetturale distinta, da autorizzare e confrontare con controllo invariato.
+
+### 19.6 Riproducibilità, artefatti e limiti
+
+Prima raccolta21,361s; replay20,994s. **2400/2400 trial identici integralmente**
+al replay con geni estratti congelati. Fermati dopo questo controllo: ulteriori
+tick non renderebbero i sensori del glucosio raggiungibili e non dimostrerebbero
+selezione. Dataset in `/tmp/popx_context_results.json`, summary in
+`/tmp/popx_context_summary.json`, replay in `/tmp/popx_context_replay.json`.
+Sono artefatti temporanei, non file versionati o archivio permanente: conservarli
+prima della pulizia di `/tmp` per rieseguire lo stesso pannello mutazionale.
+Persistenza in repository limitata ai documenti autorizzati.
+Archivio temporaneo `/tmp/popx_context_verification_2026-10-14.tar.gz`(332KiB):
+harness, analizzatore, dataset congelato, summary e manifest con INI completo,
+hash dei sorgenti/configurazione, commit, compilatore, backend e tempi.
+Non contiene un nuovo eseguibile o dipendenze e resta soggetto alla pulizia di `/tmp`.
+
+SHA256 dataset: `878fdf5b67a24c2a42b67dbcfc1cb5d0bc74f4bb1217c4c25fd4b599f3b1da32`.
+Harness: `adb47c0441b01d8176cd58ea48859e0d7fa1f92a84b483e3e0d2b182bef748a3`.
+Analizzatore: `9ab420c2345eb70cd845843b4d5766af50d7bd3f851842dfe33812c7afe2815d`.
+
+```sh
+cmake --build build-release --target popx -j 2
+clang++ -std=c++23 -O2 -Isrc -Ibuild-release/_deps/eigen3-src -Ibuild-release/_deps/nlohmann_json-src/include /tmp/popx_context_probe.cpp build-release/src/CMakeFiles/popx.dir/{brain,cell,config,console_logger,gene,genome,grid_world,pop,pops_manager,random_utility}.cpp.o -ltbb -lstdc++fs -o /tmp/popx_context_probe
+/tmp/popx_context_probe data_out/audit/corrected_pilot.json /tmp/popx_context_results.json
+python3 /tmp/analyze_context_probe.py
+# Replay congelato: usare un output distinto, non sovrascrivere il dataset letto
+/tmp/popx_context_probe /tmp/popx_context_results.json /tmp/popx_context_replay.json replay
+```
+
+La prima raccolta genera nuovi figli non identici a quelli documentati se
+rieseguita; soltanto replay del dataset congelato mantiene il pannello originale.
+Analizzatore verifica ledger dei tentativi e identità parenti/copie; replay
+verificato mediante uguaglianza di tutti i genotipi e tutti i trial.
+
+Limiti: un solo seed di comportamento per famiglia, tre figli per genitore,
+esposizione240 tick prima della maturità, sola componente genetica congelata,
+assenza di segnali, tratti fisiologici artificialmente uguali tra genotipi,
+nessuna donazione/riproduzione ecologica, ostacoli statici, nessuna competizione
+o selezione di frequenze. Non sono stime della diversità di tutta la popolazione
+possibile né della probabilità di adattamento a lungo termine.
+
+## 20. Codifica genetica e domini configurabili
+
+Fotografia prima del completamento dei feromoni: i37 input qui riportati sono
+diventati49 nella sezione21, con domini automatici49/21. I test a37 input restano
+controlli di compatibilità della configurazione ridotta.
+
+### Implementazione corrente
+
+Modifica esplicitamente autorizzata dopo la verifica contestuale; base Git
+`015d3f4da0e2c19628bb6b2afbb9d7d095e408f7` più correzioni e modifiche nel working
+tree. `Gene::source_num_` e `sink_num_` sono uint32 completi, senza bitfield a5 bit
+né troncamento implicito. Pesi restano int16/scala8192, tipi layer a3 bit,
+output type7, hidden1…6 e feedforward invariati.
+
+`GeneEncoding` definisce due conteggi di dominio. `Genome` conserva l'encoding,
+lo usa alla creazione e nella mutazione; `mutated(rate, encoding)` permette di
+applicare i limiti correnti senza riscrivere i geni non mutati. La mutazione
+resta sostituzione casuale del gene intero al tasso configurato, non bit mutation.
+`Pop` deriva limiti da IConfig per fondatori e figli, anche nella via già
+esistente dei pesi appresi. Non cambiata la politica di eredità lamarckiana:
+`hebbian_inheritance=true` nell'INI continua a richiedere valutazione separata.
+
+| Parametro INI | Valore corrente | Significato |
+|---|---:|---|
+|`brain_size_s`|37|Dimensione input attivi, indici0…36; glucosio33…36 e32 riservato.|
+|`brain_size_n`|16|Dimensione di ogni hidden layer.|
+|`brain_size_y`|21|Dimensione output attivi, azioni0…20. Con23 è raggiungibile KILL_FORWARD22;21 riservato.|
+|`genome_source_index_count`|0|0 risolve max(input,hidden); valore esplicito N genera sorgenti0…N−1.|
+|`genome_sink_index_count`|0|0 risolve max(output,hidden); valore esplicito N genera destinazioni0…N−1.|
+
+Dominio risolto corrente37/21. I conteggi espliciti possono essere minori o
+maggiori della rete: **limitano i nuovi geni e le sostituzioni**, mentre le
+dimensioni della rete limitano i geni eseguibili. Endpoint fuori layer vengono
+conservati silenti da `Brain::wire`, senza modulo o rimappatura. Ridurre un
+conteggio genetico non altera gli endpoint già ereditati; ridurre `brain_size`
+li rende silenti nella nuova rete. Valori di conteggio risolti1…INT_MAX,
+configurazione0 automatica; valori invalidi rifiutati. Input/attuatori non
+implementati non nascono aumentando una dimensione: input sconosciuti0,
+output oltre l'ultima azione esistente non eseguono un'azione nuova.
+
+I costruttori standalone senza encoding conservano il dominio storico32/32
+come compatibilità API, **non come limite della rappresentazione**. La via
+produttiva usa esplicitamente `Genome::encoding_from_config`.
+La configurazione si modifica nel file e si applica ricreando simulazione/reti
+al riavvio: il loop corrente non fa reload/rewire automatico degli agenti vivi.
+
+### Compatibilità e strumenti
+
+Preservati gli indici0…31 dei sensori e tutti gli indici delle azioni, inclusi
+glucosio33…36 e KILL_FORWARD22. Vecchi slot sentinella32(input) e21(output)
+ora nominati RESERVED_INPUT/RESERVED_ACTION; NUM_SENSES37 e NUM_ACTIONS23 sono
+conteggi corretti, non numeri da usare come connessioni funzionali.
+I vecchi geni con endpoint0…31 mantengono identico significato. Pannelli storici
+che non contengono connessioni al glucosio non acquisiscono da soli quelle
+connessioni: generazione/mutazione ora possono produrle.
+
+Export dei pesi senza cast a16 bit degli indici; snapshot Brain JSON contiene
+`gene_encoding.version=2`, `index_bits=32` e conteggi risolti. Il formato delle
+connessioni row/col resta leggibile dagli strumenti esistenti; nessun caricatore
+binario di Gene è stato identificato. Il layout C++ del gene cambia: non assumere
+compatibilità di dump binari esterni non documentati. `scripts/plot_net.py`
+aggiornato con etichette glucosio, slot riservati e azioni12…22 allineate all'enum.
+
+`Genome::add_gene` aggiorna il colore genetico; eliminato contatore di lunghezza
+ridondante non aggiornato dall'inserimento, usa dimensione del vector; riserva
+memoria per il numero iniziale di geni. Colore resta una visualizzazione compressa,
+non una misura completa di distanza genetica.
+
+### Validazione eseguita
+
+- Build Release target `popx`: compilazione e link riusciti.
+- `tests/genome_encoding_regression.cpp`: PASS. Campo senza troncamento anche
+  sopra65535; domini automatici37/21 e70/65; limiti espliciti e invalidi INI;
+  sostituzioni mutate limitate; copie senza mutazione e figli nel percorso reale;
+  gene input64→output60 con esecuzione feedforward; export dei pesi/snapshot
+  conserva indici64/60 e metadati; layer piccoli rendono gene silente e ampliati
+  lo riattivano; gene legacy0→4 mantiene significato.
+- Fixture Pop con input glucosio35→est4 e34→ovest5: cambiando distribuzione
+  delle risorse cambia decisione e movimento eseguito, senza policy override.
+  È rete costruita diagnosticamente, non una rete emersa per evoluzione.
+- Attuatore esistente22 verificato fino all'esecuzione con output23 nella fixture;
+  configurazione produttiva rimane21, senza nuova attivazione della predazione.
+- Regressione precedente `tests/pop_cycle_regression.cpp`: PASS, ordine delle
+  fasi e direzione iniziale conservati. Sintassi Python plotter verificata.
+
+Comandi riproducibili in `AGENTS.md`, sezione codifica genetica configurabile.
+CTest non registra questi controlli standalone. Nessuna lunga run evolutiva
+eseguita dopo la modifica, nessuna prova di miglioramento della fitness.
+
+La nuova distribuzione casuale degli endpoint (37/21 invece di32/32 nella via
+produttiva corrente) modifica probabilità di geni silenti/connessi. Per un
+controllo con distribuzione legacy impostare input32 e domini32/32, preservando
+uscite21/hidden16; non confrontare run non seedate come effetto causale della
+sola accessibilità al glucosio. Priorità successiva: misura del tasso con cui
+mutazioni producono connessioni risorsa→azione utili e della loro ereditabilità,
+poi confronto di fitness con termica controllata, senza reward artificiale.
+
+## 21. Feromoni, comunicazione e nuova verifica dinamica
+
+### 21.1 Stato dei meccanismi e modifiche autorizzate
+
+Data14 ottobre2026, base Git invariata più modifiche del working tree. Il developer
+ha richiesto completamento delle logiche mancanti prima della prova. Le quattro
+emissioni/local sensing e FOOD direzionale erano già funzionali e normalizzati;
+**non** è stato trovato il presunto errore raw/normalizzato tra le due quantità.
+Asimmetria completata: DANGER/MATE/HOME mancavano dei quattro gradienti cardinali.
+Nuovi sensori37…40 DANGER,41…44 MATE,45…48 HOME; indici esistenti invariati,
+NUM_SENSES49, `brain_size_s=49`, domini genetici automatici49/21. Uscite21.
+
+| Parte | Comportamento corrente verificato |
+|---|---|
+|Emissione|Azioni8…11 depositano70…100 nella cella corrente; ora `random_util_` del Pop invece di una nuova RNG non controllabile a ogni emissione. Distribuzione nominale invariata.|
+|Campo|`Cell::set_feromone` somma e clampa0…100; rifiuta tipo sconosciuto e valori non finiti. Nome storico non implica assegnazione assoluta.|
+|Decadimento|Moltiplicazione0,9995 a ogni update; soglia0,01 per cancellazione. Emissioni ripetute possono saturare il campo.|
+|Trasporto|Nessuna diffusione/avvezione aggiunta. Il deposito è locale; la scansione sensoriale può rilevarlo a distanza.|
+|Locale|Sensori20…23, concentrazione/100 in0…1.|
+|Direzionale|FOOD24…27 e nuovi37…48; media di quattro celle lungo ciascun asse, gradiente clamp(0,5+0,5×(media−locale),0,1). Campo uniforme→0,5.|
+|Semantica|Nomi dei canali non codificano comportamenti: nessuna regola automatica "trova glucosio→emetti FOOD" o "DANGER→fuggi". Sono associazioni che il sistema genetico/neuronale può produrre.|
+
+Completare il canale non equivale a insegnare un protocollo comunicativo utile.
+Hebbian learning modula i pesi già presenti con il reward esistente; non è un
+addestratore supervisionato di codici condivisi. Nessun premio a movimento,
+esplorazione, emissione o aggregazione introdotto. Nessuna diffusione o attrazione
+sociale prescritta. Finitezza del campo è protezione numerica, non la spiegazione
+stabilita dell'immobilità precedente.
+
+### 21.2 Test funzionali prima dell'interpretazione biologica
+
+`tests/pheromone_regression.cpp`: PASS. Per tutti i4 tipi emissione reale mediante
+rete genetica→campo→sensore locale normalizzato e isolato dagli altri canali;
+16 combinazioni tipo/direzione→argmax corrispondente; avvicinamento reale a
+emittente; campo uniforme senza falso gradiente; saturazione, delta negativo,
+NaN ignorato, decadimento. Nessuna action override nelle verifiche neurali.
+Rieseguiti PASS anche `genome_encoding_regression` e `pop_cycle_regression`;
+build Release compilato e linkato. CTest non registra i tre controlli standalone.
+
+Rettifica della sezione19: `set_feromone(...,0)` lasciava i segnali presenti.
+Nuove fixture cancellano sottraendo il valore effettivo di ogni tipo/cella.
+La rettifica limita l'interpretazione del vecchio isolamento dichiarato;
+non cancella i risultati osservati né inventa un errore di normalizzazione.
+
+### 21.3 Run ordinaria con configurazione produttiva
+
+Eseguito `bash scripts/run_audit.sh /tmp/popx_signal_native_pilot.json 2000`:
+mondo120×120 inizializzato dalle RBF reali,80 agenti casuali, INI corrente,
+learning/plasticità e politica di eredità effettive, rigenerazione e loop reali.
+Stop al budget2000, tempo misurato0,992s, no confronto causale con vecchie run
+non seedate. Tratti/ambiente termico variabili; nessuna forzatura delle azioni.
+
+| Misura | Risultato |
+|---|---:|
+|Richieste movimento / riuscite|6423 /284(4,42%)|
+|Emissioni FOOD /DANGER /MATE /HOME|1050 /2921 /209 /2105|
+|Nascite naturali /forzate|47 /0|
+|Morti termiche /energetiche|76 /14|
+|Vivi finali|37|
+|Residui sei bilanci materiali|0 /0 /0 /0 /0 /0|
+|Ledger energia e controlli risorse|Validazione PASS|
+
+Forte mortalità termica e molti movimenti non eseguiti persistono. Molte emissioni
+non provano ricezione, significato o coordinamento. Nell'assetto iniziale solo
+8/80 agenti hanno un altro agente lungo un raggio cardinale entro4 celle;
+media0,1 vicini per agente. È una misura geometrica della visibilità potenziale
+iniziale, non conteggio di messaggi ricevuti nell'intera run. Densità/raggio e
+fase iniziale possono limitare il contatto; non giustificano inventare gruppo.
+
+### 21.4 Controllo positivo di gruppo, distinto dall'emergenza
+
+Harness `/tmp/popx_signal_probe.cpp`. Quattro esperimenti, uno per tipo, con
+emittente centrale e4 riceventi inizialmente a distanza2 sui quattro assi.
+Genomi **costruiti diagnosticamente**: emittente con uscita costante del proprio
+tipo, riceventi con gradienti di quel tipo→movimento nelle quattro direzioni.
+Emittente effettua una emissione reale prima della prima sense dei riceventi;
+poi ciclo normale30 tick, learning congelato, niente nascite, nessuna override
+dell'azione. Deposito emittente occupato: riceventi si fermano nelle celle adiacenti.
+
+| Canale | Riceventi adiacenti con segnali /4 | Con campo cancellato /4 | Distanza media finale con /senza |
+|---|---:|---:|---|
+|FOOD|4|1|1 /4,912|
+|DANGER|4|1|1 /4,912|
+|MATE|4|1|1 /4,912|
+|HOME|4|1|1 /4,912|
+
+Risposta collettiva causale possibile con un protocollo genetico coerente.
+**Non appresa né evoluta spontaneamente**: la relazione segnale→movimento è
+stata codificata per testare la catena. Senza segnali i riceventi scelgono una
+direzione per argmax/tie e uno resta adiacente per blocco: baseline non è zero.
+
+### 21.5 Popolazioni casuali a termica controllata e ablation dei segnali
+
+Stessi80 genomi iniziali nuovi della run nativa, PHY uguale(1,0,1,80), corpo/ambiente
+37°C, quota31 piatta, lazyness0, direzione est, energia100 e riserve dei fondatori
+reali. Posizioni sparse `(1+2×(serial%8),2+2×floor(serial/8))`, nessun vicino entro
+una cella all'inizio. Griglia24×24. Acqua/O₂1000/cella iniziali, finiti; niente
+rigenerazione di glucosio, cloroplasti0; totale glucosio19200 su64 celle da300.
+Campo segue decadimento0,9995, senza world update climatico/rigenerazione.
+
+`PopsManager::update_cycle` reale, inclusi bucket/fisiologia/FIFO/cap e nascite;
+NewGen disabilitato nella fixture, plasticità **attiva**, eredità Hebbian **false**
+solo nella fixture per separare trasmissione genetica da pesi acquisiti. L'INI
+produttivo resta Hebbian inheritance true: confronto non equiparabile alla GUI.
+RNG Pop seed1729/4361+serial, RNG emissioni ora condivisa con Pop; C RNG rand()
+resettata per blocco. Geni mutati/fisiologia riproduttiva usano RNG autonome:
+run con nascite non garantite riproducibili globalmente.
+
+Quattro prove600 tick, due seed×segnali presenti/cancellati. Età inferiore a1000:
+nessuna nascita/morte/forzatura,80 vivi in tutti i controlli. Mutazione estratta
+prima e genomi identici tra condizioni, nessuna estrazione dopo nascita qui.
+Replay con stessa configurazione e corpus: identità esatta di tutti i campi
+(eccetto wall_seconds) nei4 confronti e negli8 controlli di gruppo.
+
+**Risorse lontane**, patch x16…23,y8…15:0 ingressi/0 prelievo netto/0 nascite anche
+nel pilot2200,80 vivi. Con segnali cambiano sequenze di3/80 e4/80 genomi ai due seed,
+ma celle visitate236/255 identiche ai controlli senza segnali. Non prolungata:
+mancata acquisizione non consente di valutare fitness del resource-seeking.
+
+**Risorse vicine**, stessa quantità e stessa coorte, patch x8…15,y8…15;16 fondatori
+partono nella patch e altri sono nel raggio sensoriale. Non è confronto a uguale
+accesso iniziale tra lontano/vicino: è controllo distinto della visibilità/accesso.
+
+| Seed | Segnali | Movimenti riusciti | Cambi di azione | Celle distinte famiglia | Prelievo netto glucosio | Ingressi patch | Frazione con vicino adiacente finale |
+|---|---|---:|---:|---:|---:|---:|---:|
+|1729|Cancellati|2091|153|236|8385|8|0,5875|
+|1729|Presenti|2099|156|236|8385|8|0,5875|
+|4361|Cancellati|1952|147|266|8025|10|0,5125|
+|4361|Presenti|1924|155|259|8040|8|0,5500|
+
+Sequenze diverse con segnali per4/80 e5/80 genomi. Effetto causale sulla scelta
+di alcuni individui nel controllo appaiato, **senza vantaggio coerente di
+esplorazione/acquisizione tra seed**. La geometria e le interazioni possono
+propagare cambiamenti dopo una prima risposta; non tutte le differenze sono
+un singolo agente che segue un messaggio. Clustering aumenta anche senza
+segnali: aggregazione spaziale da sola non prova comunicazione/cooperazione.
+
+### 21.6 Run breve con maturità e nascite, risorse vicine
+
+Un pilot2200 tick con segnali e seed1729, configurazione controllata appena
+descritta,0,881s misurati; mutazione reale0,05, nascite normali. Fermato al budget
+anche perché cap satura: non testare efficacia a lungo termine su un plateau.
+Tratti identici per i fondatori; i figli seguono la mutazione fisiologica reale
+di `make_offspring_phy`, oltre a quella neurale, e la propria inizializzazione.
+Il controllo a tratti rigorosamente uguali riguarda dunque i fondatori e le
+prove600 tick senza nascite, non tutti i discendenti della prova2200.
+
+| Misura | Risultato |
+|---|---:|
+|Richieste movimento / riuscite|31176 /9032(28,97%)|
+|Passi che riducono distanza geometrica dalla patch|3012|
+|Ingressi nella patch|101|
+|Celle visitate dall'insieme|569/576|
+|Prelievo netto glucosio ambientale|18250/19200|
+|Nascite naturali /forzate|48 /0|
+|Vivi finali /morti termiche /energetiche|120 /0 /8|
+|Tick al cap120|967|
+|Individui con cambi di azione, inclusi figli|45/128 osservati|
+|Frazione con vicino entro1 cella, iniziale→finale|0→0,8167|
+
+Tutti80 fondatori vivi e osservati per2200 tick, quindi confronto dell'associazione
+non confuso da durate diverse dei fondatori.36 hanno avuto almeno uno spostamento
+riuscito:45 figli diretti,6 genitori riproduttivi, media1,25 figli/fondatore mosso.
+44 senza spostamenti:0 figli. Le3 nascite restanti sono discendenti di generazioni
+successive.8 fondatori visitano più di4 nuove celle: grandi distanze possono
+ancora derivare da piccoli circuiti ripetuti.
+
+**Associazione**, non causalità dimostrata: posizione iniziale rispetto alla
+patch, genoma, GET_GLUCOSE/altre azioni e comportamento appreso possono influire
+su movimento e riproduzione. La misura di prelievo è netta (glucosio iniziale
+meno finale nel mondo), non assorbimento lordo per individuo; restituzioni e
+LEAVE_GLUCOSE sono comprese. Non attribuire tutti i3012 passi al glucosio percepito:
+una direzione casuale può avvicinare geometricamente la patch. Il pilot lungo
+non ha ablation appaiata2200 per fitness: mutazioni non seedate e cap renderebbero
+ambiguo un singolo confronto tra famiglie divergenti.
+
+### 21.7 Conclusione e priorità
+
+Ora sono verificate catene risorsa→sensore→azione e, per tutti i tipi,
+emissione→campo→gradiente→decisione→movimento. Produzione non impone un codice
+sociale: la coorte casuale produce alcune scelte sensibili ai segnali ma non
+dimostra un protocollo comunicativo vantaggioso o gruppi cooperativi evoluti.
+La selezione può associare movimento/accesso a riproduzione nel controllo
+termico; ambiente normale continua a mostrare forte mortalità e pochi movimenti
+eseguiti. Informazione disponibile non garantisce che l'argmax usi quella
+informazione in modo utile, né che Hebbian learning insegni un linguaggio.
+
+Prossima discriminante: misurare l'associazione tra emissione e presenza reale
+di risorse e la risposta dei riceventi al segnale, poi confrontare discendenza
+di linee emittenti/riceventi con segnale ablated usando un pannello mutazionale
+pre-estratto, controllando posizione iniziale e cap. Definire prima "gruppo"
+come coordinamento causale persistente, distinto da vicinanza o nascita adiacente.
+Non aggiungere attrazione sociale/premi per ottenere un gruppo visivamente bello.
+
+### 21.8 Artefatti e riproduzione
+
+Harness `/tmp/popx_signal_probe.cpp`, dati `/tmp/popx_signal_native_pilot.json`,
+`/tmp/popx_signal_results_final.json`(patch lontana),
+`/tmp/popx_signal_results_near.json`(vicina),
+`/tmp/popx_signal_paired_replay.json`(replay600), archivio temporaneo
+`/tmp/popx_signal_verification_2026-10-14.tar.gz`. Conservare prima della pulizia
+di `/tmp`. Corpus integrale degli80 genomi fondatori incluso nei dati; snapshot
+iniziale ambiente e fisiologia incluso nel pilot nativo. Il pilot controllato
+registra misure individuali e nascite, ma non tutti i geni/tratti dei figli:
+la ricostruzione genetica completa della sua traiettoria non è disponibile.
+Le condizioni nuove non sono misure di
+miglioramento causale rispetto a run storiche non appaiate.
+
+```sh
+cmake --build build-release --target popx -j 2
+bash scripts/run_audit.sh /tmp/popx_signal_native_pilot.json 2000
+clang++ -std=c++23 -O2 -Isrc -Ibuild-release/_deps/eigen3-src -Ibuild-release/_deps/nlohmann_json-src/include /tmp/popx_signal_probe.cpp build-release/src/CMakeFiles/popx.dir/{brain,cell,config,console_logger,gene,genome,grid_world,pop,pops_manager,random_utility}.cpp.o -ltbb -lstdc++fs -o /tmp/popx_signal_probe
+/tmp/popx_signal_probe /tmp/popx_signal_native_pilot.json /tmp/far.json
+/tmp/popx_signal_probe /tmp/popx_signal_native_pilot.json /tmp/near.json near
+/tmp/popx_signal_probe /tmp/popx_signal_native_pilot.json /tmp/paired.json near paired
+```
+
+Rigenerare il pilot nativo cambia genomi/ambiente e non riproduce questi numeri.
+Replay600 richiede il corpus salvato, stessa build/config e seed. Il completamento
+espande la distribuzione genetica automatica da37 a49 sorgenti: isolare questa
+modifica da clima, densità, geometria e learning nelle comparazioni future.
+Nessuna lunga evoluzione eseguita, nessun risultato sociale inventato.

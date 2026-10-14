@@ -26,6 +26,7 @@ class ICell {
 
     virtual void set_glucose(unsigned glucose) = 0;
 
+    /// Adds a finite amount, clamped to [0, MaxFeromones]; negative removes, zero does not clear.
     virtual void set_feromone(FeromoneT type, float value) = 0;
     [[nodiscard]] virtual FeromoneMapT get_feromone_map() const = 0;
 
@@ -38,6 +39,7 @@ class ICell {
     [[nodiscard]] virtual unsigned get_carbon() const = 0;
     /// Remove up to `amount` units; returns the quantity actually taken.
     virtual unsigned take_glucose(unsigned amount) = 0;
+    /// Deposit up to the remaining capacity; every give_* returns the amount accepted.
     virtual unsigned give_glucose(unsigned amount) = 0;
     virtual unsigned take_water(unsigned amount) = 0;
     virtual unsigned give_water(unsigned amount) = 0;

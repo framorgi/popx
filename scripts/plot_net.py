@@ -50,11 +50,18 @@ SENSOR_LABELS = {
     22: "SIG_MATE",      23: "SIG_HOME",
     24: "SIG_DRV_N",     25: "SIG_DRV_W",
     26: "SIG_DRV_E",     27: "SIG_DRV_S",
-    # 28-31: intrinsic / environmental  (moved here — within 5-bit address space)
+    # 28-31: intrinsic / environmental; historical indices remain stable
     28: "OSC1",          29: "AGE",
     30: "TEMP",          31: "RANDOM",
-    # 32 = NUM_SENSES sentinel (not a neuron)
-    # 33-36: GLUCOSE_DENSITY N/W/E/S — extended, currently unreachable by genes
+    32: "RESERVED",
+    33: "GLUC_N",       34: "GLUC_W",
+    35: "GLUC_E",       36: "GLUC_S",
+    37: "DNG_DRV_N",    38: "DNG_DRV_W",
+    39: "DNG_DRV_E",    40: "DNG_DRV_S",
+    41: "MATE_DRV_N",   42: "MATE_DRV_W",
+    43: "MATE_DRV_E",   44: "MATE_DRV_S",
+    45: "HOME_DRV_N",   46: "HOME_DRV_W",
+    47: "HOME_DRV_E",   48: "HOME_DRV_S",
 }
 
 ACTION_LABELS = {
@@ -66,12 +73,14 @@ ACTION_LABELS = {
     # 8-11: feromone signalling
     8:  "EMIT_FOOD",   9:  "EMIT_DNG",
     10: "EMIT_MATE",   11: "EMIT_HOME",
-    # 12-14: resource acquisition
-    12: "GET_GLUC",    13: "GET_H2O",
-    14: "GET_CALC",
-    # 15-17: internal modulation
-    15: "BURN_CAL",    16: "SET_OSC",
-    17: "SET_RESP",
+    # 12-17: resource acquisition/release
+    12: "GET_GLUC",    13: "LEAVE_GLUC",
+    14: "GET_H2O",     15: "LEAVE_H2O",
+    16: "GET_CALC",    17: "LEAVE_CALC",
+    # 18-20: internal modulation
+    18: "BURN_CAL",    19: "SET_OSC",
+    20: "SET_RESP",    21: "RESERVED",
+    22: "KILL_FWD",
 }
 
 

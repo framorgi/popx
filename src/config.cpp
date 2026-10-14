@@ -5,7 +5,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 
 // ---------------------------------------------------------------------------
@@ -71,6 +73,12 @@ unsigned Config::get_genome_min_length() const {
 }
 unsigned Config::get_genome_max_length() const {
     return params_.genome_max_length;
+}
+unsigned Config::get_genome_source_index_count() const {
+    return params_.genome_source_index_count;
+}
+unsigned Config::get_genome_sink_index_count() const {
+    return params_.genome_sink_index_count;
 }
 unsigned Config::get_steps_per_generation() const {
     return params_.steps_per_generation;
@@ -195,7 +203,10 @@ bool is_uint(const std::string& s) {
 }
 
 unsigned to_uint(const std::string& s) {
-    return static_cast<unsigned>(std::stoul(s));
+    const auto value = std::stoull(s);
+    if (value > std::numeric_limits<unsigned>::max())
+        throw std::out_of_range("Configuration integer exceeds unsigned range");
+    return static_cast<unsigned>(value);
 }
 
 std::string trim(std::string s) {
@@ -245,6 +256,15 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
     const unsigned uval = is_u ? to_uint(value) : 0u;
 
     // Brain sizes
+    if (name == "genome_source_index_count" || name == "genome_sink_index_count") {
+        if (!is_u || uval > static_cast<unsigned>(std::numeric_limits<int>::max()))
+            throw std::invalid_argument(name + " must be in [0, INT_MAX] (0 = automatic)");
+        if (name == "genome_source_index_count")
+            params_.genome_source_index_count = uval;
+        else
+            params_.genome_sink_index_count = uval;
+        return;
+    }
     if (name == "brain_size_s" && is_u && uval > 0) {
         params_.brain_size_s = uval;
         return;

@@ -47,7 +47,8 @@
         "cschlosser.doxdocgen",
         "matepek.vscode-catch2-test-adapter",
         "vadimcn.vscode-lldb",
-        "gruntfuggly.todo-tree" 
+        "gruntfuggly.todo-tree",
+        "openai.chatgpt"
 
       ],
 
@@ -115,6 +116,5 @@
     }
   }
 }
-
 
 

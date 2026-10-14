@@ -40,22 +40,32 @@ enum class Sensor {
     SENSE_SIGNAL_DRV_S,  // 27
 
     // ── 28-31: intrinsic / environmental ──────────────────────────────────
-    // Placed here so they fall within the 5-bit source_num address space
-    // (source_num max = 31 with current gene encoding).
+    // Keep historical indices stable when expanding the input domain.
     OSC1,   // 28  oscillator ±value
     AGE,    // 29  normalised age
     TEMP,   // 30  temperature at current cell
     RANDOM, // 31  uniform random
 
-    NUM_SENSES, // 32  ← brain input layer size (brain_size_s = 32)
+    RESERVED_INPUT = 32, // Historical sentinel slot; always zero.
 
-    // ── Extended sensors: beyond 5-bit address space (gene source_num ≤ 31)
-    // Computed by sense() but unreachable by current gene encoding.
-    // Reserve for future 6-bit num field expansion.
-    GLUCOSE_DENSITY_N, // 33
+    // ── Resource sensors: configured input width must include these slots.
+    GLUCOSE_DENSITY_N = 33,
     GLUCOSE_DENSITY_W, // 34
     GLUCOSE_DENSITY_E, // 35
     GLUCOSE_DENSITY_S, // 36
+    SENSE_DANGER_DRV_N = 37,
+    SENSE_DANGER_DRV_W,
+    SENSE_DANGER_DRV_E,
+    SENSE_DANGER_DRV_S,
+    SENSE_MATE_DRV_N,
+    SENSE_MATE_DRV_W,
+    SENSE_MATE_DRV_E,
+    SENSE_MATE_DRV_S,
+    SENSE_HOME_DRV_N,
+    SENSE_HOME_DRV_W,
+    SENSE_HOME_DRV_E,
+    SENSE_HOME_DRV_S,
+    NUM_SENSES, // 49 input slots; historical sensor indices remain stable.
 };
 
 enum class Action {
@@ -88,6 +98,7 @@ enum class Action {
     SET_OSCILLATOR_PERIOD, // 19  scale osc_period_ × 1.1
     SET_RESPONSIVENESS,    // 20  increase responsiveness_ by 0.1
 
-    NUM_ACTIONS,  // 21  ← brain output layer size (brain_size_y = 21)
-    KILL_FORWARD, // 22  lethal: kill entity in the forward cell
+    RESERVED_ACTION = 21, // Historical sentinel slot; no operation.
+    KILL_FORWARD = 22,    // Lethal: kill entity in the forward cell.
+    NUM_ACTIONS,          // 23 output slots; brain_size_y may limit the enabled prefix.
 };
