@@ -6,6 +6,7 @@
 #include <Eigen/Sparse>
 #include <cstddef>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,7 @@ class Brain : public IBrain {
     std::shared_ptr<const Genome> get_learned_genome() const override;
 
     void resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned num_hidden) override;
+    nlohmann::json snapshot() const override;
     void serialize(const std::string& pop_id, unsigned generation) const override;
     bool remove_serialization(const std::string& pop_id) override;
     unsigned get_size_s() const override;

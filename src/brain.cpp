@@ -177,37 +177,14 @@ void Brain::resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned n
     discarded_genes_.clear();
 }
 
-bool Brain::remove_serialization(const std::string& pop_id) {
-    if (!config_->get_brain_serialization_enabled()) {
-        return true;
-    }
-    const std::string dir = config_->get_nnets_dir();
-    if (!std::filesystem::exists(dir))
-        return false;
-    bool any_removed = false;
-    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-        const std::string fname = entry.path().filename().string();
-        if (fname.rfind(pop_id + "_g", 0) == 0) {
-            any_removed |= std::filesystem::remove(entry.path());
-        }
-    }
-    return any_removed;
+// Legacy entry points retained for source compatibility. Only explicit snapshots persist.
+bool Brain::remove_serialization(const std::string&) {
+    return true;
 }
-
-void Brain::serialize(const std::string& pop_id, unsigned generation) const {
-    if (!config_->get_brain_serialization_enabled()) {
-        return;
-    }
+void Brain::serialize(const std::string&, unsigned) const {}
+nlohmann::json Brain::snapshot() const {
     using json = nlohmann::json;
-
-    const auto timestamp_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
-            .count();
-
     json doc;
-    doc["pop_id"] = pop_id;
-    doc["generation"] = generation;
-    doc["timestamp_ms"] = timestamp_ms;
     doc["sizeS"] = size_s_;
     doc["sizeN"] = size_n_;
     doc["sizeY"] = size_y_;
@@ -240,12 +217,21 @@ void Brain::serialize(const std::string& pop_id, unsigned generation) const {
     }
     doc["connections"] = std::move(connections);
 
-    const std::string dir = config_->get_nnets_dir();
-    std::filesystem::create_directories(dir);
-
-    const std::string filename = dir + pop_id + "_g" + std::to_string(generation) + ".json";
-    std::ofstream file(filename);
-    file << doc.dump(2);
+    doc["schema_version"] = 1;
+    doc["activations"] = json::array();
+    for (const auto& layer : activations_) {
+        std::vector<float> values(layer.data(), layer.data() + layer.size());
+        doc["activations"].push_back(values);
+    }
+    doc["silent_genes"] = json::array();
+    doc["discarded_genes"] = json::array();
+    for (const auto& g : silent_genes_)
+        doc["silent_genes"].push_back(
+            {g.get_source_type(), g.get_source_num(), g.get_sink_type(), g.get_sink_num(), g.get_weight()});
+    for (const auto& g : discarded_genes_)
+        doc["discarded_genes"].push_back(
+            {g.get_source_type(), g.get_source_num(), g.get_sink_type(), g.get_sink_num(), g.get_weight()});
+    return doc;
 }
 
 // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -52,6 +53,7 @@ class IBrain {
     /// @brief Writes a JSON snapshot of the current weights to disk.
     /// @param pop_id      Identifier embedded in the filename and JSON metadata.
     /// @param generation  Simulation generation number stored in the metadata.
+    virtual nlohmann::json snapshot() const = 0;
     virtual void serialize(const std::string& pop_id, unsigned generation) const = 0;
 
     /// @brief Removes the serialized brain file for a given pop_id.

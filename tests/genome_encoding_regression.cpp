@@ -209,19 +209,14 @@ int main() {
         cfg->export_dir =
             (std::filesystem::temp_directory_path() / ("popx_encoding_export_" + std::to_string(getpid()))).string() +
             "/";
-        restored.serialize("encoding_regression", 0);
-        const auto snapshot_path = cfg->export_dir + "encoding_regression_g0.json";
-        std::ifstream snapshot_file(snapshot_path);
-        nlohmann::json snapshot;
-        snapshot_file >> snapshot;
+        const auto snapshot = restored.snapshot();
         require(snapshot["gene_encoding"]["version"] == 2 && snapshot["gene_encoding"]["source_index_count"] == 70 &&
                     snapshot["gene_encoding"]["sink_index_count"] == 65,
                 "Snapshot lost encoding domain metadata");
         require(snapshot["connections"][0]["entries"][0]["col"] == 64 &&
                     snapshot["connections"][0]["entries"][0]["row"] == 60,
                 "Snapshot truncated endpoint indices");
-        snapshot_file.close();
-        std::filesystem::remove(snapshot_path);
+
         std::filesystem::remove(cfg->export_dir);
         cfg->serialization = false;
 
