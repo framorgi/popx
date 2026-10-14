@@ -21,3 +21,6 @@ target_link_libraries(${PROJECT_NAME}
 
 # std::filesystem needs explicit linking on GCC < 9
 target_link_libraries(${PROJECT_NAME} PUBLIC stdc++fs)
+
+find_package(X11 REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE X11::X11)

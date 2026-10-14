@@ -1,61 +1,44 @@
 #pragma once
-#include "console_logger.h"
-#include "i_agents_manager.h"
-#include "i_app.h"
-#include "i_gui.h"
-#include "i_stats.h"
-#include "i_world.h"
-#include "render_flags.h"
+#include "config.h"
+#include "imgui_layer.h"
+#include "pops_manager.h"
 #include "renderer.h"
 #include "sim_control.h"
 #include "simulator.h"
+#include "stats.h"
 
-#include <filesystem>
-#include <memory>
-#include <string>
+#include <map>
 
-///--------------------------------------------------------------------------
-/// @brief Application class that implements the IApp interface and its methods
-///--------------------------------------------------------------------------
-class PopXApp : public IApp {
+struct AppOptions {
+    std::string config_path;
+    unsigned udp_port = 8001, speed = 1;
+    bool headless = false;
+};
+/// @brief Owns process/window lifetime independently of a simulation run.
+class PopXApp {
   public:
-    PopXApp(std::shared_ptr<ISimulator> sim, std::shared_ptr<IRenderer> renderer, std::shared_ptr<ILogger> logger,
-            std::shared_ptr<IStats> stats, std::shared_ptr<IAgentsManager> agents, std::shared_ptr<IWorld> world);
-
-    void init() override;
-    void run() override;
-    void stop() override;
-
-    /// @brief Inject the GUI layer (call before init()).
-    void set_gui(std::shared_ptr<IGui> gui) {
-        gui_ = std::move(gui);
-    }
-
-    /// @brief Provide access to the control/flag structs so that the GUI layer
-    ///        (constructed in main.cpp) can bind references to them.
-    SimControl& get_sim_control() {
-        return sim_control_;
-    }
-    RenderFlags& get_render_flags() {
-        return render_flags_;
-    }
+    explicit PopXApp(AppOptions options);
+    int run();
 
   private:
-    std::shared_ptr<ISimulator> sim_;
-    std::shared_ptr<IRenderer> renderer_;
+    void start();
+    void show_gui();
+    void hide_gui();
+    void dispatch(nlohmann::json command);
+    void finish_if_needed();
+    nlohmann::json status() const;
+    AppOptions options_;
     std::shared_ptr<ILogger> logger_;
-    std::shared_ptr<IStats> stats_;
-    std::shared_ptr<IAgentsManager> agents_;
-    std::shared_ptr<IWorld> world_;
-    std::shared_ptr<IGui> gui_;
-
-    SimControl sim_control_;
-    RenderFlags render_flags_;
-
-    bool running_token_ = false;
-    bool end_of_sim_ = false;
-    uint64_t tick_count_ = 0;
-
-    /// @brief Derive a timestamped output path and call stats_->save_to_json().
-    [[nodiscard]] bool save_stats();
+    std::shared_ptr<Config> config_;
+    std::shared_ptr<GridWorld> world_;
+    std::shared_ptr<PopsManager> agents_;
+    std::shared_ptr<Simulator> sim_;
+    std::shared_ptr<Stats> stats_;
+    std::shared_ptr<SfmlGraphicEngine> gfx_;
+    std::unique_ptr<Renderer> renderer_;
+    std::unique_ptr<ImGuiLayer> gui_;
+    SimControl control_;
+    RenderFlags flags_;
+    bool quit_ = false, finished_recorded_ = false, reset_clock_ = false;
+    std::map<std::string, nlohmann::json> replies_;
 };
