@@ -5,6 +5,21 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+template <int N>
+const std::array<Vec2, N + 1>& unit_circle() {
+    static const auto points = [] {
+        std::array<Vec2, N + 1> result{};
+        for (int i = 0; i <= N; ++i) {
+            const float angle = 6.28318530718f * i / N;
+            result[i] = {std::cos(angle), std::sin(angle)};
+        }
+        return result;
+    }();
+    return points;
+}
+} // namespace
+
 Renderer::Renderer(std::shared_ptr<IGraphicEngine> gfx, std::shared_ptr<IWorld> world, std::shared_ptr<IConfig> config)
     : gfx_(std::move(gfx)), world_(std::move(world)), config_(std::move(config)) {}
 
@@ -33,16 +48,20 @@ void Renderer::init() {
 void Renderer::draw() {
     gfx_->clear();
 
-    entity_layer_.clear();
-    entity_layer_.reserve(static_cast<std::size_t>(population_) * SEGMENTS * 3);
+    if (dirty_) {
+        entity_layer_.clear();
+        entity_layer_.reserve(static_cast<std::size_t>(population_) * SEGMENTS * 3);
 
-    feromone_layer_.clear();
-    feromone_layer_.reserve(world_width_ * world_height_ * SEGMENTS * 3);
+        feromone_layer_.clear();
+        feromone_layer_.reserve(world_width_ * world_height_ * SEGMENTS * 3);
 
-    resource_layer_.clear();
-    resource_layer_.reserve(world_width_ * world_height_ * GLUCOSE_SEGMENTS * 3);
+        resource_layer_.clear();
+        resource_layer_.reserve(world_width_ * world_height_ * GLUCOSE_SEGMENTS * 3);
 
-    update_world();
+        update_world();
+
+        dirty_ = false;
+    }
 
     gfx_->draw_quads(map_layer_);
 
@@ -103,12 +122,11 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
         } else {
             // foreach segment
             for (int i = 0; i < SEGMENTS; ++i) {
-                float a0 = (i / static_cast<float>(SEGMENTS)) * 2.f * PI;
-                float a1 = ((i + 1) / static_cast<float>(SEGMENTS)) * 2.f * PI;
+                const auto& circle = unit_circle<SEGMENTS>();
 
                 Vec2 center{cx, cy};
-                Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
-                Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+                Vec2 p0{cx + circle[i].x * radius, cy + circle[i].y * radius};
+                Vec2 p1{cx + circle[i + 1].x * radius, cy + circle[i + 1].y * radius};
 
                 entity_layer_.push_back({center, rs.color});
                 entity_layer_.push_back({p0, rs.color});
@@ -146,12 +164,11 @@ void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
             float radius = std::max(0.8f, static_cast<float>(cell_render_size * intensity * 0.24));
 
             for (int i = 0; i < GLUCOSE_SEGMENTS; ++i) {
-                float a0 = (i / static_cast<float>(GLUCOSE_SEGMENTS)) * 2.f * PI;
-                float a1 = ((i + 1) / static_cast<float>(GLUCOSE_SEGMENTS)) * 2.f * PI;
+                const auto& circle = unit_circle<GLUCOSE_SEGMENTS>();
 
                 Vec2 center{cx, cy};
-                Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
-                Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+                Vec2 p0{cx + circle[i].x * radius, cy + circle[i].y * radius};
+                Vec2 p1{cx + circle[i + 1].x * radius, cy + circle[i + 1].y * radius};
 
                 resource_layer_.push_back({center, color});
                 resource_layer_.push_back({p0, color});
@@ -212,12 +229,11 @@ void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
             float radius = cell_render_size * static_cast<float>(intensity) / 1.7f;
 
             for (int i = 0; i < FEROMONE_SEGMENTS; ++i) {
-                float a0 = (i / static_cast<float>(FEROMONE_SEGMENTS)) * 2.f * PI;
-                float a1 = ((i + 1) / static_cast<float>(FEROMONE_SEGMENTS)) * 2.f * PI;
+                const auto& circle = unit_circle<FEROMONE_SEGMENTS>();
 
                 Vec2 center{cx, cy};
-                Vec2 p0{cx + std::cos(a0) * radius, cy + std::sin(a0) * radius};
-                Vec2 p1{cx + std::cos(a1) * radius, cy + std::sin(a1) * radius};
+                Vec2 p0{cx + circle[i].x * radius, cy + circle[i].y * radius};
+                Vec2 p1{cx + circle[i + 1].x * radius, cy + circle[i + 1].y * radius};
 
                 feromone_layer_.push_back({center, feromone_color});
                 feromone_layer_.push_back({p0, feromone_color});
@@ -225,12 +241,13 @@ void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
             }
         };
 
+        // CellVisualData keeps the legacy order: A=DANGER, B=FOOD.
         if (flags_.show_feromone_food)
-            add_feromone_layer(cell_data->feromones_a,
-                               Color(255, 0, 100, static_cast<uint8_t>(cell_data->feromones_a * 200)));
-        if (flags_.show_feromone_danger)
             add_feromone_layer(cell_data->feromones_b,
-                               Color(55, 240, 200, static_cast<uint8_t>(cell_data->feromones_b * 200)));
+                               Color(255, 0, 100, static_cast<uint8_t>(cell_data->feromones_b * 200)));
+        if (flags_.show_feromone_danger)
+            add_feromone_layer(cell_data->feromones_a,
+                               Color(55, 240, 200, static_cast<uint8_t>(cell_data->feromones_a * 200)));
         if (flags_.show_feromone_mate)
             add_feromone_layer(cell_data->feromones_c,
                                Color(55, 220, 0, static_cast<uint8_t>(cell_data->feromones_c * 200)));
@@ -249,6 +266,8 @@ void Renderer::poll_event() {
 }
 
 void Renderer::set_render_flags(const RenderFlags& flags) {
+    if (flags_ != flags)
+        dirty_ = true;
     flags_ = flags;
 }
 

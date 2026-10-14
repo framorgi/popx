@@ -46,6 +46,15 @@ class Renderer : public IRenderer {
     /// @brief    Initializes the renderer
     ///--------------------------------------------------------------------------
     void init() override;
+    void invalidate() {
+        dirty_ = true;
+    }
+    void set_revision(uint64_t tick) {
+        if (tick != revision_) {
+            revision_ = tick;
+            dirty_ = true;
+        }
+    }
     ///--------------------------------------------------------------------------
     /// @brief    Draws the current frame
     ///--------------------------------------------------------------------------
@@ -161,6 +170,8 @@ class Renderer : public IRenderer {
     std::vector<IGraphicEngine::EntityVertex> resource_layer_;
 
     RenderFlags flags_;
+    uint64_t revision_ = 0;
+    bool dirty_ = true;
 
     ///--------------------------------------------------------------------------
     /// @brief    Width and height of the world

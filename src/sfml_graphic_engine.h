@@ -16,6 +16,9 @@ class SfmlGraphicEngine : public IGraphicEngine {
     void create_window(std::string title, int width, int height) override;
     void display() override;
     bool is_open() const override;
+    bool needs_redraw() const {
+        return event_pending_;
+    }
     void poll_event() override;
 
     // --------------------------
@@ -49,4 +52,7 @@ class SfmlGraphicEngine : public IGraphicEngine {
     sf::VertexArray quad_vertices_;
     sf::VertexArray triangle_vertices_;
     bool initialized_ = false;
+    bool event_pending_ = true;
+    bool imgui_initialized_ = false;
+    sf::View world_view_;
 };

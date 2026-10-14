@@ -17,6 +17,7 @@ enum class ResourceOverlay {
 ///        Shared between the GUI layer and the Renderer.
 ///--------------------------------------------------------------------------
 struct RenderFlags {
+    bool operator==(const RenderFlags&) const = default;
     bool show_entities = true;
     bool show_glucose = true;
     bool show_temperature = false;

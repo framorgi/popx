@@ -2,24 +2,35 @@
 
 #include <imgui-SFML.h>
 #include <imgui.h>
+#include <unistd.h>
+
+#include <filesystem>
 
 SfmlGraphicEngine::SfmlGraphicEngine(std::shared_ptr<ILogger> logger) : logger_(std::move(logger)) {}
 
 SfmlGraphicEngine::~SfmlGraphicEngine() {
-    ImGui::SFML::Shutdown();
+    // SFML must release its active cursor while ImGui-owned cursors are still alive.
+    window_.close();
+    if (imgui_initialized_)
+        ImGui::SFML::Shutdown();
 }
 
 void SfmlGraphicEngine::create_window(std::string title, int width, int height) {
-    window_.create(sf::VideoMode(width, height), title);
-    window_.setFramerateLimit(60);
+    const auto desktop = sf::VideoMode::getDesktopMode();
+    window_.create(desktop, title + " [" + std::to_string(getpid()) + "]", sf::Style::None);
+    const float side = std::min(float(desktop.height), std::max(1.f, float(desktop.width) - 320.f));
+    world_view_.reset({0, 0, float(width), float(height)});
+    world_view_.setViewport({0, 0, side / desktop.width, side / desktop.height});
 }
 
 void SfmlGraphicEngine::clear(const Color& color) {
-    window_.clear(sf::Color(color.r, color.g, color.b, color.a));
+    window_.clear(sf::Color(14, 19, 28));
+    window_.setView(world_view_);
 }
 
 void SfmlGraphicEngine::display() {
     window_.display();
+    event_pending_ = false;
 }
 bool SfmlGraphicEngine::is_open() const {
     return window_.isOpen();
@@ -27,6 +38,7 @@ bool SfmlGraphicEngine::is_open() const {
 void SfmlGraphicEngine::poll_event() {
     sf::Event event;
     while (window_.pollEvent(event)) {
+        event_pending_ = true;
         ImGui::SFML::ProcessEvent(window_, event);
         if (event.type == sf::Event::Closed) {
             window_.close();
@@ -143,10 +155,22 @@ void SfmlGraphicEngine::draw_quads(const std::vector<Quad>& quads) {
 }
 
 void SfmlGraphicEngine::imgui_init() {
-    [[maybe_unused]] bool ok = ImGui::SFML::Init(window_);
+    imgui_initialized_ = ImGui::SFML::Init(window_);
+    if (!imgui_initialized_) {
+        window_.close();
+        ImGui::SFML::Shutdown();
+        throw std::runtime_error("ImGui initialization failed");
+    }
+    const std::string font = "/usr/share/fonts/truetype/lato/Lato-Regular.ttf";
+    if (imgui_initialized_ && std::filesystem::exists(font)) {
+        ImGui::GetIO().Fonts->Clear();
+        ImGui::GetIO().Fonts->AddFontFromFileTTF(font.c_str(), 17.f);
+        (void)ImGui::SFML::UpdateFontTexture();
+    }
 }
 
 void SfmlGraphicEngine::imgui_new_frame(float dt_seconds) {
+    window_.setView(window_.getDefaultView());
     ImGui::SFML::Update(window_, sf::seconds(dt_seconds));
 }
 
