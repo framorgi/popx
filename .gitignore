@@ -70,3 +70,7 @@ desktop.ini
 
 #pyton pycache__pycache__/
 *.pyc
+# Local dashboard environment and installed web dependencies
+.venv/
+dashboard/static/vendor/
+__pycache__/
