@@ -1,11 +1,11 @@
 """Summarise paired policy interventions; repeated deterministic controls are not independent replicas."""
 import json
+from audit_data import read_report
 import statistics
 import sys
 from pathlib import Path
 
-folder = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[1] / 'data_out' / 'audit'
-data = json.loads((folder / 'strategy_comparison.json').read_text())
+data = read_report(sys.argv[1], 'strategy_fixture')
 fields = ['movement_attempts', 'movement_successes', 'boundary_failures', 'occupancy_failures',
           'founder_glucose_uptake', 'glucose_uptake', 'water_uptake', 'energy_income', 'movement_cost',
           'basal_cost', 'founder_energy', 'founder_offspring', 'descendants_born', 'descendants_alive',
@@ -29,7 +29,7 @@ for photo in [False, True]:
                          'n_seeds': 4, 'metrics': {f: {'mean': statistics.mean(r[f] for r in group),
                                                      'min': min(r[f] for r in group),
                                                      'max': max(r[f] for r in group)} for f in fields}})
-trace = json.loads((folder / 'strategy_network_trace.json').read_text())['network_replay']
+trace = data['network_replay']
 for r in trace:
     assert r['movement_requests'] == r['movement_successes'] + r['boundary_failures'] + r['zero_displacement_requests']
 summary = {'policy_comparisons': rows, 'network_trace': {
@@ -40,5 +40,6 @@ summary = {'policy_comparisons': rows, 'network_trace': {
     'zero_displacement_requests': sum(r['zero_displacement_requests'] for r in trace),
     'constant_movers_visiting_at_most_4_cells': sum(r['distinct_actions'] == 1 and r['movement_requests'] > 0
                                                   and r['visited_cells'] <= 4 for r in trace)}}
-(folder / 'strategy_summary.json').write_text(json.dumps(summary, indent=2) + '\n')
-print(json.dumps(summary['network_trace'], indent=2))
+
+if __name__ == '__main__':
+    print(json.dumps(summary, indent=2))

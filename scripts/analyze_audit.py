@@ -1,5 +1,6 @@
 """Describe the saved pilots; do not interpret unpaired differences as causal effects."""
 import json
+from audit_data import read_report
 import math
 import statistics
 import sys
@@ -60,8 +61,7 @@ def describe(report):
 
 
 if __name__ == '__main__':
-    folder = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[1] / 'data_out' / 'audit'
-    names = ['legacy_resources_pilot', 'corrected_pilot', 'accounting_validation']
-    summaries = {name: describe(json.loads((folder / f'{name}.json').read_text())) for name in names}
-    (folder / 'summary.json').write_text(json.dumps(summaries, indent=2) + '\n')
+    if len(sys.argv) < 2:
+        raise SystemExit('usage: analyze_audit.py DATABASE [DATABASE ...]')
+    summaries = {name: describe(read_report(name, 'audit')) for name in sys.argv[1:]}
     print(json.dumps(summaries, indent=2))

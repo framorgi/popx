@@ -1,3 +1,4 @@
+#include "diagnostic_output.h"
 // Controlled physiology and finite-resource gardens; policies are explicit diagnostic interventions.
 #include "config.h"
 #include "console_logger.h"
@@ -379,10 +380,7 @@ int main(int argc, char** argv) {
                             }
             }
         }
-        std::ofstream output(argv[2]);
-        output << report.dump(2);
-        if (!output.good())
-            throw std::runtime_error("write failed");
+        persist_diagnostic(report, "thermal_fixture");
         std::cout << "PASS: " << report["trials"].size() << " isolated controls; "
                   << (report.contains("gardens") ? report["gardens"].size() : 0) << " gardens; all ledgers PASS\n";
     } catch (const std::exception& e) {

@@ -7,8 +7,9 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-folder = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[1] / 'data_out' / 'audit'
-summary = json.loads((folder / 'strategy_summary.json').read_text())
+folder = Path(sys.argv[2]) if len(sys.argv)>2 else Path('/tmp')
+folder.mkdir(parents=True,exist_ok=True)
+from analyze_strategy_comparison import summary
 policies = ['stationary', 'constant_east', 'patrol', 'random_cardinal']
 labels = ['Immobile', 'Sempre est', 'Pattuglia', 'Casuale']
 fig, axes = plt.subplots(2, 2, figsize=(10, 7), constrained_layout=True, sharey=True)

@@ -1,3 +1,4 @@
+#include "diagnostic_output.h"
 // Short headless diagnostics using the production simulation, without GUI timing.
 #include "brain.h"
 #include "cell.h"
@@ -340,8 +341,14 @@ class SimulationAudit {
     static Json run(const std::shared_ptr<ILogger>& logger, const std::shared_ptr<IConfig>& config, unsigned limit) {
         auto world = std::make_shared<AuditWorld>(MapSize, MapSize, logger);
         auto manager = std::make_shared<PopsManager>(world, logger, config);
+        auto capture = std::make_unique<DiagnosticCapture>();
+        auto* captured = capture.get();
+        auto central = std::make_shared<Stats>(std::move(capture));
+        central->begin_session({{"kind", "audit_native"}});
+        manager->set_stats(central);
         Simulator simulator(world, manager, logger);
         simulator.init();
+        central->sample(0, *manager, *world);
         Json out;
         out["requested_tick_limit"] = limit;
         unsigned registered = 0;
@@ -405,6 +412,7 @@ class SimulationAudit {
                     }
                 }
             // Production update; per-agent accounting below is observational, not an action override.
+            central->set_tick(tick);
             simulator.update();
             for (const auto& [p, d] : moves)
                 movement_successes += p->lifetime_distance_ > d;
@@ -423,6 +431,7 @@ class SimulationAudit {
                                       {"signature", signature(p->genome_, config)}});
                 }
             if (tick % 100 == 0 || manager->pops_.empty()) {
+                central->sample(tick, *manager, *world);
                 double distance = 0, energy = 0;
                 unsigned eligible = 0;
                 std::array<long long, 4> death_causes{};
@@ -564,6 +573,10 @@ class SimulationAudit {
                  {"offspring_length", offspring.get_genes().size()}});
         }
         out["inheritance_assay"] = assays;
+        central->end_session(out["ticks_executed"].get<uint64_t>(), out["stop_reason"].get<std::string>(), *manager,
+                             *world);
+        out["central_records"] = std::move(captured->records);
+        out["central_statistics"] = central->latest();
         out["wall_seconds"] = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         return out;
     }
@@ -571,7 +584,7 @@ class SimulationAudit {
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        std::cerr << "usage: popx_audit CONFIG OUTPUT_JSON [TICKS|probes]\n";
+        std::cerr << "usage: popx_audit CONFIG RECEIVER [TICKS|probes]\n";
         return 2;
     }
     auto logger = std::make_shared<ConsoleLogger>();
@@ -606,18 +619,14 @@ int main(int argc, char** argv) {
             valid = valid && std::abs(run["energy_ledger"]["unexplained_residual"].get<double>()) < 1e-5;
     }
     report["validation_passed"] = valid;
-    std::ofstream f(argv[2]);
-    f << report.dump(2);
-    if (!f.good())
-        return 3;
-    std::cout << report["resource_probes"].dump(2) << "\n";
-    if (probes_only)
-        return report["resource_probes"]["conservation_checks_passed"].get<bool>() ? 0 : 1;
-    auto brief = report["run"];
-    brief.erase("initial_genomes");
-    brief.erase("initial_environment");
-    brief.erase("individuals");
-    brief.erase("birth_events");
-    std::cout << brief.dump(2) << "\n";
+    persist_diagnostic(report, "audit");
+    std::cout << (valid ? "PASS" : "FAIL") << ": conservation probes";
+    if (!probes_only) {
+        const auto& run = report["run"];
+        std::cout << "; ticks=" << run["ticks_executed"] << "; reason=" << run["stop_reason"];
+        if (run.contains("central_statistics"))
+            std::cout << "; alive=" << run["central_statistics"]["alive"];
+    }
+    std::cout << '\n';
     return valid ? 0 : 1;
 }

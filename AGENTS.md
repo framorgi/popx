@@ -15,8 +15,15 @@ superate dagli interventi autorizzati descritti sotto.
 
 ## Architettura e vincoli attuali
 
-- `main.cpp`: composizione, INI relativo all'eseguibile, GUI; nessuna CLI seed/headless.
-- `popx_app.cpp`: accumulatore10 ms, GUI nello stesso thread, statistiche ogni200 tick.
+- `main.cpp`: CLI headless/config/velocità/schema/validazione; INI predefinito relativo all'eseguibile.
+- `popx_app.cpp`: scheduler100/200 tick/s con attese, ogni tick10 ms simulati; GUI opzionale
+  nello stesso thread. Start/Restart valida e rilegge l'INI ricostruendo la run.
+- `Stats`: raccolta centrale, campioni iniziale/finale e ogni200 tick, eventi individuali,
+  bilanci e telemetria UDP loopback. Worker solo su copie, nessun accesso ai Pop vivi.
+- Dashboard Python locale: unico scrittore SQLite, inspector manuale, snapshot neurali JSON
+  solo su richiesta. Nessuna nuova esportazione JSON statistica, neppure diagnostica.
+- Durata INI0 infinita; estinzione/Stop concludono la run, Esci termina il processo.
+  Headless rilascia SFML/ImGui, Mostra GUI ricrea la finestra sulla stessa run.
 - `simulator.cpp`: inizializza il mondo prima dello spawn; aggiorna agenti poi ambiente.
 - `pops_manager.*`: ownership shared_ptr, bucket sense→think→act, FIFO nascite,
   morti e NewGen. Guard Pop impediscono fasi fuori ordine anche alla nascita.
@@ -69,13 +76,13 @@ ENABLE_UTESTS non coincide con UTESTS_ENABLED; `utests/` non è presente.
 ```sh
 cmake --build build-release --target popx -j 2
 bash scripts/run_regressions.sh
-bash scripts/run_audit.sh /tmp/conservation.json probes
-bash scripts/run_audit.sh /tmp/pilot.json 2000
-bash scripts/run_thermal_comparison.sh /tmp/moderate.json moderate
+bash scripts/run_audit.sh /tmp/conservation.sqlite probes
+bash scripts/run_audit.sh /tmp/pilot.sqlite 2000
+bash scripts/run_thermal_comparison.sh /tmp/moderate.sqlite moderate
 ```
 
 Regressioni standalone, non registrate in CTest: respirazione, ciclo, thread/spazio,
-codifica genetica e feromoni. Il diagnostico termico verifica il codice corrente:
+codifica genetica, feromoni, statistiche e runtime. Il diagnostico termico verifica il codice corrente:
 non riproduce risultati della vecchia fisiologia dopo un cambio d'implementazione.
 Non dichiarare una suite CTest o esperimenti mai eseguiti.
 

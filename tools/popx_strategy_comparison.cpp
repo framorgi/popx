@@ -1,3 +1,4 @@
+#include "diagnostic_output.h"
 // Common-garden interventions, separate from evolved behaviour and production policy.
 #include "brain.h"
 #include "cell.h"
@@ -472,18 +473,19 @@ int main(int argc, char** argv) {
             if (std::chrono::steady_clock::now() - start > std::chrono::seconds(30))
                 break;
         }
-    std::ifstream file(argv[1]);
     Json corpus;
-    file >> corpus;
+    if (std::string(argv[1]) == "-")
+        std::cin >> corpus;
+    else {
+        std::ifstream file(argv[1]);
+        file >> corpus;
+    }
     if (!boundary_only)
         report["network_replay"] = SimulationAudit::network_replay(logger, cfg, corpus["run"]["initial_genomes"]);
     report["boundary_probe"] = SimulationAudit::boundary_probe(logger, cfg);
     report["network_replay_note"] = "80 original genomes, common traits/environment, frozen learning, 120 ticks. "
                                     "Production RANDOM/emission RNGs remain unseeded: exploratory only.";
     report["wall_seconds"] = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-    std::ofstream out(argv[2]);
-    out << report.dump(2);
-    if (!out.good())
-        return 3;
+    persist_diagnostic(report, "strategy_fixture");
     std::cout << "Trials: " << report["trials"].size() << ", seconds: " << report["wall_seconds"] << std::endl;
 }

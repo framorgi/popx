@@ -1,5 +1,6 @@
 """Static scientific summary of one pilot and the separate physiology controls."""
 import json
+from audit_data import read_report
 import sys
 from pathlib import Path
 import matplotlib
@@ -7,13 +8,15 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 
-folder = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[1] / 'data_out' / 'audit'
-pilot = json.loads((folder / 'corrected_pilot.json').read_text())['run']
-thermal = json.loads((folder / 'conservation_regression.json').read_text())['thermal_probe']
+folder = Path(sys.argv[2]) if len(sys.argv)>2 else Path('/tmp')
+folder.mkdir(parents=True,exist_ok=True)
+report = read_report(sys.argv[1], 'audit')
+pilot = report['run']
+thermal = report['thermal_probe']
 samples = pilot['samples']
 fig, axes = plt.subplots(2, 1, figsize=(10, 9), constrained_layout=True)
 x = [0] + [s['tick'] for s in samples]
-axes[0].plot(x, [80] + [s['alive'] for s in samples], label='Vivi', color='#224d91', linewidth=2)
+axes[0].plot(x, [pilot['initial_alive']] + [s['alive'] for s in samples], label='Vivi', color='#224d91', linewidth=2)
 axes[0].plot(x, [0] + [s['death_causes'][3] for s in samples], label='Morti termiche cumulative', color='#aa3232')
 axes[0].plot(x, [0] + [s['death_causes'][1] for s in samples], label='Morti per energia cumulative', color='#d17815')
 axes[0].plot(x, [0] + [s['births'] for s in samples], label='Nascite cumulative (incluse forzate)', color='#327e56')

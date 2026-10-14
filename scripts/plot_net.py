@@ -18,6 +18,7 @@ Keyboard controls (when the window is focused):
 
 import json
 import os
+from pathlib import Path
 import sys
 
 import matplotlib
@@ -95,13 +96,13 @@ def _load_all(nnets_dir: str):
         sys.exit(1)
 
     records = []
-    for fname in os.listdir(nnets_dir):
-        if not fname.endswith(".json"):
-            continue
-        path = os.path.join(nnets_dir, fname)
+    for path in Path(nnets_dir).rglob("*.json"):
+        fname = path.name
         try:
             with open(path) as fp:
                 data = json.load(fp)
+                if "brain" in data:
+                    data = {**data["brain"], "pop_id":data["pop_id"], "generation":data["tick"], "timestamp_ms":0}
             records.append((
                 data.get("generation",   0),
                 data.get("timestamp_ms", 0),

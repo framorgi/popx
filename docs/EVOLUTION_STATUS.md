@@ -4,7 +4,183 @@ Documento unico di riferimento del progetto. `AGENTS.md` contiene le istruzioni
 operative. Audit e indagini precedenti sono conservati sotto con risultati e
 limiti originali; non descrivono automaticamente il modello attuale.
 
-## Stato corrente — respirazione regolata, 14 ottobre 2026
+## Stato corrente — osservabilità, controllo e dashboard locale, 14 ottobre 2026
+
+L'intervento separa processo, run e finestra. Fisiologia, ereditarietà dei pesi
+appresi, riproduzione e ordine sense→think→act restano quelli autorizzati,
+descritti nella sezione fisiologica seguente. I vecchi comandi con output JSON
+nelle sezioni storiche sono evidenza del protocollo precedente: i nuovi output
+statistici e diagnostici sono SQLite. Gli artefatti storici non vengono cancellati.
+
+### Avvio e configurazione
+
+```sh
+# Ambiente e asset locali già preparati in questo workspace:
+bash scripts/run_popx.sh --headless
+# Prima preparazione di un altro checkout, con installazione esplicita:
+bash scripts/run_popx.sh --setup --build --headless
+bash scripts/run_popx.sh --help
+# Eseguibile senza servizio web; la simulazione continua anche senza ricevitore:
+build-release/src/popx --headless --config config/popx.ini --speed 2
+# Schema e validazione non inizializzano SFML né richiedono DISPLAY:
+build-release/src/popx --config-schema
+build-release/src/popx --validate-config config/popx.ini
+```
+
+Dashboard: `http://127.0.0.1:8000`, UDP loopback8001. Launcher: `--headless`,
+`--config`, `--binary`, `--db`, `--http-port`, `--udp-port`, `--speed 1|2`,
+`--setup`, `--build`. L'avvio ordinario non installa né ricompila. La build usa
+solo il target `popx` di `build-release`; le dipendenze C++ devono già essere
+configurate. FastAPI/Uvicorn sono isolati in `.venv`; Chart.js4.4.9 e
+Cytoscape.js3.31.2 sono scaricati da `--setup`, verificati con SHA256 e serviti
+localmente, incluse le licenze. Il launcher verifica il PID del backend pronto,
+propaga i segnali e raccoglie entrambi i figli.
+
+Nuovi parametri INI: `map_size=120`, `max_duration_minutes=0`, `gui_fps=30`.
+La durata è in **minuti simulati**, con scadenza al tick
+`ceil(minuti * 6000)`; zero disabilita soltanto il limite temporale. Estinzione
+e Stop concludono comunque la run. Non è stata identificata la causa della
+vecchia interruzione attorno a704.200 tick: l'ultimo campione con19 vivi non
+contiene il motivo terminale. Non esiste un limite speciale a704.000 tick.
+
+`Simulator` possiede il tick64 autorevole e gli stati running/paused/finished.
+100 tick/s a1×,200 a2×, sempre10 ms biologici per tick; attese tra gruppi di
+massimo8 tick, comandi elaborati anche in pausa. Non si recupera il tempo
+trascorso in pausa. La cadenza richiesta resta soggetta al costo del calcolo.
+Start/Restart prepara una nuova configurazione, mondo, popolazione e arena TBB
+prima di sostituire la run. Un errore di validazione lascia intatta la precedente.
+Start è disponibile dopo la conclusione; Restart anche durante l'esecuzione.
+Stop lascia il processo disponibile; Esci lo termina.
+
+Lo schema C++ centralizza tipi, limiti, default, descrizioni e parametri legacy.
+Validazione incrociata: lunghezza genoma, intervallo alpha, capacità e celle di
+spawn; ricerca di spawn con fallback finito. Gli override `@N` sono conservati e
+validati ma non applicati durante la run. La pagina INI usa lo stesso binario per
+schema/validazione, mantiene commenti e righe invariate, controlla la revisione
+contro modifiche esterne e sostituisce atomicamente il file. Il salvataggio non
+modifica la run corrente. `brain_serialization_enabled` è deprecato e inerte;
+`nnets_dir` è usato esclusivamente dai salvataggi manuali.
+
+### Statistiche e persistenza
+
+`Stats` raccoglie campioni iniziali, periodici (ogni200 tick) e finali, eventi
+individuali, censura, bilanci e risultati diagnostici. `IStats` espone record
+tipizzati di sessione, campione, evento, bilancio e risultato diagnostico; i
+campi estensibili mantengono un payload JSON. Fondatori e
+nascite registrano identità, genoma, PHY e genealogia; morti/abbattimenti
+registrano lo stato prima della rimozione. I riepiloghi delle vite concluse
+conservano aggregati senza trattenere i `Pop`. Restano separati richieste di
+azione, tentativi/successi di movimento, acquisizioni/restituzioni, riproduzione,
+backlog, respirazione, fotosintesi, calore, cap, overflow e roundoff.
+
+Le medie dei vivi, le medie dei campioni e le medie delle vite concluse hanno
+denominatori distinti; un campione finale allo stesso tick sostituisce quello
+periodico senza duplicarne il peso. La finestra degli indicatori di frequenza
+contiene10 campioni, mentre somme/contatori dell'intera run sopravvivono alla
+rotazione. L'energia distingue i costi d'azione contabilizzati ma non ancora
+pagati: una morte fra ACT e fisiologia non crea un falso residuo. Sono distinti
+tempo simulato, tempo reale, latenza del tick/frame e secondi CPU di processo;
+questi ultimi includono tutti i thread, trasporto e rendering, non solo la fisica.
+
+`Stats` possiede `ICommunicator`/`UdpCommunicator`. Il worker gestisce copie di
+messaggi immutabili e non legge agenti o mondo. Protocollo1: processo, run, tick,
+sequenza, tipo e request_id; frammenti ASCII da512 byte, ricomposizione limitata,
+ACK dopo commit SQLite, retry e deduplicazione. I comandi ricevono conferma dopo
+l'applicazione; il simulatore conserva2048 risposte e rifiuta run superate e
+richieste scadute. Snapshot completi vengono costruiti sul thread sequenziale.
+
+Memoria di trasporto limitata: coda4096 messaggi/32 MiB,32 messaggi pendenti entro
+32 MiB, messaggio singolo massimo16 MiB; retry ogni500 ms per12 tentativi.
+Ricomposizione Python:128 messaggi/32 MiB, scadenza15 s. L'ambiente iniziale è
+inviato in blocchi di2048 celle. L'assenza del backend non ferma la simulazione:
+al superamento dei limiti si registrano perdite e intervalli mancanti. I cumulativi
+riallineano gli aggregati, ma non ricostruiscono eventi/genomi iniziali persi.
+Una sessione con lacune non costituisce un audit completo. Stato e collegamento
+sono pubblicati ogni secondo reale, anche in pausa o a run conclusa.
+
+Il backend è l'unico scrittore SQLite/WAL: sessioni, campioni, eventi, ambiente,
+risultati, lacune e indice snapshot. Provenienza: INI effettivo, commit/diff,
+sorgenti non tracciati, hash sorgenti/binario, compilatore, costanti e limiti RNG.
+Le RNG produttive restano random_device/rand non centralizzati: nessuna nuova
+garanzia di riproducibilità globale. Gli audit e i confronti termici/strategie
+usano lo stesso collettore e un ricevitore temporaneo; dichiarano salvataggio
+riuscito soltanto dopo conferma della persistenza. Le preparazioni/asserzioni
+indipendenti delle fixture restano diagnostiche. Gli script di analisi leggono
+SQLite e, in sola lettura, vecchi report JSON; non scrivono nuovi JSON statistici.
+
+### Interfacce
+
+SFML/ImGui: desktop senza bordi, mondo quadrato scalato uniformemente a sinistra,
+widget modulari nella fascia destra, tema scuro/verde acqua. Stato, tempi,
+popolazione, prestazioni, connessione, comandi e livelli mappa; nessun chart né
+inspector. Geometrie e buffer vengono riutilizzati. `gui_fps` è il massimo;
+il rendering riduce la cadenza se il suo costo misurato supera il budget CPU
+obiettivo del20%. In pausa si ridisegna per eventi o al massimo per aggiornamenti
+periodici. Headless distrugge finestra, contesto e ImGui; Mostra GUI li ricrea
+sulla stessa run. Senza display la richiesta restituisce errore e la run continua.
+Il file utente `imgui.ini` non viene letto/scritto dal nuovo layout.
+
+Frontend: storico selezionabile, SSE per statistiche, grafici senza animazioni,
+serie limitate e query per intervallo (massimo2000 punti), eventi e run paginati.
+Inspector solo su richiesta esplicita: lista vivi, ricerca/ordine, dettagli e tick
+della fotografia. Un agente morto prima della richiesta restituisce un errore,
+non uno stato vecchio presentato come attuale. Il grafo visualizza matrici
+correnti, attivazioni disponibili, segno/peso, livelli, sensori/azioni e geni
+silenti senza rieseguire la rete. Salvataggio manuale atomico in
+`nnets_dir/run_id/pop_id/tick_snapshot_id.json`, indicizzato in SQLite e
+consultabile dopo morte/restart. Nessuna esportazione automatica a nascita/NewGen
+né cancellazione automatica dei vecchi snapshot.
+
+### Validazione dell'architettura
+
+Comandi ripetibili (standalone, non CTest):
+
+```sh
+cmake --build build-release --target popx -j 2
+bash scripts/run_regressions.sh
+.venv/bin/python -m unittest tests/dashboard_protocol.py tests/dashboard_integration.py -v
+.venv/bin/python -m tests.gui_smoke
+.venv/bin/python tests/launcher_smoke.py
+.venv/bin/python -m tests.runtime_pilot data_out/audit/architecture_2026-10-14/runtime
+bash scripts/run_audit.sh /tmp/conservation.sqlite probes
+bash scripts/run_audit.sh /tmp/pilot.sqlite 2000
+bash scripts/run_thermal_comparison.sh /tmp/moderate.sqlite moderate
+bash scripts/run_strategy_comparison.sh /tmp/strategy.sqlite /tmp/pilot.sqlite all
+```
+
+Le verifiche GUI richiedono un display reale. Verifiche eseguite: Release;
+regressioni respirazione, ciclo, parallelismo, genoma, feromoni e stats/runtime;
+UDP frammentato, pacchetti mancanti/duplicati/riordinati, input malformato e
+persistenza; avvio senza DISPLAY, pause/velocità, restart con mondo/thread/rete
+variati, INI invalido preservando la run, scadenza esatta a6 tick, rifiuto run
+superata, NewGen duplicato eseguito una volta, snapshot e database dopo riavvio.
+La disconnessione iniziale di7 s produce lacune esplicite e recupero del servizio.
+Il clock controllato verifica1.000.000 iterazioni senza limite temporale; questo non è
+un esperimento evolutivo completo di1.000.000 tick.
+
+GUI: verificata su desktop1920×1080, incluse ripetute transizioni
+headless→GUI→headless nella stessa run in pausa. Il pilot nativo2000 tick
+confronta osservazioni indipendenti e `Stats`: residui nulli per le sei risorse e
+per l'energia; campioni/eventi/censura sono presenti in SQLite. Il confronto
+termico moderate ha eseguito180 controlli e144 popolazioni; il confronto strategie
+full64 prove e replay. Risultati locali in
+`data_out/audit/architecture_2026-10-14/`, esclusi da Git.
+
+Pilot con scheduler produttivo a2×,2000 tick e INI produttivo (solo durata
+modificata), prima del budget adattivo: headless2,28 s CPU /11,79 s reali,
+GUI12,78 s CPU /18,51 s reali. Dopo il budget: headless2,43 s CPU /11,77 s reali,
+GUI4,59 s CPU /12,02 s reali; entrambi terminano esattamente a2000 tick per durata.
+La GUI ha ridotto la cadenza media a5,43 FPS sul display disponibile; `gui_fps=30`
+è un massimo, non una promessa di frame rate. I tempi reali del test includono
+avvio e osservazione del completamento; la CPU di Stats parte dall'inizio sessione.
+Le run sono distinte/stocastiche, quindi i numeri non isolano causalmente il rendering.
+
+Il frontend è stato verificato tramite API, asset locali e sintassi JavaScript;
+non è stata eseguita una verifica visuale in un browser. Il confronto GUI/headless
+usa run stocastiche separate: misura locale di costo/scheduling, non una stima
+causale né una prova di equivalenza evolutiva.
+
+## Fisiologia di riferimento — respirazione regolata, 14 ottobre 2026
 
 Implementazione autorizzata dopo i confronti termici: consumo regolato dalla
 riserva energetica, attività termica continua, materia/energia/calore prodotti
