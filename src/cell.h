@@ -59,15 +59,11 @@ class Cell : public ICell {
     void update() override;
 
   private:
+    friend class CheckpointCodec;
     ///----------------------------------------------
     // Helper method to decay feromones over time
     ///----------------------------------------------
     void decay_feromones();
-
-    ///----------------------------------------------
-    // Helper method to regenerate glucose over time
-    ///----------------------------------------------
-    void regen_glucose();
 
     ///----------------------------------------------
     // Helper method to regenerate oxygen over time
@@ -110,12 +106,7 @@ class Cell : public ICell {
     ///----------------------------------------------
     /// Flag to indicate if the cell is reserved for future use
     ///----------------------------------------------
-    bool reserved_;
-
-    ///----------------------------------------------
-    /// Tick counter for glucose regeneration timing
-    ///----------------------------------------------
-    unsigned regen_tick_;
+    bool reserved_ = false;
 
     ///----------------------------------------------
     /// Tick counter for oxygen regeneration timing

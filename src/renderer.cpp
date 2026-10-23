@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include <array>
 
 #include "common.h"
 
@@ -100,6 +101,21 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
 
     RenderState rs = entity->get_render_state();
     PositionT pos = {static_cast<int>(rs.position.x), static_cast<int>(rs.position.y)};
+    if (std::holds_alternative<SourceVisualData>(rs.payload)) {
+        // A bordered black diamond distinguishes Source from circular/triangular Pops.
+        const float cx = cell_render_size * (pos.x + 0.5f);
+        const float cy = cell_render_size * (pos.y + 0.5f);
+        auto diamond = [&](float radius, Color color) {
+            const Vec2 top{cx, cy - radius}, right{cx + radius, cy};
+            const Vec2 bottom{cx, cy + radius}, left{cx - radius, cy};
+            for (const auto& triangle : {std::array<Vec2, 3>{top, right, bottom},
+                                          std::array<Vec2, 3>{top, bottom, left}})
+                for (const auto& vertex : triangle) entity_layer_.push_back({vertex, color});
+        };
+        diamond(cell_render_size * 0.58f, Color(235, 235, 235));
+        diamond(cell_render_size * 0.48f, Color(0, 0, 0));
+        return;
+    }
     if (auto pop = std::get_if<PopVisualData>(&rs.payload)) {
         float cx = cell_render_size * pos.x + cell_render_size * rs.size / 2;
         float cy = cell_render_size * pos.y + cell_render_size * rs.size / 2;

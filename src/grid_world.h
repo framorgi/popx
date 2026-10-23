@@ -4,6 +4,7 @@
 #include "i_logger.h"
 #include "i_random.h"
 #include "i_world.h"
+#include "source.h"
 
 #include <cstdint>
 #include <memory>
@@ -21,7 +22,8 @@ class GridWorld : public IWorld {
     /// @param    h Height of the grid world
     /// @param    logger Shared pointer to the Logger instance
     ///----------------------------------------------------------------------
-    GridWorld(int w, int h, std::shared_ptr<ILogger> logger = nullptr);
+    GridWorld(int w, int h, std::shared_ptr<ILogger> logger = nullptr,
+              SourceSettings source_settings = {0, 40, 40, 8});
 
     ///----------------------------------------------------------------------
     /// @brief    Initialization of  the grid world
@@ -153,9 +155,16 @@ class GridWorld : public IWorld {
     std::pair<uint64_t, uint64_t> get_regeneration_totals() const override {
         return {glucose_regenerated_, oxygen_regenerated_};
     }
+    std::vector<std::shared_ptr<IEntity>> get_environment_agents() const override {
+        return std::vector<std::shared_ptr<IEntity>>(sources_.begin(), sources_.end());
+    }
 
   private:
+    friend class CheckpointCodec;
+    void reset_sources(bool spawn = true);
     uint64_t glucose_regenerated_ = 0, oxygen_regenerated_ = 0;
+    std::vector<std::shared_ptr<Source>> sources_;
+    SourceSettings source_settings_;
     ///----------------------------------------------------------------------
     /// @brief    Check if coordinates are within the bounds of the grid
     /// @param    x The x-coordinate

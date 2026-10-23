@@ -7,6 +7,8 @@
 
 enum class RenderShape { Circle, Segment, Square, Triangle };
 
+struct SourceVisualData {};
+
 struct PopVisualData {
     float energy;
     float age;
@@ -30,6 +32,6 @@ struct RenderState {
     float size;
     Color color;
 
-    std::variant<CellVisualData, PopVisualData> payload;
+    std::variant<CellVisualData, PopVisualData, SourceVisualData> payload;
     bool dirty;
 };

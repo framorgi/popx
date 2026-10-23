@@ -4,7 +4,8 @@
 #include "common.h"
 #include "random_utility.h"
 
-GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger) : width_(w), height_(h), logger_(logger) {
+GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger, SourceSettings settings)
+    : width_(w), height_(h), logger_(logger), source_settings_(settings) {
     cells_.resize(width_ * height_);
     for (auto& cell : cells_) {
         cell = std::make_shared<Cell>();
@@ -15,6 +16,7 @@ GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger) : width_(w),
 void GridWorld::init() {
     glucose_regenerated_ = oxygen_regenerated_ = 0;
     environment_tick_counter_ = rotation_tick_counter_ = 0;
+    sources_.clear();
     RandomUtility random_util;
 
     /// Generate a random RBF set for temperature
@@ -53,7 +55,31 @@ void GridWorld::init() {
             cells_[index(x, y)]->set_water((water_value));
         }
     }
+    reset_sources();
     logger_->info("Grid world initialized.");
+}
+
+void GridWorld::reset_sources(bool spawn) {
+    for (auto& source : sources_) source->despawn();
+    sources_.clear();
+    std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<int> x_dist(0, width_ - 1), y_dist(0, height_ - 1);
+    for (unsigned n = 0; n < source_settings_.count; ++n) {
+        auto source = std::make_shared<Source>(*this, source_settings_, rng());
+        if (!spawn) { sources_.push_back(std::move(source)); continue; }
+        bool placed = false;
+        for (int trial = 0; trial < 1000 && !placed; ++trial)
+            placed = source->try_spawn({x_dist(rng), y_dist(rng)});
+        if (!placed) {
+            const int start = std::uniform_int_distribution<int>(0, width_ * height_ - 1)(rng);
+            for (int offset = 0; offset < width_ * height_ && !placed; ++offset) {
+                const int index = (start + offset) % (width_ * height_);
+                placed = source->try_spawn({index % width_, index / width_});
+            }
+        }
+        if (!placed) throw std::runtime_error("No free cell available for Source");
+        sources_.push_back(std::move(source));
+    }
 }
 
 bool GridWorld::is_free(PositionT p) const {
@@ -127,12 +153,34 @@ int GridWorld::index(int x, int y) const {
 }
 
 bool GridWorld::update_cycle() {
-    // TODO: Implement world update logic (resource regeneration, environmental changes, etc.)
+    // Weathering redistributes carbonate without creating matter or new saturated barriers.
+    // Recipients stay below capacity; therefore this scan cannot cascade through new barriers.
+    if ((environment_tick_counter_ + 1) % CalciumWeatheringInterval == 0) {
+        for (int y = 0; y < height_; ++y) {
+            for (int x = 0; x < width_; ++x) {
+                auto& source = cells_[index(x, y)];
+                if (source->get_calcium() != MaxCaco3)
+                    continue;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        if ((!dx && !dy) || !in_bounds(x + dx, y + dy))
+                            continue;
+                        auto& target = cells_[index(x + dx, y + dy)];
+                        if (target->get_calcium() < MaxCaco3 - 1)
+                            source->take_calcium(target->give_calcium(1));
+                    }
+                }
+            }
+        }
+    }
     for (auto& cell : cells_) {
-        const auto glucose = cell->get_glucose(), oxygen = cell->get_organics().o2;
+        const auto oxygen = cell->get_organics().o2;
         cell->update();
-        glucose_regenerated_ += cell->get_glucose() - glucose;
         oxygen_regenerated_ += cell->get_organics().o2 - oxygen;
+    }
+    for (const auto& source : sources_) {
+        source->update();
+        glucose_regenerated_ += source->last_deposit();
     }
     if (environment_tick_counter_ % TemperatureRefreshInterval == 0) {
         RandomUtility random_util;

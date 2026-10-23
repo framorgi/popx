@@ -16,6 +16,8 @@ class IWorld {
         return {0, 0};
     }
     ///----------------------------------------------------------------------
+    /// @brief Environmental agents, including physical cell occupants.
+    virtual std::vector<std::shared_ptr<IEntity>> get_environment_agents() const { return {}; }
     /// @brief Initialize the world
     ///----------------------------------------------------------------------
     virtual void init() = 0;

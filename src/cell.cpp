@@ -8,7 +8,7 @@
 #include <cmath>
 
 Cell::Cell(std::weak_ptr<IEntity> occupant)
-    : occupant_(std::move(occupant)), temperature_(20.0f), elevation_(0.0f), regen_tick_(0), regen_o2_tick_(0)
+    : occupant_(std::move(occupant)), temperature_(20.0f), elevation_(0.0f), regen_o2_tick_(0)
 
 {
     // Initialize organics with random values
@@ -28,8 +28,6 @@ Cell::Cell(std::weak_ptr<IEntity> occupant)
     feromones_[FeromoneT::MATE_FEROMONE] = 0;
     feromones_[FeromoneT::HOME_FEROMONE] = 0;
 
-    // Randomize regen phase so cells do not all regenerate glucose at the same tick.
-    regen_tick_ = static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(GlucoseRegenInterval) - 1));
     regen_o2_tick_ = static_cast<unsigned>(rand_util.rnd_int(0, static_cast<int>(O2RegenInterval) - 1));
 }
 
@@ -192,13 +190,6 @@ void Cell::decay_feromones() {
     }
 }
 
-void Cell::regen_glucose() {
-    if (++regen_tick_ >= GlucoseRegenInterval) {
-        regen_tick_ = 0;
-        organics_.c6h12o6 = std::min(organics_.c6h12o6 + GlucoseRegenAmount, MaxC6h12o6);
-    }
-}
-
 void Cell::regen_o2() {
     if (++regen_o2_tick_ >= O2RegenInterval) {
         regen_o2_tick_ = 0;
@@ -208,6 +199,5 @@ void Cell::regen_o2() {
 
 void Cell::update() {
     decay_feromones();
-    regen_glucose();
     regen_o2();
 }

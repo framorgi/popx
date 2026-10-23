@@ -3,17 +3,12 @@
 #include <map>
 
 constexpr int MapSize = 120;                     // Number of cells along one side of the square map
-constexpr int TemperatureRefreshInterval = 5000; // Ticks between each temperature update
+constexpr int TemperatureRefreshInterval = 1000; // Ticks between each temperature update
 constexpr unsigned MaxAge = 200000;
 constexpr float MaxEnergy = 400.0f;
 constexpr unsigned MinPopulationAllowed = 20;
-constexpr unsigned MaxPopulationAllowed = 120;
-// learning contribution weights
-constexpr float AgeRewardWeight = 0.05f;
-constexpr float EnergyRewardWeight = 0;
-constexpr float EnergyDeltaRewardWeight = 0.35f;
-constexpr float OffspringRewardWeight = 0.60; // learning rate
-constexpr float HebbianLearningRate = 0.06f;  // was 0.001f
+// Reward coefficients live in Scorer; plasticity parameters are configured through IConfig.
+constexpr float MinDecayingSynapseMagnitude = 1.0f / 8192.0f; // One genetic weight quantum; decay only.
 
 using PositionT = struct {
     int x;
@@ -23,15 +18,15 @@ using PositionT = struct {
 constexpr unsigned WaterThreshold = 100;
 constexpr unsigned MaxH2o = 1000;
 constexpr unsigned MaxC6h12o6 = 500;
-constexpr unsigned GlucoseRegenInterval = 1000; // ticks between each glucose increment
-constexpr unsigned GlucoseRegenAmount = 1;      // units of glucose added per interval
-constexpr unsigned O2RegenInterval = 1000;      // ticks between each oxygen increment
-constexpr unsigned O2RegenAmount = 1;           // units of oxygen added per interval
+constexpr unsigned O2RegenInterval = 1000;       // ticks between each oxygen increment
+constexpr unsigned O2RegenAmount = 1;            // units of oxygen added per interval
 constexpr unsigned MaxLipids = 300;
 constexpr unsigned MaxO2 = 1000;
 constexpr unsigned MaxCo2 = 1000;
 constexpr unsigned MaxN2 = 2000;
 constexpr unsigned MaxCaco3 = 500;
+// Conservative erosion: at most one unit per neighbour per interval, from saturated cells only.
+constexpr unsigned CalciumWeatheringInterval = 1000;
 constexpr unsigned MaxFeromones = 100;
 
 using OrganicsT = struct {
