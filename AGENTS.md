@@ -16,30 +16,53 @@ superate dagli interventi autorizzati descritti sotto.
 ## Architettura e vincoli attuali
 
 - `main.cpp`: CLI headless/config/velocità/schema/validazione; INI predefinito relativo all'eseguibile.
-- `popx_app.cpp`: scheduler100/200 tick/s con attese, ogni tick10 ms simulati; GUI opzionale
-  nello stesso thread. Start/Restart valida e rilegge l'INI ricostruendo la run.
+- `popx_app.cpp`: scheduler100/200 tick/s oppure turbo headless (speed0), ogni tick10 ms simulati; GUI opzionale
+  nello stesso thread. Turbo usa batch massimi di8 tick e attende se la coda telemetrica è >=128 messaggi;
+  Mostra GUI torna a2× dopo apertura riuscita. Start/Restart valida e rilegge l'INI ricostruendo la run.
 - `Stats`: raccolta centrale, campioni iniziale/finale e ogni200 tick, eventi individuali,
   bilanci e telemetria UDP loopback. Worker solo su copie, nessun accesso ai Pop vivi.
 - Dashboard Python locale: unico scrittore SQLite, inspector manuale, snapshot neurali JSON
   solo su richiesta. Nessuna nuova esportazione JSON statistica, neppure diagnostica.
-- Durata INI0 infinita; estinzione/Stop concludono la run, Esci termina il processo.
+- Checkpoint CBOR versionati: cattura sul thread simulatore fra tick, ambiente completo,
+  Pop/reti/tracce/scorer/fasi/code e INI; restore su nuova run tick0, età e tempo ambiente conservati.
+  Config delle run da checkpoint bloccata UI/API; RNG non globalmente deterministiche.
+  Cap database predefinito10 GB: checkpoint verificato, nuova run in pausa, sostituzione
+  dello storico SQLite e ripresa. Errori conservano checkpoint/storico e lasciano in pausa.
+  Ultimi2 checkpoint automatici, tutti i manuali; catalogo separato dallo storico.
+- Durata INI0 infinita; l'estinzione attiva il recupero ereditario, Stop conclude la run,
+  Esci termina il processo. Con durata finita l'estinzione conclude la run.
   Headless rilascia SFML/ImGui, Mostra GUI ricrea la finestra sulla stessa run.
 - `simulator.cpp`: inizializza il mondo prima dello spawn; aggiorna agenti poi ambiente.
 - `pops_manager.*`: ownership shared_ptr, bucket sense→think→act, FIFO nascite,
   morti e NewGen. Guard Pop impediscono fasi fuori ordine anche alla nascita.
 - `pop.*`: sensori, azioni, fisiologia, learning e riproduzione asessuata; PHY
   ereditato separatamente dai geni. Direzione iniziale fra8 vicini, mai zero.
-- `gene/genome`: endpoint uint32, mutazione sostituisce geni interi; copie preservano
+- `gene/genome`: endpoint uint32, mutazione completa1% e ritocco del solo peso5% condizionato
+  alla mancata sostituzione, massimo256 quanti per ritocco; copie preservano
   endpoint e domini. Usare `Genome::encoding_from_config` nei percorsi produttivi.
   Costruttori standalone senza encoding mantengono legacy32/32.
-- `brain/neuron`: rete feedforward sparsa, hidden1…6, sigmoid, argmax singola azione;
-  parità favorisce indice0. Geni fuori dimensioni attive silenti senza modulo.
-- INI49 input: glucosio33–36, gradienti DANGER/MATE/HOME37–48;32 riservato.
-  FOOD24–27 invariato. INI21 uscite;23 abilita KILL_FORWARD22,21 riservato.
+- `brain/neuron`: rete feedforward sparsa, hidden1…6, sigmoid, massimo unico;
+  uscite neutre o massimi pari producono DO_NOTHING21. Decadimento limitato al modulo
+  1/8192; plasticità libera di attraversare zero. Eredità arrotonda al quanto più vicino,
+  preservando il segno dei non nulli con minimo1 quanto; zeri esatti restano zero.
+  Geni fuori dimensioni attive silenti senza modulo.
+- INI57 input: densità FOOD/DANGER/MATE/HOME24–27; glucosio33–36,
+  gradienti direzionali DANGER/MATE/HOME37–48;
+  32 segnala l'ultimo movimento fallito e49–56 la percorribilità delle otto
+  destinazioni al passo corrente. I checkpoint con49 input mantengono32 a zero.
+  `SENSOR_COUNT` è un conteggio, non un input. Sensitività PHY imposta il raggio
+  iniziale delle scansioni spaziali; l'azione20 aumenta raggio effettivo e reattività.
+  FOOD24–27 invariato. INI22 uscite include DO_NOTHING21;23 abilita KILL_FORWARD22.
   Dimensioni extra non implementano nuovi sensori/azioni. Rewire viventi non automatico.
 - Eredità dei pesi appresi **true**, esplicitamente richiesta dall'utente: preservarla.
   Mutazione INI0,01, applicata anche ai tratti PHY. Distinguere dai default Config.
-- Riproduzione: costo energetico dissipato, poi trasferimento1/8 di risorse/energia;
+- Scorer individuale: reward ecologico, baseline mobile e segnale relativo; parametri learning in INI.
+  Tracce registrate in act, uscita scelta e attività hidden; decadono ogni tick. Baseline/tracce
+  non ereditarie; pesi appresi ereditati. Stats conserva cumulativi dei morti e medie istantanee dei vivi.
+- Cap configurabile, 360 vivi nell'INI distribuito; telemetria separa idoneità agente×tick al cap, tentativi senza spazio e nascite.
+  Nessun nuovo accodamento al cap; i candidati già in FIFO restano in attesa.
+- Riproduzione: cella nella prima corona; se piena cerca fino al raggio configurato
+  (2 nell'INI distribuito). Costo energetico dissipato, poi trasferimento1/8 di risorse/energia;
   nessuna dotazione gratuita ai figli. Distinguere nascite naturali e forzate.
 - NewGen seleziona/abbatte ma NON riposiziona né riassegna i bucket dei superstiti;
   conserva identità, occupazioni, fasi e ordine. Non è profondità genealogica.
@@ -48,14 +71,15 @@ superate dagli interventi autorizzati descritti sotto.
   Non introdurre scritture condivise nelle fasi parallele; snapshot non autorizzano
   accesso concorrente alla simulazione senza sincronizzazione.
 - `grid_world/cell`: occupanti weak_ptr, capacità finite, risorse/campi RBF,
-  rigenerazione locale; feromoni additivi0…100, decadimento0,9995/tick, nessuna
-  diffusione. Per cancellare un campo usare delta negativo del valore presente.
+  ossigeno rigenerato localmente e due Source fisiche mobili per il glucosio;
+  feromoni additivi0…100, decadimento0,9995/tick, nessuna diffusione.
+  Per cancellare un campo usare delta negativo del valore presente.
   Canali FOOD/DANGER/MATE/HOME non impongono significati o cooperazione.
 - `Cell::give_*` restituisce la quantità accettata: sottrarre soltanto quella.
   Morte restituisce riserve; overflow è sink esplicito. Validare bilanci/cap/roundoff.
 - Respirazione regolata: riserva target100, banda25, capacità frazionaria accumulata;
   flusso modulato dalla temperatura, inibizione calda continua fino a zero a47 C.
-  Rendimento respiratorio gaussiano; reward termico ancora lineare. Calore/energia
+  Rendimento respiratorio gaussiano; reward termico gaussiano continuo. Calore/energia
   solo per reazioni completate. Formule, parametri e limiti nel documento unico.
   Credito non ereditario; reset a init e nessuna raffica dopo scarsità di substrati.
 - Statistiche GUI dei vivi non descrivono vite completate. Registrare eventi dei morti.

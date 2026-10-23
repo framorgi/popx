@@ -4,6 +4,2391 @@ Documento unico di riferimento del progetto. `AGENTS.md` contiene le istruzioni
 operative. Audit e indagini precedenti sono conservati sotto con risultati e
 limiti originali; non descrivono automaticamente il modello attuale.
 
+The [README](../README.md) covers the project, features, mathematical model, architecture,
+and setup. Validation status and audit records remain in this document.
+
+## Stato corrente — affollamento e possibilità di fuga, 23 ottobre 2026
+
+Analisi non invasiva della run `1792748686533986224-712313108`, lasciata in
+esecuzione. Il codice non ha una morte per affollamento: la fisiologia registra
+energia, temperatura ed età come cause ordinarie. Lo spazio può influire
+indirettamente su movimento, accesso alle risorse e riproduzione; questi
+contatori non identificano da soli la causa di una singola morte.
+
+Al tick 1.400.000, su 37,78 milioni di tentativi di movimento cumulativi,
+il 5,9% era riuscito, il 73,9% era fallito per occupazione e il 19,4% per
+pendenza. L'86,3% dei 260.994 tentativi riproduttivi processati era senza
+spazio entro raggio 2; il 96,5% dei tick-agente idonei alla riproduzione era
+bloccato dal cap. Questi valori descrivono una forte pressione spaziale
+locale, pur in una mappa globalmente poco occupata. Fra tick 300.000 e
+360.000, durante il collasso da 185 a un vivo, il 56,2% dei tentativi di
+movimento era bloccato dalla pendenza e il 42,6% dall'occupazione; le morti
+per temperatura sono aumentate di 976 e quelle per energia di 739. La
+distanza termica media dei vivi è salita da 12,2 a 23,0 °C. Questi dati
+suggeriscono una componente climatica e topografica nel collasso, senza
+dimostrare una causa unica o l'effetto causale dell'affollamento.
+
+Al tick 1.553.961, uno snapshot manuale dei 360 vivi mostrava 319 agenti
+senza alcun tentativo di movimento e 338 senza movimento riuscito. In un
+secondo controllo iniziato al tick 1.625.057, 325 dei 360 vivi elencati
+erano ancora presenti all'ispezione. Nessuna delle 325 reti ispezionate
+aveva un percorso con pesi non nulli dai sensori di densità (8…11) o di
+percorribilità (49…56) verso un output; nessuna collegava i sensori termici
+(12…19) agli otto output di movimento. Otto reti avevano un percorso termico
+verso un qualche output. Tutte le 325 avevano almeno un percorso da qualche
+input verso il movimento: la difficoltà specifica è usare l'informazione
+ambientale per scegliere *dove* muoversi. La presenza di un percorso resta
+solo una condizione necessaria, non prova di decisione efficace. Il campione
+di vivi esclude 35 agenti non più ispezionabili durante la lettura e descrive
+un solo momento, non tutte le generazioni.
+
+Al tick 362.643 c'è stata una sola estinzione completa nella run osservata:
+20 semi recuperati da 20 donatori distinti della riserva. La popolazione è
+poi tornata a 360 vivi. Il recupero preserva continuità ereditaria ma
+introduce individui con riserve piene in posizioni casuali: può attenuare
+temporaneamente la selezione per il movimento. Poiché la staticità e il
+collasso erano già presenti *prima* di questo primo recupero, esso non ne è
+la causa in questa run. La deposizione della prole nella seconda corona può
+trasferire linee verso zone favorevoli senza movimento degli adulti.
+
+Conclusione operativa: mantenere distinguibili sopravvivenza naturale e
+recuperi; prima di cambiare reward o forzare la fuga, verificare con una
+fixture a politica controllata se l'informazione di cella libera e temperatura
+permette effettivamente di aumentare sopravvivenza e nascite in terreni
+percorribili. Misurare poi nelle run evolutive la quota di reti con un percorso
+sensore→movimento e i successi condizionati alle vie fisicamente libere.
+
+## Stato corrente — continuità ereditaria dopo estinzione, 23 ottobre 2026
+
+Il recupero delle run infinite usa una riserva di massimo 64 profili recenti.
+Alla rimozione ordinaria di un morto il manager conserva il genoma ereditabile
+(pesi appresi quantizzati con le stesse regole delle nascite naturali quando
+`hebbian_inheritance=true`), PHY e ID del donatore. La chiave di deduplicazione
+è la firma del genoma di nascita più i quattro tratti PHY: il donatore più
+recente sostituisce il precedente con la stessa chiave. A riserva piena si
+elimina il profilo aggiornato da più tempo. Gli abbattimenti NewGen non
+alimentano la riserva. Nessun Pop morto o stato fisico resta trattenuto.
+
+All'estinzione si estraggono i profili in ordine casuale senza ripetizioni
+finché possibile, ripetendo l'estrazione se la riserva è più piccola del
+numero di fondatori necessari. Il target resta 20, limitato dal cap e dalla
+dimensione della mappa. Si copiano genoma ereditabile e PHY senza nuove
+mutazioni; età, scorer, tracce neurali, stato fisico e direzione sono
+inizializzati come per i fondatori. Le successive nascite naturali usano le
+mutazioni INI ordinarie. Il posizionamento resta casuale sulle celle libere;
+non cerca una temperatura favorevole. Soltanto una riserva vuota usa il
+precedente fallback casuale. Il meccanismo conserva informazione ereditaria
+fra estinzioni, senza garantire la persistenza di ogni ceppo né la stabilità
+ecologica. È un intervento esterno, non sopravvivenza naturale.
+
+I recuperi sono eventi `birth` forzati con `parent_id`, `recovery_seed` e
+`recovery_from_archive`. Le loro dotazioni sono ingressi espliciti nei bilanci
+di materia ed energia anche con donatore noto. `counts.inherited_recovery_births`
+è un sottoinsieme delle nascite forzate; `reproduction.recovery_bank_size`
+misura i profili disponibili. La pagina Linee evolutive mantiene la famiglia
+del donatore e applica la normale soglia di somiglianza per i rami; la
+profondità include i passaggi tramite riserva, mentre i figli conteggiati
+nelle statistiche di fitness restano solo quelli naturali.
+
+Il checkpoint include la riserva compatta; i vecchi checkpoint senza riserva
+sono caricabili e la riempiono alle morti successive. Dopo una rotazione
+dello storico, gli ID dei donatori archiviati restano registrati con origine
+esterna alla nuova run: la dashboard segnala il recupero e non inventa lo
+storico degli antenati assenti. Un nuovo Start/Restart azzera la riserva.
+
+Validazione: fixture dedicate per morte→riserva→recupero, pesi appresi e geni
+silenti, PHY, reset di scorer/tracce, campionamento bilanciato, limite di
+memoria, deduplicazione e fallback vuoto; roundtrip del checkpoint con
+riserva, compatibilità legacy e rifiuto di riserve sovradimensionate.
+Il test dei bilanci di recupero verifica anche i fondatori con donatore noto.
+Il test genealogico distingue recuperi, figli naturali e donatori di run
+precedenti. Queste prove verificano la meccanica; non sono una misura di
+miglioramento evolutivo a lungo termine.
+
+Esiti: `bash scripts/run_regressions.sh` (18 regressioni C++), 7 test
+genealogici Python, 4 test di integrazione checkpoint/fallimenti/marcatori
+di estinzione e regressione UI genealogica passati; catalogo metriche,
+sintassi JS/Python e `git diff --check` verificati. HEAD resta
+`f6b6fbd042a3cc17eb8da59002ea15cab54e0bcd` con modifiche locali; INI e
+diff conservati in `data_out/audit/hereditary_recovery_20261023/`.
+
+Come richiesto, chiusi launcher, simulatore e dashboard precedenti e rimosso
+lo storico operativo SQLite (4.560.650.240 byte); checkpoint separati
+conservati. Nuova run `1792748686533986224-712313108`, headless turbo,
+configurazione ordinaria sbloccata, cap 360 e limite database 10 GB.
+Raggio di dispersione INI ancora 2, così la nuova run introduce il solo
+meccanismo di continuità rispetto ai parametri precedenti. Al controllo
+tick 53.000: 360 vivi, 1.003 nascite naturali, 723 morti, 64 profili nella
+riserva, nessun recupero ancora necessario; residui dei bilanci di materia
+ed energia tutti zero. Le estinzioni successive e la stabilità ecologica
+restano da osservare nella run; il recupero è già verificato nelle fixture.
+
+## Stato corrente — dispersione della prole, 23 ottobre 2026
+
+`offspring_dispersal_radius` ora controlla effettivamente la ricerca della cella
+di nascita fino al raggio configurato (schema INI: 1…8). Le corone di distanza
+di Chebyshev sono provate in ordine e ciascuna è mescolata; le posizioni fuori
+mappa sono escluse. `reproduction.dispersed_births` conta tutte le nascite
+oltre la prima corona, inclusi i raggi 3…8. La regressione locale verifica
+il fallimento con raggio insufficiente, le nascite nelle corone 2, 3 e 4 e
+la conservazione delle risorse trasferite.
+
+La run sospesa descritta sotto conserva la configurazione e il processo
+precedenti (raggio 2). Il suo checkpoint resta invariato. Per valutare
+l'effetto ecologico della correzione serve una nuova run con raggio 3 o 4,
+confrontata con raggio 2 a parità degli altri parametri; il fix della ricerca
+non dimostra da solo che la dispersione prevenga i collassi.
+
+## Stato corrente — collassi della run lunga, 23 ottobre 2026
+
+La run `1792735061314312259-1932886052`, nata dal checkpoint completo
+`caeba8cdc3c24a6497add06ab80ebc2b` della run precedente al tick 15.486.384,
+è stata sospesa reversibilmente al tick 7.711.341 e 360 vivi. Il checkpoint
+manuale completo e verificato `be987ea5ba304650a3fc3406009f00b0` conserva
+questo stato. Database e dashboard restano disponibili; nessun parametro è
+stato cambiato. Il database corrente contiene soltanto questo segmento perché
+le rotazioni automatiche hanno eliminato gli storici precedenti. Codice in
+uso: HEAD `f6b6fbd042a3cc17eb8da59002ea15cab54e0bcd` con diff di lavoro
+non committato; parametri effettivi inclusi nel checkpoint/metadata della run.
+
+Al campione finale: 94 estinzioni complete seguite da 1.880 semi casuali,
+281.452 nascite naturali, 283.332 morti (206.858 per energia, 76.462 per
+temperatura, 12 per età). Dei 94 cicli conclusi, 59 non hanno mai raggiunto
+50 vivi; 29 hanno raggiunto almeno 300, con durata mediana circa 212.000 tick
+e massimo 695.228. Dopo ogni estinzione `recover_from_extinction()` crea nuovi
+fondatori casuali senza ereditarietà dalle linee estinte. Non emerge quindi
+accumulo genealogico fra i cicli. Il numero di recuperi nei tre blocchi
+successivi di 2,5 milioni di tick è 26, 23, 44: nessun miglioramento
+monotono della stabilità. Intervalli brevi fra recuperi spesso fanno parte
+di una cascata di tentativi di ripopolamento falliti, non di popolazioni
+consolidate che collassano ogni poche migliaia di tick.
+
+I tentativi riproduttivi cumulativi sono 6.919.180; il 95,9% è fallito per
+mancanza di spazio entro le due corone locali. Il 54,2% delle nascite riuscite
+usa la seconda corona. L'84,3% dei tick-agente idonei è bloccato dal cap 360.
+Solo il 9,5% dei 156,8 milioni di tentativi di movimento ha avuto successo;
+il 63,5% è stato bloccato dall'occupazione e il 24,9% dalla pendenza. Su una
+lettura non invasiva di 329 vivi al tick 7.584.397, il 94,5% non aveva mai
+percorso una cella e la mediana aveva tutti gli otto vicini immediati occupati
+(23 su 24 entro raggio due). Sono dati di un singolo snapshot, non una prova
+che tale densità valga in ogni fase. Il mondo è 180×180: l'addensamento è
+locale, non un riempimento della mappa.
+
+Prima di collassi consolidati il glucosio e l'acqua globali restavano
+nell'ordine dei milioni di unità. In un episodio i vivi sono scesi da 360
+a due mentre la temperatura media dei superstiti scendeva fino a 13,3 °C;
+in un altro i superstiti erano attorno a 50 °C. La fisiologia riduce il
+rendimento respiratorio lontano da 36 °C e lo inibisce del tutto a 46 °C
+con la semilarghezza effettiva di 10 °C. La morte per energia può quindi
+essere mediata dal clima senza risultare classificata come morte termica
+(soglie dirette 10 e 75 °C). La presenza globale di risorse non dimostra
+accessibilità delle stesse nella cella occupata. Il nesso causale fra
+addensamento, mobilità, clima e collasso va verificato con confronti
+controllati; nessun singolo fattore è isolato in questa run.
+
+Decisione operativa: sospendere la run e conservare il checkpoint, perché
+altri tick con la stessa configurazione ripetono cicli di estinzione e
+fondazione casuale. Prima di una nuova run lunga confrontare in prove brevi
+la dispersione della prole a raggio 2 con 3–4 e monitorare spazio locale,
+movimento, durata delle linee e bilanci. Al momento dell'indagine l'INI
+esponeva `offspring_dispersal_radius`, ma il codice produttivo limitava il
+raggio a 2 (`std::min(..., 2u)`): il limite è stato rimosso nella correzione
+documentata sopra. Aumentare durata massima di vita, cap globale
+o apporto di glucosio non è supportato come prima correzione da questi dati.
+
+Metodo: campioni SQLite ogni 200 tick, differenze dei contatori cumulativi,
+tick distinti degli eventi `recovery_seed`, cicli fra recuperi e un roster
+live letto tramite `agents`; telemetria senza messaggi persi al momento della
+pausa. Censura del ciclo corrente e delle vite ancora aperte. Il database
+storico delle rotazioni precedenti non è disponibile per un confronto
+longitudinale completo fra giorni.
+
+## Stato corrente — filtro dei percorsi neurali, 21 ottobre 2026
+
+Il grafo dell'inspector offre tre viste: tutte le sinapsi della rete attiva,
+quelle da cui si può raggiungere un output e soltanto quelle appartenenti a
+un percorso completo sensore→output. La raggiungibilità usa tutte le sinapsi
+con peso non nullo dello snapshot, prima della soglia di visualizzazione;
+questa soglia può quindi nascondere parte di un percorso. I geni silenti o
+esclusi non compaiono nel grafo della rete attiva e restano nell'elenco del
+genoma. I pesi esattamente zero sono visibili solo nella vista «tutte» quando
+si abilita il relativo controllo.
+
+Il filtro dei percorsi completi descrive il trasporto possibile di informazione
+sensoriale, non tutte le operazioni eseguite da `Brain::feed_forward`. Ogni
+strato nascosto applica `sigmoid` anche senza ingressi: un neurone isolato
+produce 0,5 e può influire sull'output tramite una sinapsi in uscita. Gli
+archi verso rami senza uscita sono calcolati, ma non influenzano la decisione.
+La vista «verso output» conserva anche i rami nascosti senza ingresso che
+possono contribuire all'attuatore.
+
+Validazione: regressione JS con percorso diretto, percorso attraverso più
+strati, ramo senza uscita, neurone nascosto senza ingresso, arco di peso zero,
+soglia e Cytoscape; test dell'inspector e `git diff --check`. Su uno snapshot
+letto dalla run attiva: 40 sinapsi nella rete, 23 potenzialmente influenti su
+un output e 17 su percorsi completi sensore→output. Modifica solo degli asset
+statici della dashboard: la run continua senza riavvio.
+
+## Stato corrente — marcatori di estinzione e variazioni temporali, 21 ottobre 2026
+
+La dashboard mostra una linea rossa al tick di ogni ripopolamento dopo
+estinzione globale; per una run conclusa per estinzione usa il tick dell'ultimo
+campione. I tick provengono dagli eventi di nascita con `recovery_seed=true`,
+non dai campioni sottocampionati. L'indice del backend legge una volta lo
+storico della run, poi soltanto i nuovi eventi. Le linee compaiono sui grafici
+con asse temporale della panoramica e delle linee evolutive; grafici per età,
+condizione diagnostica e distribuzioni non hanno un asse dei tick della run.
+
+Per popolazione, stock ambientali, somme dei vivi e contatori/bilanci aggregati
+si può commutare tra valore e variazione media per tick, calcolata come
+`(valore corrente - valore precedente) / (tick corrente - tick precedente)`.
+La prima osservazione dell'intervallo non ha derivata; intervalli di tick non
+uniformi sono normalizzati. Nella pagina genealogica anche la composizione dei
+ceppi può essere mostrata come variazione per tick, con valori negativi per
+contrazione. Le curve derivate descrivono differenze tra campioni disponibili,
+non gli eventi istantanei avvenuti fra loro.
+
+Validazione: test JS per derivata, marcatori, panoramica e pagina genealogica;
+test Python dell'indice con ripopolamenti duplicati, incrementali e terminali;
+integrazioni dashboard/checkpoint e `git diff --check`.
+
+## Stato corrente — costo dei tentativi attivi, 21 ottobre 2026
+
+La run precedente ha mostrato una policy ripetitiva: in 87 reti campionate,
+29 Pop hanno richiesto `GET_CALCIUM` 555.067 volte senza acquisire calcio.
+Il codice precedente non addebitava energia a trasferimenti, emissioni,
+regolazioni e attacchi. Ora ogni azione attiva costa 0,01 energia per tentativo,
+anche se non produce effetto; i movimenti mantengono il costo già esistente,
+`BURN_CALORIES` mantiene il proprio costo 0,05 e `DO_NOTHING` resta gratuito.
+La nuova voce `other_action_cost` separa le azioni attive non motorie dalla
+termoregolazione e chiude il bilancio energetico anche dopo una morte fra
+azione e fisiologia. I checkpoint v4 precedenti caricano il nuovo contatore a
+zero, lasciando invariato lo stato energetico salvato.
+
+La stessa analisi sulle reti ha trovato due gruppi di genomi fra gli 80 Pop
+selezionati casualmente (62 e 18, con soglia Jaccard 0,5 sugli endpoint). I
+quattro nuovi sensori di densità dei feromoni hanno cambiato una sola scelta
+su 87 reti quando portati singolarmente a 0 o 1; il glucosio non ne ha
+cambiata nessuna. La convergenza genealogica e le azioni ripetute dimostrano
+struttura ereditaria, ma non da sole un adattamento alle risorse mobili.
+
+Validazione: build `popx`, 17 regressioni C++ standalone (incluso il nuovo
+controllo di tutti gli attuatori), regressione checkpoint precedente privo del
+nuovo contatore, sei integrazioni Python, controllo etichette JS e
+`git diff --check` passati. Il checkpoint manuale completo
+`0876e5710a2b443f97d668458865af76` della run precedente al tick
+8.806.083 è stato verificato e caricato dalla nuova run
+`1792587923217596324-2845636136`, che prosegue con lo storico SQLite
+conservato. A tick 8.600 della nuova run `other_action_cost=8.319,71`,
+bilancio energetico residuo zero; 360 Pop vivi.
+
+Protocollo di decisione direzionale ripetibile:
+`python3 scripts/analyze_nn_direction.py --sample 80`. Legge soltanto
+`agents`/`inspect`, ricostruisce la rete sparsa, lascia costanti gli altri
+sensori e confronta la scelta con tutte le otto direzioni bloccate e con
+una sola direzione aperta alla volta. Fra 74 reti disponibili alla nuova
+run, 592 aperture hanno prodotto 35 cambi di azione ma zero cambi verso la
+direzione corretta; in un successivo campione di 39 reti, 312 aperture
+hanno prodotto 24 cambi e ancora zero corretti. La ricostruzione della
+scelta osservata coincideva in 69/74 e 39/39 reti rispettivamente. È un
+test controfattuale della policy a sensori fissi, non una misura di
+sopravvivenza o una simulazione della nuova configurazione fisica.
+
+## Stato corrente — feromoni, raggio sensoriale e cap, 21 ottobre 2026
+
+Gli ingressi 24…27 hanno ora ciascuno un feromone distinto: FOOD, DANGER,
+MATE, HOME. Ognuno restituisce la media delle concentrazioni normalizzate
+nelle celle della piazza di raggio sensoriale attorno al Pop, esclusa la
+cella occupata. Un campo uniforme ha valore uniforme; non si sottrae il
+valore locale. Gli ingressi locali 20…23 restano la concentrazione nella
+cella del Pop; i gradienti direzionali DANGER/MATE/HOME 37…48 restano
+direzionali. Gli indici non cambiano, ma il significato 24…27 cambia: per
+questo i checkpoint vecchi, se caricati con il nuovo binario, proseguono con
+una semantica sensoriale diversa. La nuova run parte da zero.
+
+Il tratto ereditato `phy.sensitiveness` imposta il raggio iniziale effettivo
+`probe_dist_` (1…12 celle). L'azione 20 mantiene l'aumento della reattività
+al movimento e aumenta di una cella il raggio effettivo fino al minore fra
+il massimo configurato e 12. Le scansioni direzionali di popolazione,
+temperatura, glucosio e feromoni e le nuove densità usano questo raggio.
+Le misure della cella corrente, gli ingressi interni e la percorribilità
+della destinazione immediata mantengono il loro significato esatto, che non
+dipende da un raggio di ricerca. Il tratto ereditato resta distinto dal
+raggio modificato durante la vita; l'inspector mostra entrambi. Il cap
+configurato per la nuova run è 360 Pop vivi.
+
+Le etichette della dashboard seguono il modello sensoriale effettivo:
+`SENSOR_COUNT` è soltanto il numero di ingressi, mai un sensore; l'indice 32
+dei checkpoint a 49 ingressi rimane etichettato come slot riservato e vale
+zero. Gli ingressi oltre 56 sono segnalati come non implementati.
+
+Validazione: build `popx`, 16 regressioni C++ standalone, regressioni JS
+etichette/rete/inspector e tre test di integrazione dashboard/checkpoint
+passati; `git diff --check` pulito. La nuova run headless turbo
+`1792575828674331184-2927656479` parte da un database SQLite vuoto,
+espone `sensor_model=chemical_density_v2`, 57 ingressi e cap 360. I
+checkpoint esterni sono stati conservati. La regressione dei feromoni verifica
+separazione dei quattro canali, media spaziale normalizzata, raggio ereditato,
+incremento tramite l'azione 20 e propagazione del raggio alle altre scansioni.
+
+## Rotazione database e recupero della run — 21 ottobre 2026
+
+La run `1792516222119803499-451470706` si è fermata in pausa a
+21.741.452 tick oltre la soglia di 10 GB decimali. Il checkpoint automatico
+falliva con `INI differs from active run`: l'INI sul disco era stato
+modificato dopo l'avvio (49 ingressi, NewGen attivo, raggio prole 1) mentre
+la run usava 57 ingressi, NewGen disattivato e raggio 2. Una copia dell'INI
+successivo è conservata in
+`data_out/config_backups/popx-before-storage-recovery-45fc2476139540de9eb5ddd42d5dbc18.ini`.
+L'INI originale è stato recuperato dai metadati della run e verificato contro
+la configurazione attiva; il monitor ha quindi salvato e verificato il
+checkpoint automatico `1433928e34a6475199867bce2f94c3d6`, sostituito
+lo storico e ripreso la simulazione nella nuova run
+`1792538105513374180-2081800247`. Dopo la rotazione il database occupava
+circa 15 MB e conteneva solo la nuova run con campioni da tick 0. Il
+checkpoint conserva il tick sorgente e lo stato biologico; la nuova run
+riparte con storico vuoto e configurazione bloccata.
+
+La correzione in `PopXApp` conserva l'INI che ha costruito la run e lo usa
+per i checkpoint, anche se il file sul disco cambia in seguito. La nuova
+run caricata da checkpoint usa già un INI bloccato, quindi la rotazione
+successiva non dipende dal file modificato. La compilazione aggiornata e la
+regressione end-to-end con modifica dell'INI dopo Start verificano il caso.
+
+## Stato corrente — accessibilità locale, dispersione e NewGen, 20 ottobre 2026
+
+Per la prossima run evolutiva l'INI usa 57 ingressi, `newgen_enabled=false` e
+`offspring_dispersal_radius=2`. Gli ingressi 49…56 valgono 1 se la destinazione
+nelle otto direzioni è percorribile al passo corrente, 0 se bloccata da bordo,
+occupante (Pop o Source), calcio saturo o salita oltre la soglia individuale.
+Il sensore 32 indica se l'ultimo tentativo di movimento è fallito; torna a 0
+dopo un successo. La decisione usa le normali connessioni del genoma: nessuna
+azione o ricompensa è stata imposta. Le configurazioni storiche con 49 ingressi
+mantengono il sensore 32 a 0 e i checkpoint precedenti restano caricabili.
+
+La nascita cerca prima tutte le otto celle confinanti in ordine mescolato.
+Solo se nessuna è disponibile e il raggio configurato è 2, cerca le sedici
+posizioni della seconda corona. Il contatore `reproduction.dispersed_births`
+registra le nascite in seconda corona. Costo energetico e trasferimento di un
+ottavo delle riserve restano invariati; la seconda corona rappresenta una
+dispersione breve della prole, non un movimento dell'adulto. Un raggio 1
+preserva il precedente limite spaziale, salvo l'ordine di ricerca casuale.
+
+Disabilitare NewGen rimuove gli abbattimenti periodici e lascia attive
+selezione ecologica, mortalità e nascite naturali. Questa è una scelta di
+esperimento, non una conclusione che la mobilità emergerà: il confronto
+controllato precedente mostrava stasi anche senza NewGen. Valutare almeno
+100.000 tick nuovi con successi/tentativi di movimento, ripartizione dei
+fallimenti, nascite nella seconda corona, discendenza e permanenza al cap.
+
+Validazione: build `popx`, 16 regressioni C++ standalone (inclusa una policy
+che legge la percorribilità e sceglie una mossa riuscita), 2 test di
+integrazione dashboard, integrazione checkpoint e catalogo metriche superati.
+Il test dashboard verifica che la telemetria di apprendimento sia presente
+senza presupporre che un Pop scelto casualmente abbia già aggiornato i pesi.
+Il checkpoint storico del tick 16.757.754 è stato caricato con una porta
+diagnostica separata e lasciato in pausa per cinque secondi senza errore;
+la nuova run produttiva non è stata interrotta.
+
+Nuova run `1792516222119803499-451470706`, avviata da zero in headless turbo
+con dashboard, 57 ingressi, NewGen disattivato e raggio di dispersione 2.
+A 100.000 tick: 138 vivi, 833.391 tentativi di movimento, 512.542 successi,
+133.234 blocchi per occupazione e 108.470 per salita; 7.349 nascite naturali,
+di cui 2.589 nella seconda corona, e 153.162 tentativi senza spazio. Fra
+80.000 e 100.000 tick i successi sono 100.044 su 147.494 tentativi (67,8%),
+ma nello stesso intervallo la popolazione cala da 300 a 138: la minore
+occupazione è un confondente evidente. La run resta in corso. Questi dati
+congiunti non isolano l'effetto dei sensori, di NewGen o della dispersione;
+serve osservare stabilità demografica, distanze e discendenza su più cicli.
+Il controllo successivo a 250.000 tick trova 58 vivi, 13.842 nascite naturali,
+240 nascite forzate e 14.104 morti. Fra 150.000 e 200.000 tick la popolazione
+scende da 34 a 23 vivi nei campioni disponibili e il contatore delle nascite
+forzate passa da 40 a 120: si sono verificati recuperi da estinzione. NewGen
+è disattivato, quindi i crolli non derivano dai suoi abbattimenti periodici.
+I successi di movimento cumulativi salgono a 878.993 su 2.309.458 tentativi,
+ma l'elevata mobilità iniziale e la dispersione non garantiscono ancora una
+linea demograficamente stabile. Il test checkpoint è stato ripetuto dopo
+l'ultima correzione della serializzazione usando una mappa temporanea 24×24.
+Al controllo successivo intorno a 396.000 tick i vivi sono tornati a 300,
+ma le nascite forzate cumulative sono 440: il recupero della numerosità non
+dimostra stabilità autonoma delle linee. La run rimane attiva per osservazione
+più lunga.
+
+## Indagine controllata — fallimenti di movimento e NewGen, 20 ottobre 2026
+
+La run `1792490142244376844-3311247595` è stata fermata a 16.809.931 tick.
+Il checkpoint completo e verificato `data_out/checkpoints/4b3e4f8dc2d14aa592219ab488422938.popx`
+proviene dal tick 16.757.754. Dopo la chiusura del simulatore e della dashboard,
+lo storico principale SQLite (~8,3 GiB) è stato eliminato su richiesta; il
+checkpoint esterno è conservato. I due database diagnostici temporanei sono
+stati letti per questa analisi e poi eliminati. Nessuna run produttiva resta
+in esecuzione.
+
+`Pop::try_move` ora conta ogni tentativo in una delle categorie esclusive:
+successo; destinazione occupata da Pop/Source; barriera di calcio saturo;
+salita oltre la soglia individuale; bordo; destinazione uguale alla partenza;
+altro. La verifica della salita precede quella dell'occupazione, quindi una
+cella sia ripida sia occupata è classificata come pendenza. Questi contatori
+sono osservativi, sommati per vivi e morti da `Stats`, descritti nella dashboard
+e salvati opzionalmente nei checkpoint v4; le snapshot precedenti restano
+caricabili. La regressione dedicata verifica che ogni tentativo abbia esattamente
+un esito.
+
+Confronto: `dashboard.diagnostics movement` ricarica due volte lo stesso
+checkpoint, con identiche impostazioni eccetto `newgen_enabled` (true/false),
+ed esegue 100.000 tick per ramo. Un seed **solo diagnostico** resetta i nuovi
+`RandomUtility` e `rand`; la Source riprende il proprio RNG dal checkpoint.
+I campioni dei due rami a 10.000, 20.000, 30.000 e 40.000 tick coincidono
+esattamente per vivi, nascite, morti, tentativi, successi e stock mondiali.
+Il primo NewGen interviene fra 40.000 e 50.000 tick; il secondo entro 100.000.
+Questo è un controfattuale controllato da un checkpoint, non una stima della
+variabilità fra molti mondi o una garanzia di replay deterministico produttivo.
+
+| Esito nei 100.000 tick | NewGen attivo | NewGen disattivo |
+|---|---:|---:|
+| tentativi di movimento | 573.897 | 260.844 |
+| successi | 48.441 (8,44%) | 47.711 (18,29%) |
+| occupazione | 315.839 (55,03%) | 142.675 (54,70%) |
+| pendenza | 197.736 (34,45%) | 60.447 (23,17%) |
+| bordo / destinazione invariata | 4.447 / 7.434 | 2.553 / 7.458 |
+| calcio / altro | 0 / 0 | 0 / 0 |
+| vivi mai mossi alla fine | 276/300 | 283/298 |
+| nascite naturali / forzate | 2.307 / 20 | 2.041 / 20 |
+| morti, di cui abbattimenti NewGen | 2.082, di cui 43 | 1.818, di cui 0 |
+
+Nella fase comune dei primi 40.000 tick si osservano 46.116 successi su
+71.254 tentativi. Nei 60.000 tick successivi: NewGen attivo 2.325 successi
+su 502.643 tentativi (0,46%); NewGen disattivo 1.595 su 189.590 (0,84%).
+Quindi NewGen in questo fork induce molto più movimento *richiesto* ma quasi
+nessuno spostamento aggiuntivo. Le due popolazioni restano al cap circa alla
+fine; entrambi i rami rimangono largamente immobili. Il primo pilot senza
+seed diagnostico divergeva prima del primo NewGen ed è stato escluso dalle
+inferenze causali.
+
+Priorità di intervento: (1) rendere riconoscibili agli agenti le direzioni
+fisicamente impraticabili, verificando prima se i sensori di densità attuali
+discriminano davvero la cella di destinazione e il dislivello; l'occupazione
+e la pendenza spiegano quasi tutti i fallimenti. Evitare di premiare il
+movimento in sé. (2) Valutare NewGen disattivato o una selezione meno ancorata
+al numero assoluto di figli: `Scorer::selection` usa figli + 0,01×energia e
+mantiene i superstiti nelle stesse celle; questo fork mostra che NewGen non
+risolve la stasi. (3) Solo dopo, indagare dispersione locale della prole e
+accesso alle risorse nelle nicchie affollate. Aumentare il cap o modificare
+il calcio non è sostenuto da questi dati.
+
+Validazione: build `popx`, 15 regressioni C++ standalone, integrazione
+dashboard (2 test) e catalogo metriche. La fixture RNG produce due sequenze
+identiche quando viene resettata e resta disabilitata in produzione. Protocollo
+ripetibile: `python -m dashboard.diagnostics movement DB CHECKPOINT`, con
+`DB` SQLite temporaneo e `CHECKPOINT` percorso del file sopra; il report è
+salvato nella tabella `diagnostics`, non in JSON.
+
+## Analisi run corrente — 13,8 milioni di tick, 20 ottobre 2026
+
+Run `1792490142244376844-3311247595`, osservata in sola lettura mentre
+continuava. INI della run: mappa 180×180, 2 Source, cap 300 Pop, NewGen ogni
+50.000 tick con rapporto superstiti 0,9. A 13.817.200 tick: 300 vivi,
+405.955 nascite naturali, 980 nascite forzate da recuperi dopo estinzione,
+406.715 morti (242.195 per energia, 156.778 per temperatura, 7.121
+abbattimenti NewGen, 621 per età). Esiste forte ricambio, ma anche collassi:
+la numerosità non è una popolazione stabilmente vicina al cap. L'andamento
+ricorrente 300→270 è imposto in parte da NewGen, non un equilibrio spontaneo.
+
+Negli ultimi 20.000 tick misurati della fase precedente (13.550.000–
+13.570.000), 4.052 movimenti riusciti su 510.850 tentativi (0,8%); negli
+ultimi 50.000 prima di quel punto, 32.323/1.825.601 (1,8%). Un censimento
+read-only dei 300 vivi a circa 13,64 milioni di tick ne trovava 246 senza
+alcuno spostamento nella propria vita, pur con 185 che avevano richiesto
+almeno un movimento. Occupavano x=42…95 e y=46…73, una piccola parte della
+mappa. In un secondo censimento 102 dei 250 individui mai mossi non avevano
+alcuna delle otto celle adiacenti libera; la mediana di celle adiacenti libere
+era una. L'occupazione locale spiega una parte dei blocchi; pendenza e policy
+che scelgono una direzione sfavorevole contribuiscono plausibilmente, senza
+una ripartizione causale completa dei fallimenti. Il calcio saturo rilevato
+dal campione era zero, quindi non spiega questa fase.
+
+La pressione selettiva non è assente: su tutta la run 89,5% degli agent-tick
+idonei alla riproduzione era bloccato dal cap e 95,4% dei tentativi processati
+falliva per mancanza di spazio adiacente. Questo favorisce la ritenzione degli
+insediamenti che già riproducono. NewGen ordina per numero di figli più
+0,01×energia e lascia i superstiti nella stessa cella: è un meccanismo
+compatibile con la persistenza di una nicchia immobile. La selezione può
+restare forte pur premiando uno stile di vita sedentario; questa è
+un'interpretazione dei meccanismi e dei dati, non una prova causale isolata.
+
+Le risorse globali a 13,8 milioni non sono esaurite (glucosio ~2,77 milioni,
+acqua ~6,83 milioni di unità nelle celle), ma il glucosio era ~4,98 milioni
+all'inizio e l'accesso locale può essere scarso. Il clima ruota di 0,009
+radianti ogni 1.000 tick: ciclo teorico ~698.000 tick. Fra 9 e 13,7 milioni,
+l'autocorrelazione a lag 698.000 di reward e distanza termica media è circa
+0,30 e 0,26; l'oscillazione climatica contribuisce ai pattern senza spiegarli
+interamente. Il segnale medio di apprendimento vicino a zero riflette anche
+la baseline adattiva: a 13,8 milioni media −0,0021, media assoluta 0,0045,
+deviazione standard 0,0058. Non indica rete spenta, ma la plasticità media
+proposta per connessione resta piccola (~9,2e−7) rispetto al decadimento
+(~2,1e−6). Aspettare altri cicli da solo non garantisce una strategia mobile:
+la run ha già attraversato circa venti cicli termici completi.
+
+## Stato corrente — cap dei Pop configurabile, 20 ottobre 2026
+
+`max_population_allowed` nell'INI determina il numero massimo di Pop vivi
+contemporaneamente (default 240; valore iniziale `population` non superiore al
+cap). La dashboard lo espone nella configurazione e riporta il valore effettivo
+nella telemetria `reproduction.capacity`; le modifiche si applicano al prossimo
+Start/Restart. Ammissione delle nascite, recupero da estinzione e caricamento
+dei checkpoint leggono lo stesso parametro. I checkpoint v4 preesistenti senza
+questa chiave usano il default 240; la firma storica v4 conserva il vecchio
+valore per compatibilità. La run già avviata prima della build resta legata al
+proprio binario e al suo cap finché non viene riavviata.
+Validazione: build `popx`, 14 regressioni C++ standalone e integrazione
+dashboard (2 test) PASS; lo schema e la validazione CLI espongono il default 240.
+
+## Stato corrente — Source fisiche e fronti di glucosio, 20 ottobre 2026
+
+Le Source sono ora occupanti reali della griglia, collidono con Pop, altre
+Source, barriere di calcio e pendenze non scalabili. Due istanze per default
+nascono in celle libere casuali; il cap dei Pop rimane indipendente. Il simbolo
+SFML è un rombo nero con bordo chiaro, di diametro leggermente maggiore dei Pop.
+Il movimento segue un heading continuo con curvatura casuale che cambia ogni
+6–18 passi; quando il passo fallisce, prova direzioni alternative casuali
+aggiornando anche la curvatura. L'intervallo di movimento passa da10 a40 tick.
+
+L'emissione di glucosio è indipendente dal movimento: default ogni40 tick,
+8 unità offerte a ciascuna delle otto celle adiacenti. Gli avanzi per capacità
+piena si propagano in larghezza nelle celle vicine finché trovano capacità;
+il deposito sotto la Source è escluso. Solo le unità effettivamente accettate
+entrano nel ledger. Il limite teorico interno resta 2×8×8/40=3.2 unità/tick;
+bordi e saturazione completa possono ridurlo. source_count,
+source_move_interval_ticks, source_glucose_interval_ticks e
+source_glucose_per_neighbor sono validati dall'INI. Il checkpoint
+popx_state_v4 conserva posizioni, heading, curvatura, fasi dei due orologi
+e stato RNG delle Source, oltre alle risorse e al ledger. Il modello v3 resta
+incompatibile e richiede il binario precedente.
+
+Validazione: build popx, 14 regressioni standalone C++, integrazione reale
+checkpoint/caricamento/rotazione e audit conservazione2000 tick PASS.
+La regressione Source verifica collisioni, movimento alternativo dopo blocco,
+identità grafica, flood al secondo anello e bilancio; il checkpoint verifica
+la continuazione delle fasi e dello stato RNG. Nella nuova run
+1792486016214411264-1794519221, campione13200 tick:41424 unità di glucosio
+accettate e residuo di tutti i sei materiali zero. Un checkpoint v4 della run
+reale contiene due Source in posizioni distinte, senza sovrapposizione ai Pop.
+La dashboard locale e il proxy LAN sono nuovamente attivi; lo storico della
+run v3 è conservato, così come un checkpoint manuale v3 e il suo binario in
+data_out/checkpoints/popx-model-v3-before-physical-source-backup. Le misure
+della run precedente appartengono al modello non occupante descritto nella
+sezione storica successiva.
+
+Osservazione preliminare della nuova run: a20000 tick i vivi erano4 dopo
+aver raggiunto il cap240; decessi cumulativi5406 per temperatura e963 per
+energia, glucosio globale ancora2.60 milioni e apporto Source62472 unità.
+A40000 tick i vivi erano1, con5471 decessi termici contro1027 energetici;
+l'apporto Source era124816 unità e il glucosio globale2.66 milioni. La
+finestra non sostiene una carenza globale di glucosio; un campo termico
+iniziale diverso e l'adattamento delle linee sono confondenti. Il paragone
+con la vecchia run non è un esperimento a condizioni iniziali identiche,
+quindi non attribuire il crollo alla nuova traiettoria delle Source. A76000
+tick i vivi erano2, l'apporto cumulativo238720 (3.14 unità/tick), il residuo
+materiale ancora zero, i decessi termici5593 contro1138 energetici. Per
+valutare causalmente il nuovo percorso andrà confrontato su uno stato iniziale
+condiviso; questa run da fondatori nuovi non lo consente.
+
+### Diagnosi del crollo e del recupero (lettura live fino a168000 tick)
+
+La nuova run è tornata al cap240 verso110000 tick e vi rimaneva al taglio
+168968. Ha accumulato260 nascite forzate:13 episodi di estinzione completa,
+ciascuno seguito da20 nuovi fondatori del recupero endless. Dopo il recupero
+intorno a104000 tick non risultano ulteriori fondatori forzati fino a168000;
+la fotosintesi cumulativa sale da2561 a100000 tick a2.70 milioni a165000.
+Anche la precedente run v3 era scesa fino a1 vivo verso110000 tick, dopo
+160 fondatori forzati, prima di tornare al cap240 verso130000: non era una
+popolazione continuamente stabile.
+
+Nella nuova run fra10000 e20000 tick:4667 nascite naturali,4903 morti,
+di cui4372 per temperatura;4279 di questi per freddo,93 per caldo. L'età
+mediana dei morti termici è4 tick;3115 sono morti entro10 tick. I figli
+nascono a25°C, ricevono1/8 dei lipidi/energia del genitore e, con pochi
+lipidi, scambiano calore rapidamente con l'ambiente. Quindi il dato è
+compatibile con un collo di bottiglia termico dei neonati, non con
+l'impossibilità generale di muoversi: nello stesso intervallo i movimenti
+riusciti aumentano di403825 su501438 tentativi (80.5%). Non c'erano
+abbattimenti NewGen in quella finestra.
+
+La nuova mappa casuale ha solo93/32400 celle con quota>=50 e temperatura
+iniziale20–47°C; la vecchia ne aveva568. È una proxy di habitat che
+consente fotosintesi senza caldo/freddo ambientale estremo, non una misura
+diretta di sopravvivenza. Nella nuova run solo12/1626 nascite dei primi10000
+tick erano a quota>=50, contro375/625 nella vecchia; solo4/1626 avevano
+anche almeno5 cloroplasti, contro367/625 nella vecchia. Fra10000 e20000
+le nascite a quota>=50 erano178/4667. La fotosintesi cumulativa a20000 tick
+era2313 nella nuova run contro912398 nella vecchia, mentre il glucosio
+globale della nuova mappa restava2.60 milioni e l'apporto delle Source era
+62472 unità. Fra100000 e130000 tick, dopo il recupero,1311/2480 nascite
+sono a quota>=50 e quasi tutti i figli hanno almeno5 cloroplasti: coincide
+con il ritorno della fotosintesi e della popolazione alta.
+
+La causa più sostenuta dai dati è quindi l'interazione fra configurazione
+spaziale casuale di quota/temperatura, espansione iniziale in zone basse,
+forte mortalità a freddo dei neonati e scarsa fotosintesi. La nuova
+distribuzione locale del glucosio delle due Source potrebbe influire sulla
+scelta degli habitat, ma non è isolata da questi dati: l'apporto totale è
+vicino a3.2 unità/tick e una comparazione causale richiede lo stesso mondo
+e la stessa popolazione iniziale. Il cap240 e i due occupanti Source non
+spiegano il crollo: le nascite e i movimenti proseguivano durante la crisi.
+
+### Rotazione termica: secondo collasso dopo un ciclo
+
+La temperatura è ricalcolata ogni1000 tick; ad ogni refresh i centri RBF
+ruotano di0.009 rad senza cambiare ampiezza o larghezza. Il periodo completo
+è circa698132 tick; a90 celle dal centro il centro di una campana si sposta
+circa0.81 celle per refresh. Quindi non è un salto spaziale grande a ogni
+tick, ma il clima attraversa in modo periodico configurazioni ecologiche
+molto diverse.
+
+Usando le RBF termiche del checkpoint v4 a22591 tick, ruotandone i centri
+secondo il codice e rivalutando le32400 celle con quota statica, le celle
+con quota>=50 e temperatura ambientale20–47°C sono93 a fase0 (conferma
+l'ambiente iniziale salvato),1417 a375000 tick e90 a700000 tick. Questa
+misura è una proxy del possibile habitat fotosintetico, non una previsione
+deterministica della sopravvivenza: risorse, corpi, movimento e geni contano.
+Il minimo ricorre quasi esattamente dopo un giro.
+
+La telemetria mostra240 vivi a660000 tick,50 a680000,54 a700000,1 a710000
+e750000, quindi240 a770000 e ancora240 oltre un milione. Fra690000 e710000
+si registrano4655 morti, di cui3808 per freddo e194 per caldo, età mediana
+dei morti5 tick; gli abbattimenti NewGen sono6. La fotosintesi cumulativa
+cresce di sole9158 reazioni fra690000 e710000, contro milioni nelle fasi
+favorevoli. Le nascite forzate cumulative passano da260 a320 entro760000:
+tre nuovi recuperi completi dopo l'estinzione. Il primo collasso era intorno
+a10000–20000 tick; la distanza fra i due è compatibile con il periodo
+climatico, pur senza attribuire a una sola variabile la causalità completa.
+
+Interpretazione: il clima mobile crea selezione durante le fasi favorevoli,
+ma i colli di bottiglia quasi totali e le estinzioni azzerano la continuità
+genealogica; molta mortalità neonatale non equivale ad apprendimento
+evolutivo. Ridurre la velocità da sola prolunga sia le fasi favorevoli sia
+quelle inospitali; per una selezione continua serve soprattutto che
+l'intersezione fra temperatura tollerabile, quota fotosintetica e accesso
+alle risorse non collassi a quasi zero. Un confronto sperimentale dovrebbe
+partire da uno stesso checkpoint, variare velocità e ampiezza del clima,
+ripetere più run (RNG produttivo non centralizzato) e misurare estinzioni,
+discendenza naturale e occupazione delle celle rifugio.
+
+## Stato corrente — fronte mobile di glucosio, 20 ottobre 2026
+
+Analisi rapida in sola lettura della run `1792468236105594011-4060155386` al
+taglio12253400, con INI modificato dall’utente: rete5 hidden×8, mappa180×180,
+`GlucoseRegenInterval=10000` nel binario precedente, ottimo termico36°C,
+soglia fotosintesi5 e cap240. Gli ultimi100000 tick:3097 nascite naturali,
+3117 morti,42 abbattimenti;858788 tentativi di movimento,394858 successi
+(45.97%). Nell’ultimo milione:18831 nascite,19031 morti;22419388 tentativi,
+975791 successi (4.35%);93.28% dei tick individuali di idoneità riproduttiva
+bloccati dal cap. Tutti i240 vivi ispezionati non avevano percorso distanza,
+235 non avevano tentato il movimento,240 erano fotosinteticamente capaci.
+Fra i morti nell’ultimo milione,48.13% aveva percorso almeno una cella e76.81%
+non aveva figli. Il contrasto vivi/morti è selezione del campione: osservazione
+compatibile con una strategia stazionaria che sopravvive e si riproduce vicino
+alla temperatura mite, non prova causale che muoversi peggiori la fitness.
+Nella finestra100000 tick:2151 morti per energia e952 per temperatura su3145,
+con percentuale di movimento riuscito più alta che nel milione intero; medie
+lunghe nascondono periodi ecologici molto diversi. Plasticità proposta media
+4.63e-6, decadimento medio1.43e-5 negli ultimi100000 campioni ogni200 tick;
+rapporto0.324. La termica e la disponibilità locale restano fattori plausibili;
+non si è cambiato il reward o imposto un bonus al movimento.
+
+### Meccanica Source
+
+`Source` implementa `IAgent` come agente ambientale senza metabolismo,
+riproduzione o occupazione di una cella. Quattro istanze percorrono quattro
+quadranti con scansione a serpentina, un passo ogni10 tick, e depositano una
+unità di glucosio nelle otto celle adiacenti. Il deposito è limitato dalla
+capacità della cella e nel ledger compare solo la quantità accettata. I Pop
+possono occupare la posizione di una Source; la sua presenza non li blocca né
+viene contata nel cap. L’overlay SFML la disegna come cerchio giallo.
+La rigenerazione autonoma del glucosio nelle celle è rimossa; quella
+dell’ossigeno rimane. La dotazione iniziale di glucosio RBF resta la stessa.
+Su180×180, tetto di apporto4×8/10=3.2 unità/tick rispetto al valore atteso
+precedente180²/10000=3.24; il flusso effettivo può essere inferiore per celle
+piene o confini. Un quadrante90×90 viene percorso ogni81000 tick. La stessa
+quantità media, distribuita in impulsi spaziali, introduce occasioni di
+inseguire il fronte; la fotosintesi può comunque mantenere vantaggiosa
+l’immobilità. È una modifica ecologica sperimentale, non una garanzia di moto.
+
+Checkpoint modello `popx_state_v3`: salva posizione e fase delle quattro Source,
+insieme ai cumulativi di apporto. La baseline delle statistiche sottrae i
+cumulativi presenti all’avvio di una nuova run da checkpoint, mantenendo il
+residuo di materia pari a zero. Il binario precedente è conservato in
+`data_out/checkpoints/popx-model-v2-before-source-backup`, per poter leggere
+l’ultimo checkpoint della run precedente; v3 rifiuta v2 esplicitamente.
+La dashboard descrive il nuovo significato dell’apporto di glucosio.
+
+## Stato corrente — staticità, cicli termici e cap240, 19 ottobre 2026
+
+Analisi della run `1792425238763647807-3452666255`, taglio27312600 per
+apprendimento e27330600 per periodicità/genealogia. Script ripetibili:
+`analyze_learning_followup.py` e `analyze_periodic_run.py` in `scripts/`;
+risultati testuali in `data_out/audit/learning-periodic-current.txt`,
+`periodicity-current.txt` e `periodicity-historical.txt`. Letture vive su più
+tick: non costituiscono una fotografia simultanea. Lo script periodico supporta
+`--run`, `--cutoff`, `--db` per verifiche storiche senza API. Eventi ordinati
+per tick prima di ricostruire genealogie, perché l’ordine di inserimento può
+riflettere trasporto asincrono. La modalità storica conserva160 vivi ricostruiti.
+
+### Risultati e interpretazione
+
+Ultimo milione:2610 nascite naturali e morti,320 abbattimenti,1819 morti
+per energia,450 per età,21 per temperatura, nessun ripopolamento forzato.
+Cap pieno997010 tick su un milione;152207757/152649154 tick idonei bloccati
+(99.71%). Solo2610 dei5298 tentativi effettivi riescono;2688 senza spazio.
+Azioni idle48035675 su circa53.3 milioni (90%);1450423 tentativi di moto,
+43288 successi (2.98%). Ultimi5 milioni:13138 nascite;99.70% idoneità bloccata.
+I campioni decimati su multipli di10000 sovrarappresentano i cali NewGen:
+la media156.8 vivi di quel sottocampione non è la media temporale esatta.
+
+Campione vivo successivo:160/160 capaci di fotosintesi,160/160 con distanza
+cumulativa nulla,155 senza tentativi;6.55 vicini occupati in media su8,
+nessuna cella satura di calcio. Un campione poco precedente dava6.71 vicini.
+Quindi affollamento locale e scelta/fallback idle prevalgono; una densità globale
+bassa (160 su14400 celle) non rappresenta l’accessibilità dei vicini.
+Su2672 vite terminate nell’ultimo milione al secondo taglio,91.58% senza
+spostamenti,61.86% senza figli, età mediana18484.5 e media61183.5 tick.
+Tutti i vivi discendono da `pop_48` ai tagli22.33,26.33 e27.33 milioni.
+È fissazione della linea fondatrice, non identità dei genomi o prova di assenza
+di evoluzione. Mortalità e discendenza diseguale mantengono selezione attiva.
+La strategia sedentaria fotosintetica è compatibile con risorse accessibili
+senza locomozione, che invece costa energia anche se fallisce.
+
+Plasticità/decadimento medio3.08 nell’ultimo milione e2.18 negli ultimi5 milioni:
+la precedente prevalenza del decadimento non spiega da sola la staticità.
+Segnale medio−0.00000751 nell’ultimo milione, modulo individuale medio0.002868.
+Il primo resta vicino a zero per baseline e compensazione fra segni. Ispezione
+159 cervelli:62.45% pesi <=1.01/8192 (prima88.44%), zeri esatti0;96.30% delle
+hidden con ingressi ancora entro0.001 da0.5,75.77% delle uscite con ingressi.
+Pareggi esatti30.82%;146/159 ultima azione idle. Il fallback e le hidden deboli
+restano contributi possibili; non tutti gli idle sono fallback. Nessuna modifica
+alla policy o bonus al movimento introdotta in questo intervento.
+
+Termica: rotazione deterministica0.009 radianti ogni1000 tick, periodo teorico
+698131.7 tick (6981.3 secondi simulati). Su2500 campioni a passo2000 negli ultimi
+5 milioni: autocorrelazione a698000 tick0.925 per reward,0.945 per componente
+termica,0.948 per scarto termico; correlazione reward/componente termica0.989.
+Periodogramma grossolano dominante intorno350000 tick, oltre alla fondamentale
+intorno700000: armoniche compatibili con il campo a più campane e le trasformazioni
+simmetriche dello scarto termico. Non è prova di un ritmo neurale appreso.
+NewGen produce un secondo ritmo ogni50000 tick:160→144 al confine, ritorno160
+entro il campione successivo200 tick dopo. Il sottocampionamento della dashboard
+può modificare l’apparenza dei picchi; la periodicità termica è anche nei dati grezzi.
+Acqua totale5.75M al primo taglio,−431538 in5M tick, ma+51416 nell’ultimo milione:
+non dimostra un esaurimento imminente. Glucosio totale7.19M; i totali non provano
+che le risorse siano raggiungibili da ogni individuo.
+
+### Intervento autorizzato
+
+Cap aumentato160→240 in `src/common.h`, mantenendo invariati fondatori80,
+ambiente, costi, apprendimento e NewGen. Scelta sperimentale motivata dal blocco
+riproduttivo99.7%; non garantisce maggiore movimento né risolve l’affollamento
+locale. NewGen eliminerà24 individui al cap, sempre il10%, ogni50000 tick.
+Nuova run da fondatori indipendenti: confronto descrittivo, non esperimento
+causale appaiato; per attribuire effetti al cap servono repliche controllate.
+Storico precedente conservato. Checkpoint prima dell’arresto
+`2bf11c30d30f4322a0d810b18c4f046d`; binario cap160 conservato accanto ai checkpoint
+come `popx-model-v2-cap160-backup`, perché il cap entra nella firma di compatibilità.
+Limite dello storico10GB e rotazione automatica invariati.
+
+Verifica finale:14 regressioni standalone C++ (inclusa Source) PASS.
+Dopo la correzione della baseline degli apporti, rieseguite le regressioni di
+statistiche/checkpoint/Source e l’integrazione reale checkpoint: PASS.
+Audit di conservazione in `/tmp/popx-source-pilot-2.sqlite`:2000 tick,
+183 vivi, residuo dei sei materiali tutto zero,6006 unità di glucosio accettate.
+Primo tentativo di audit fallito al tick0 per l’ottimo termico37°C codificato
+nella fixture mentre l’INI usa36°C; fixture corretta a leggere l’INI.
+Prima integrazione checkpoint fallita per il cumulativo di apporto restaurato
+sottratto senza baseline di nuova run; corretta e verificata a residuo zero.
+Lo snapshot `c83c28afb7424692adceed2a125c1b57` conserva lo stato completo
+prima dell’arresto. Storico SQLite precedente (~4.45GB) eliminato dopo la
+chiusura dei processi; catalogo e file checkpoint preservati.
+Nuova run `1792484602640242177-3973666402` da fondatori, mappa180, rete5×8,
+GUI attiva, velocità2, dashboard8000 e proxy LAN8080. Al tick5200:240 vivi,
+16034 unità di glucosio Source accettate, residuo di tutti i materiali zero,
+receiver_errors0 e nessun messaggio perso. Limite DB10GB invariato.
+
+Build Release esplicita. Pilot isolato2000 tick:240 vivi e conservazione PASS,
+SQLite `/tmp/popx-cap240-pilot.sqlite`. La fixture riproduttiva è stata ampliata
+a40×40: con240 agenti la vecchia disposizione20×20 collideva con la cella del
+parent diagnostico. Nessuna dotazione o regola della fixture trasferita in produzione.
+
+Verifica finale: tutte le13 regressioni standalone e integrazione checkpoint PASS.
+Nuova run `1792440609541561133-2405984528`, tick20048, vivi240, cap240,
+turbo headless, dashboard8000 e LAN8080 operative, errori ricevitore0.
+Storico della run precedente presente; nessuna cancellazione effettuata.
+
+## Stato corrente — correzioni di apprendimento e ammissione, 19 ottobre 2026
+
+Interventi autorizzati dall’utente, con arresto, cancellazione dello storico e nuova
+run da fondatori. Prima dell’arresto salvato il checkpoint completo
+`63c77da24d9645debbf3dacbda156584` della run precedente; catalogo e file preservati.
+
+- Ammissione FIFO con cursore persistente dopo l’ultimo ammesso, riferito all’ID
+  del prossimo individuo; indice circolare di ripiego se quell’individuo muore.
+  Cap, idoneità e budget restano invariati. Cursore conservato nei checkpoint.
+  Ogni Pop espone tick idonei, tick bloccati dal cap, esclusioni dalla coda,
+  ammissioni e attesa idonea corrente/massima, anche negli eventi di morte.
+  L’attesa accumula solo tick idonei fuori coda fra ammissioni, include il cap
+  e può attraversare periodi di non idoneità: non è durata cronologica continua.
+- `learning_weight_decay` configurabile e validato [0, 0.01], default/INI0.00003.
+  Eredità dei pesi appresi preservata; nessuna nuova connessione creata dal learning.
+  Minimo asintotico del decadimento1/8192 invariato. La plasticità può attraversarlo
+  o invertire il segno. Learning rate0.06 e baseline0.01 invariati.
+- Trace decay0.97. Credito locale dell’uscita scelta = attività presinaptica ×
+  uscita × (1−uscita), con iniezione1−trace_decay³ e clamp della traccia±0.25.
+  La derivata sigmoid rimane sensibile intorno a0.5; attività presinaptica nulla
+  e saturazione possono ancora ridurre il credito. Le hidden mantengono il
+  prodotto centrato precedente: è un’approssimazione locale, non backpropagation
+  né una stima non distorta del gradiente della policy argmax. Segnale nullo
+  produce plasticità nulla; segni opposti producono cambiamenti opposti.
+- Reward termico0.2 × (2 × 2^−((T−ottimo)/intervallo)² −1), stessa curva del
+  rendimento respiratorio. Continuo oltre la vecchia soglia; pesi dei componenti
+  e baseline invariati. Descrizioni dashboard aggiornate. Nessun premio al moto.
+- Cap mantenuto160: il confronto160/240 resta un esperimento successivo alla
+  verifica della nuova ammissione nella run naturale. Questo intervento non
+  dimostra ancora un vantaggio adattivo né ottimalità dei parametri scelti.
+- Checkpoint modello `popx_state_v2`, metadati run `learning_v9`. Salvataggi del
+  vecchio modello rifiutati esplicitamente; i file conservati richiedono il
+  precedente modello. Nuovi checkpoint preservano anche i contatori individuali.
+  Il limite dello storico resta10GB con checkpoint e rotazione automatica.
+
+Nuova run `1792425238763647807-3452666255`, avviata da80 fondatori, turbo headless.
+Verifica al tick21904:160 vivi, storico con una sola run, receiver_errors0,
+nessun messaggio perso/in coda. Dashboard8000 e proxy LAN8080 rispondono.
+SQLite ricreato (circa7.8MB alla verifica); catalogo checkpoint conservato.
+
+### Verifiche della modifica
+
+Build Release target esplicito `popx`. Tutte le13 regressioni standalone passate
+(non CTest); dopo l’aggiornamento delle asserzioni neurali rieseguite le ultime5.
+Dashboard2, genealogia6, servizio checkpoint2 e integrazione checkpoint1: PASS.
+La fixture dashboard ora sovrascrive le directory temporanee in fondo all’INI,
+per isolare anche configurazioni contenenti percorsi assoluti da checkpoint.
+Confronto deterministico sulla stessa rete senza reward,20000 aggiornamenti:
+1e-4 → peso0.135427;3e-5 →0.548862;1e-5 →0.818752, da peso iniziale1.
+Scelto il valore intermedio come primo esperimento conservativo. Tracce dopo30
+aggiornamenti:0.9 →4.2391%;0.97 →40.1007%. Fixture di ammissione persistente:
+159 candidati, FIFO64, servizio3,1000 cicli: tutti159 serviti (prima64).
+La fixture isola l’ammissione: non simula successo riproduttivo o selezione.
+Test coprono credito positivo/negativo vicino a0.5, neutralità a reward0,
+uscite non scelte, termica oltre banda, eredità e reset. Vecchie asserzioni
+sul decadimento e sul credito sono state aggiornate ai parametri configurati.
+Pilot isolato `scripts/run_audit.sh /tmp/popx-learning-pilot-20261019.sqlite 2000`:
+PASS conservazione,2000 tick,160 vivi, stop per budget diagnostico.
+Integrazione checkpoint reale: PASS salvataggio/caricamento, configurazione
+bloccata, rifiuto corruzione e rotazione automatica. Nessun replay globale
+riproducibile promesso: RNG produttive restano non centralizzate.
+
+## Valutazione corrente — apprendimento e ammissione riproduttiva, 19 ottobre 2026
+
+Analisi in sola lettura della run `1792397944484202031-3575920632` durante
+l'esecuzione: prima lettura al tick23481200, seconda al tick41941400. Nessuna
+modifica al modello, INI o processo; nessuna pausa o ripartenza. Riferimento
+Git `f6b6fbd042a3cc17eb8da59002ea15cab54e0bcd` con modifiche locali già presenti.
+Protocollo ripetibile: `scripts/analyze_learning_followup.py`; risultati testuali
+in `data_out/audit/learning-second-20261019.txt` e
+`data_out/audit/learning-followup-latest-20261019.txt`. Campioni storici di
+100 punti nell'ultimo milione e500 negli ultimi5 milioni, a passo10000 tick;
+finestre brevi di100 campioni consecutivi per confronto. Le differenze dei
+contatori usano invece gli estremi esatti delle finestre, senza sottocampionamento.
+
+### Segnale medio e plasticità
+
+Al taglio41941400, ultimi5 milioni: segnale medio−0,000445; modulo individuale
+medio0,009080; deviazione standard tra individui media0,021041.
+In una lettura quasi contemporanea, taglio41938200 sulla stessa durata:
+quota media con |segnale|<1e-4 pari0,803%, quota positiva26,27%.
+Media temporale del modulo della media della popolazione0,001489.
+Ricompensa media−0,07055, baseline media−0,07012; la lieve differenza rispetto
+alla media dei segnali deriva anche dal fatto che la baseline telemetrica è
+quella già aggiornata, mentre il segnale usa quella precedente.
+
+`Scorer::observe` usa s=r−b e b'=b+0,01(r−b), con clamp del segnale.
+In regime stabile la baseline insegue la ricompensa e il segnale medio tende
+naturalmente a zero. In assenza di clamp, su una vita individuale la somma dei
+segnali è proporzionale alla variazione della baseline: non misura il beneficio
+adattivo cumulativo. La media dei vivi include anche ricambio e selezione di
+sopravvivenza. Non va forzata positiva per ottenere apprendimento.
+Esempio puntuale al tick41938383:51 Pop con segnale positivo medio+0,01190,
+109 negativo medio−0,003539; media complessiva+0,001380 e modulo medio0,006203.
+
+Plasticità/decadimento, rapporto dei moduli medi:10,57% negli ultimi5 milioni,
+14,00% nell'ultimo milione. Al precedente taglio23,48 milioni era circa7–8%.
+Non è una diminuzione monotona della plasticità a zero, ma permane la prevalenza
+del decadimento sulle modifiche proposte. La variabilità delle coorti e
+l'eredità dei pesi impediscono di interpretare il confronto come effetto causale
+della ricostruzione dell'ambiente.
+
+Ispezione154 dei160 Pop, tick41941461…41942228 (6 morti prima dell'ispezione;
+possibile selezione verso i sopravvissuti):7342 connessioni,88,44% al livello
+<=1,01/8192,1,17% esattamente nulle, mediana1/8192. Fra i soli neuroni con
+almeno una connessione entrante,98,32% delle hidden e97,90% delle uscite sono
+entro0,001 da0,5. La neutralità non dipende soltanto dalle unità scollegate.
+Margine mediano fra le due uscite maggiori1,45e-5; pareggio esatto nel2,6%
+dei cervelli ispezionati. Una rete debole può quindi scegliere azioni ripetute
+con argmax, senza ricadere sempre in DO_NOTHING.
+
+Campione completo dei vivi al tick41941443: modulo medio del peso0,01774
+sotto10000 tick d'età (n46),0,002215 fra10000 e50000 (n59),0,0001791
+fra50000 e100000 (n25),0,0001177 oltre100000 (n30). È una fotografia tra
+coorti, non una misura longitudinale del decadimento dello stesso individuo.
+Il codice dà però un meccanismo coerente: decadimento per tick1e-4,
+emivita dell'eccesso sul minimo circa6931 tick; traccia0,9, emivita6,58 tick.
+Tracce formate dal prodotto di attività centrate a0,5 diventano piccole quando
+le attività tendono a quel valore. Aumentare solo learning_rate moltiplicherebbe
+anche i rari picchi, lasciando intatto il problema della traccia quasi nulla.
+
+Ulteriore criticità del reward: nel campione al tick41938383 il53,1% dei Pop
+ha il termine termico fermo a−0,2. Il reward termico lineare si appiattisce a
+|T−37|>=10 °C: lì miglioramenti termici locali non cambiano quel componente,
+sebbene possano ancora cambiare indirettamente energia e altri componenti.
+
+### Ecologia, cap e nuova criticità della coda
+
+Ultimi5 milioni al taglio41941400:55073 nascite naturali e55073 morti,
+nessuna nascita forzata;44615 morti per energia,8488 per temperatura,
+1598 abbattimenti e372 per età. Cap:96,45% dell'idoneità agente×tick bloccata;
+88,08% dei461862 tentativi effettivi senza spazio. Successi di movimento
+43121418/197199458=21,87%. Il69,55% delle richieste di movimento è MOVE_RIGHT;
+la distanza percorsa non dimostra esplorazione utile (possibili cicli locali).
+Non c'è evidenza di arresto del ricambio né motivo di equiparare segnale medio
+nullo a pressione evolutiva nulla. Il cap impone un collo di bottiglia forte.
+
+L'acqua totale, circa1,74 milioni ora, è molto inferiore ai7,72 milioni iniziali
+ricostruiti, ma negli ultimi5 milioni varia di−42214, circa−2,4% della quantità
+all'inizio della finestra. Si osserva un regime meno ricco rispetto alla prima
+ripartenza, non un esaurimento rapido dimostrato. Il totale non misura la
+raggiungibilità locale per i Pop. Il confronto con la run precedente conserva
+il limite della migrazione parziale dell'ambiente.
+
+`collect_reproducer_candidates()` scansiona sempre `pops_` dall'inizio;
+con coda piena respinge gli ulteriori candidati. Il budget consuma pochi posti,
+che il giro successivo può riassegnare ai primi candidati già serviti.
+Fixture isolata `tools/popx_queue_admission_audit.cpp`, compilata contro gli
+oggetti Release attuali:159 candidati persistenti, coda64, consumo3 per ciclo,
+1000 cicli ->64 candidati distinti serviti,95 mai serviti. La fixture chiama
+l'ammissione produttiva ma sostituisce il servizio con estrazione senza nascite:
+dimostra la possibilità di starvation, non la sua quota nella run naturale.
+Un modello di ammissione con cursore rotante serve tutti159 nelle stesse
+condizioni. I contatori di scarto ripetuti non contano individui distinti.
+
+### Interventi da sperimentare, non applicati
+
+1. Ammissione riproduttiva equa: scansione con cursore persistente che riprenda
+   dopo l'ultimo ammesso; mantenere FIFO, idoneità, costi e cap. Registrare attesa
+   ed esclusioni per individuo. Conservare anche il cursore nei checkpoint.
+   Priorità alta perché elimina una selezione dovuta all'ordine dei contenitori.
+2. Rendere configurabile il decadimento e confrontare1e-4,3e-5,1e-5, lasciando
+   invariata l'eredità richiesta. Emivite6931,23105,69314 tick. Successivamente
+   valutare consolidamento di una componente ereditaria e decadimento della
+   sola componente plastica; modifica più invasiva, da distinguere nel protocollo.
+3. Confrontare trace_decay0,9 e0,97: emivite6,58 e22,76 tick; residuo dopo30 tick
+   4,24% e40,10%. Poi, separatamente, valutare credito all'azione selezionata
+   che non si annulli solo perché la sua uscita sigmoid è0,5. Non basta usare
+   indiscriminatamente attivazioni grezze, che introdurrebbero deriva positiva.
+4. Valutare un termine termico continuo, coerente con il rendimento fisiologico,
+   e misurare separatamente i componenti del segnale. Mantenere la baseline
+   adattiva; nessun bonus arbitrario a movimento o aggregazione.
+5. Solo dopo la correzione dell'ammissione, confrontare cap160 e240. Un cap
+   maggiore può spostare la limitazione verso risorse/spazio e ridurre tick/s;
+   non garantisce di eliminare il blocco o accelerare l'evoluzione per ora reale.
+
+Esperimenti separati dalla produzione, stessa distribuzione iniziale derivata
+da checkpoint con compatibilità esplicita dei parametri, una modifica alla
+volta, più repliche. Misurare sopravvivenza, discendenza a esposizione comparabile,
+fallimenti di movimento, pesi per fascia d'età, contributi plasticità/decadimento,
+attese riproduttive e costo CPU. Confronti iniziali della stessa rete con
+plasticità attiva/disattiva distinguerebbero cambiamenti dei pesi da beneficio
+adattivo; RNG non centralizzate impediscono di promettere traiettorie identiche.
+
+## Stato corrente — checkpoint, migrazione e rotazione a 10 GB, 19 ottobre 2026
+
+Implementati salvataggio e caricamento dalla dashboard, con nuova run senza
+recupero dello storico. Produzione riavviata in turbo headless: run
+`1792397944484202031-3575920632`, 160 Pop iniziali, configurazione bloccata,
+`database_limit_gb = 10`. Dashboard localhost8000 e accesso LAN8080 attivi.
+Nessun parametro di apprendimento modificato durante questa migrazione.
+
+### Analisi precedente alle modifiche
+
+Run originale `1792347273710687193-3678064490`, trovata già in pausa al
+tick55457267. Ultimi100 campioni, tick55437400…55457200:
+
+- Segnale medio +0,00006959; modulo medio0,009798; deviazione standard0,019421.
+  La media prossima a zero è compatibile con la baseline adattiva e la
+  compensazione dei segnali; non dimostra l'assenza di apprendimento.
+- Plasticità proposta media1,6446e-8, decadimento2,2023e-7: rapporto7,47%.
+  Il decadimento domina in questo intervallo. Non è un rapporto tra guadagno
+  adattivo e perdita: le quantità sono moduli medi delle variazioni proposte.
+- Ispezione dei160 Pop:7849 connessioni,87,62% con modulo <=1,01/8192;
+  mediana esattamente1/8192. Zeri esatti medi per Pop circa0,054%.
+  Fra le attivazioni ispezionate,99,64% delle hidden e99,26% delle uscite
+  distano meno di0,001 da0,5; la mediana della distanza è zero. Sono incluse
+  unità scollegate, e alcune attivazioni risalgono all'ultima fase think.
+  Poiché le tracce usano il prodotto delle attività centrate a0,5,
+  questa neutralità contribuisce meccanicamente a tracce e plasticità piccole.
+  È un punto critico da sperimentare, non prova di inefficacia adattiva globale.
+- Ultimo milione di tick:13079 nascite naturali e13079 morti, di cui318
+  abbattimenti NewGen,9650 per energia,3078 per temperatura,33 per età.
+  Il ricambio continua. Il cap blocca121321359/130290991=93,12%
+  dell'idoneità agente×tick;193554/206633=93,67% dei tentativi effettivi
+  fallisce per spazio locale. Successi di movimento5991714/28589599=20,96%.
+  Cap e spazio sono vincoli distinti; questi aggregati non quantificano da soli
+  la selezione tra ceppi o il beneficio causale del movimento.
+
+### Prima migrazione, parziale e autorizzata
+
+Il vecchio eseguibile esportava soltanto l'inspector individuale e l'ambiente
+iniziale: non aveva un checkpoint completo. Ptrace e lettura di `/proc/PID/mem`
+non erano consentiti dall'ambiente. L'utente ha autorizzato esplicitamente la
+migrazione parziale e la ricostruzione dei dati mancanti prima della sostituzione.
+
+Cattura coerente dei160 Pop allo stesso tick, in
+`data_out/checkpoints/legacy-1792347273710687193-3678064490-55457267.sqlite`
+(6086656 byte). Il convertitore `scripts/import_legacy_checkpoint.py` produce
+`migration-portable-55457267.popx`: conserva genomi di nascita, pesi e attività
+neurali, sensori, stato fisico esportabile, posizione, direzione, età,
+discendenza cumulativa e baseline; conserva il terreno originale. Risorse per
+cella, feromoni, campi termici, tracce di eleggibilità, credito respiratorio e
+FIFO non esportabili vengono ricostruiti. La config originale è incorporata,
+con limite10 GB richiesto e percorsi risolti. L'origine ricostruita resta nei
+metadati anche dei checkpoint completi successivi.
+
+### Checkpoint ordinari
+
+`src/checkpoint.h` codifica lo stato in CBOR, con versione/modello, costanti,
+controllo d'integrità e scrittura temporanea, fsync e rename. Il salvataggio
+avviene sul thread della simulazione fra tick completi. Si conservano:
+
+- tutte le risorse delle celle, compreso azoto; temperatura, elevazione,
+  feromoni e fasi di rigenerazione; RBF e contatori ambientali;
+- genoma originale, matrici neurali sparse con pesi float attuali, attivazioni,
+  tracce di eleggibilità, geni silenti/scartati, baseline dello scorer;
+- stato fisiologico e costi pendenti, credito respiratorio, posizione e
+  direzione, età, fasi, sensori, caratteristiche individuali e RNG dei Pop;
+- ordine dei Pop e dei bucket, FIFO riproduttiva, contatore NewGen,
+  identificativi e configurazione INI incorporata.
+
+La ripartenza crea un nuovo run_id e tick0, conserva l'età biologica e il tempo
+ambientale. I bilanci sottraggono i flussi già presenti al caricamento. I contatori
+individuali conservati sono stato di dimensione fissa; campioni/eventi delle run
+precedenti non sono necessari. Le genealogie marcano l'ingresso da checkpoint,
+considerano l'età iniziale e l'ingresso ritardato nella curva di sopravvivenza.
+Gli antenati fuori dalla snapshot non costituiscono lacune telemetriche della
+nuova run. RNG locali conservate; `rand` e generatori transitori delle nuove
+nascite restano non centralizzati: non si promette replay futuro deterministico.
+
+Dashboard: «Salva checkpoint», selezione e «Carica checkpoint». Caricamento
+verificato prima di sostituire la run; INI sovrascritto e configurazione bloccata
+via UI/API, Start/Restart ordinari bloccati per le run da checkpoint. Per
+riavviare da CLI: `scripts/run_popx.sh --headless --checkpoint PATH`;
+parte in pausa. Il caricamento manuale dalla dashboard riprende automaticamente.
+Il caricamento manuale conserva gli storici di altre run, salvo raggiungimento
+del cap; la nuova run inizia con il solo campione iniziale e i Pop importati.
+
+### Rotazione automatica e limiti operativi
+
+Soglia predefinita10 GB decimali, SQLite+WAL+SHM, verifica ogni0,5 s.
+Al superamento: salva e verifica un checkpoint, sospende i tick, ricostruisce una
+nuova run in pausa, attende la telemetria iniziale, chiude i lettori genealogici,
+sostituisce il database con uno nuovo contenente solo la run ripristinata,
+quindi riprende. Tombstone minime impediscono ai pacchetti tardivi di ricreare
+la run rimossa. Il catalogo checkpoint è separato dallo storico e conserva un
+marcatore dell'operazione per ritentare dopo interruzioni.
+
+Se salvataggio/caricamento falliscono lo storico rimane; il simulatore viene
+lasciato in pausa e l'errore è visibile. La rotazione viene ritentata dopo30 s.
+Se il nuovo database iniziale supera già la soglia, rimane in pausa anziché
+ripartire in un ciclo incontrollato. Conservati gli ultimi due checkpoint
+automatici e tutti quelli manuali. I checkpoint esterni sono esclusi dal cap;
+la soglia campionata non è una quota filesystem e può essere superata durante
+il completamento dell'operazione. Nessuna compattazione del VHDX Windows.
+
+La prima rotazione reale ha recuperato lo storico da circa10,7 GB, lasciando
+circa10 MB subito dopo la ripresa; poi il database ricomincia a crescere.
+Checkpoint completo iniziale automatico: `431cb01365b04d148246dbb42ef9e942`;
+salvataggio manuale verificato sulla nuova run: `e408213059264191bc455eac351bff79`.
+Dimensione del primo file completo4731322 byte.
+
+### Validazione eseguita
+
+- Build Release target esplicito `popx`;12 regressioni C++ preesistenti passate
+  (`/tmp/popx-checkpoint-regressions.log`). Nuova regressione C++ checkpoint:
+  confronto dei dati ripristinati in30 fasi successive, continuazione ambiente,
+  round-trip su file e rifiuto della corruzione; passata separatamente e aggiunta
+  a `scripts/run_regressions.sh`.
+- `checkpoint_integration.py`: simulatore e backend reali su DB temporaneo;
+  salvataggio/caricamento, file alterato rifiutato, config bloccata, rotazione
+  causata da volume storico di prova, un'unica nuova run e recupero spazio.
+- `checkpoint_service_regression.py`:2 casi di errore, nessuna cancellazione
+  prima del caricamento verificato, pausa e marcatore persistente di recupero.
+- Passate regressioni Python dashboard(2), storage(3), limite/fallback(3),
+  evoluzione(6); JavaScript uscita, pagina genealogie e gestione spazio.
+- Prova separata del checkpoint parziale con tutti160 Pop: confronto esatto
+  dei campi esportabili e dei pesi, poi salvataggio completo e continuazione
+  per almeno1600 tick; residui materiali ed energetici zero.
+- Produzione: tick77000, residui materiali tutti zero ed energia0;
+  genealogie589 ingressi,429 morti,160 vivi, nessun genitore mancante inatteso,
+  duplicato o gap; integrità coerente. Config bloccata e LAN8080 HTTP200.
+
+## Stato precedente — accesso LAN senza riavvio, 18 ottobre 2026
+
+La produzione è nuovamente attiva per avvio dell'utente. Hotfix LAN applicata
+senza interrompere backend o simulatore: `dashboard.lan_proxy` ascolta su
+`0.0.0.0:8080` e inoltra HTTP/SSE al backend esistente `127.0.0.1:8000`.
+Nessun accesso al database o modifica al trasporto UDP. Avvio esplicito:
+`.venv/bin/python -m dashboard.lan_proxy --port 8080` (dopo il launcher).
+Il launcher ordinario rimane locale; riavviare anche questo comando nelle run
+future per riattivare l'accesso LAN. Il proxy termina quando cambia il PID del
+backend o dopo tre controlli di salute falliti; arrestarlo lascia intatta la run.
+Sono accettati Host IP privati/loopback e localhost; Origin deve corrispondere
+all'indirizzo richiesto. Header di inoltro del client eliminati. Nessuna
+autenticazione: i dispositivi ammessi alla porta hanno i controlli della dashboard.
+
+Validazione: due regressioni Python con upstream simulato (inoltro percorso,
+query, corpo e origine, rifiuto cross-origin/Host arbitrari, cambio PID).
+Verificati realmente HTTP200 per overview, pagine evoluzione/storage, JS,
+status e stream SSE via `172.18.0.2:8080`. Run invariata
+`1792347273710687193-3678064490`, backend PID836599, tick avanzati fino a8321272.
+Nessun comando mutante inviato alla produzione durante queste verifiche.
+
+Accesso dal telefono non verificabile da questo ambiente: l'indirizzo osservato
+è privato e può appartenere a una rete container dentro WSL. Windows deve poter
+raggiungere la porta prima di inoltrarla alla LAN. Lo script
+`scripts/enable_dashboard_lan.ps1 -TargetAddress <IPv4-raggiungibile-da-Windows>`
+verifica tale raggiungibilità, aggiunge un portproxy TCP8080 e una regola firewall
+per il solo profilo Private/LocalSubnet. Eseguire da PowerShell amministratore;
+script preparato ma non eseguito qui, perché Windows non è accessibile.
+In presenza di container serve anche la pubblicazione/inoltro della sua porta.
+Riferimento: https://learn.microsoft.com/en-us/windows/wsl/networking
+
+## Stato precedente — limite database, Esci e verifica genealogie, 18 ottobre 2026
+
+Produzione ferma su richiesta dell'utente. Il database
+`data_out/popx.sqlite` è stato eliminato integralmente dopo verifica dell'assenza
+dei processi:17649504256 byte rimossi; nessun WAL/SHM presente al momento della
+cancellazione. I test successivi usano database temporanei e non ricreano quello
+di produzione. Nessuna nuova run produttiva avviata.
+
+### Soglia di spazio
+
+Nuovo parametro INI/schema/configurazione dashboard `database_limit_gb = 50`,
+in GB decimali (1 GB =1000000000 byte), intervallo valido0,001…1000000.
+Il backend misura ogni0,5 secondi la somma delle dimensioni dei file
+SQLite+WAL+SHM, includendo tutte le run conservate e le pagine interne libere.
+Al raggiungimento della soglia richiede Stop al simulatore, che registra
+`storage_limit` come causa e salva il riepilogo finale. La dashboard mostra
+un avviso esplicito e la barra rispetto al cap. Start/Restart/Resume via API
+sono rifiutati se i file sono già al limite; Start/Restart leggono il nuovo
+valore dalla config, mentre la run in corso usa la propria configurazione.
+L'arresto viene ritentato in caso di mancata conferma.
+
+È una soglia campionata con arresto ordinato: coda già prodotta, latenza del
+comando e dati finali possono superare il valore. Non è una quota filesystem.
+Il controllo richiede il backend attivo, anche con browser chiuso; il launcher
+termina il simulatore se il backend termina. Errori di misura sono segnalati e
+ritentati, senza arresti automatici non associati a un superamento misurato.
+Snapshot esterni, database diagnostici e altri file non rientrano in questo cap.
+
+Verifica WSL: kernel `6.6.87.2-microsoft-standard-WSL2`, progetto su
+`/dev/sdd[/home/framorgi/dev/popx]`, ext4. Il filesystem risiede nel disco
+virtuale WSL2, che può crescere nel VHDX Windows. La capacità/libero riportata
+da Linux è virtuale e non certifica il libero sul volume Windows; interop
+Windows e percorso VHDX non sono esposti in questo ambiente. Il meter ora
+distingue questi valori esplicitamente. L'utente ha chiarito che è sufficiente
+il cap dei dati del database: nessun monitor del volume Windows implementato.
+Cancellare file Linux non garantisce il restringimento immediato del VHDX.
+Riferimenti ufficiali:
+[WSL disk space](https://learn.microsoft.com/en-us/windows/wsl/disk-space),
+[compact vdisk](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/compact-vdisk).
+Nessuna compattazione del VHDX o arresto dell'intera distribuzione effettuati.
+
+### Esci e genealogie
+
+Corretto il ciclo C++: dopo Esci interrompe l'elaborazione dei comandi e passa
+alla chiusura, senza eseguire ulteriori tick. Il riepilogo e la telemetria finale
+vengono scaricati prima dell'uscita. Il launcher chiude anche il backend.
+La pagina, alla conferma di Esci, azzera run selezionata, grafici, agenti,
+inspector, rete, eventi, diagnostici e configurazione mostrata; chiude SSE,
+ferma polling e widget spazio, annulla richieste pendenti e ignora risposte
+tardive. Lo storico SQLite resta salvato: pulizia dell'interfaccia e cancellazione
+dei dati sono azioni distinte.
+
+Verificato il grafo genealogico con la libreria Cytoscape effettiva in modalità
+headless: archi genitore→figlio, coordinate valide, clic sui nodi, dettaglio del
+ceppo, sovrapposizione della sopravvivenza e rimozione della selezione.
+Corrette risposte tardive dopo “Tutti” e confronti provenienti dalla run
+precedente; database vuoto mostra un messaggio esplicito. La chiusura del
+backend segnala la cancellazione al lettore genealogico e alle query SQLite,
+così un'analisi lunga non trattiene il processo durante Esci.
+
+Validazione:12 regressioni C++ standalone passate;4 test del limite, incluso
+simulatore reale con soglia1 MB e verifica del riepilogo `storage_limit`;
+2 integrazioni dashboard reali;3 regressioni di rimozione;6 genealogiche;
+test JS Esci con richieste/SSE tardivi, grafo con Cytoscape reale, meter,
+inspector e rete neurale. Smoke launcher con run attiva e SSE aperto: processi
+chiusi, causa finale `exit`, tick finale uguale al tick della conferma Esci.
+Tutti i processi delle fixture vengono chiusi e la produzione resta ferma.
+
+## Intervento v7 — genealogie, somiglianza e diagnosi dell'apprendimento, 18 ottobre 2026
+
+Modello `lineages_genetic_sensing_v7`, sulla base e sul working tree v6 descritti
+sotto. Eredità dei pesi appresi, ricompense, decadimento, mutazioni e fisiologia
+conservati. Il sensore GENETIC_SIM_FWD ora influenza realmente le decisioni:
+questo intervento cambia la dinamica e richiede una nuova run per il confronto.
+
+### Spazio e rimozione delle run — aggiornamento dashboard
+
+Pagina `/static/storage.html` e misuratore condiviso in panoramica e genealogie,
+aggiornato ogni15 secondi. Mostra capacità/spazio disponibile del filesystem,
+quota occupata o riservata, dimensioni database+WAL+SHM e pagine interamente
+riutilizzabili. Le pagine occupate includono indici e spazio parzialmente libero.
+La quota disco comprende gli altri programmi; i file esterni degli snapshot
+non sono compresi nella dimensione dei file SQLite. Lettura tramite stat,
+disk_usage e PRAGMA, senza scansioni periodiche dei payload.
+
+Rimozione selettiva tramite conferma della run: solo run concluse, sempre
+protetta quella collegata al simulatore. `DELETE /api/runs/{run}` richiede
+`confirm_run`, risponde202 e rende disponibile l'avanzamento; si rimuovono
+campioni, eventi, ambiente, diagnostici, lacune e riferimenti agli snapshot.
+Gli snapshot vengono cancellati solo se il percorso corrisponde esattamente
+al file generato nella directory della run e non attraversa symlink; file
+non riconosciuti restano sul disco e vengono conteggiati nella segnalazione.
+Directory vuote e registri tecnici di deduplicazione rimangono.
+
+Unico writer mantenuto: operazioni in blocchi di400 righe, commit e yield fra
+blocchi; nessun worker aggiuntivo scrive nel database. Intenzione e avanzamento
+persistono in `removed_runs`; un'interruzione riprende al riavvio. Il tombstone
+impedisce a telemetria tardiva di ricreare la run. Un'analisi genealogica ancora
+in corso blocca la rimozione; le cache completate vengono invalidate. Le run
+in rimozione spariscono dagli elenchi e le API storiche restituiscono410.
+
+La cancellazione libera pagine per nuove scritture; il file fisico SQLite può
+restare della stessa dimensione. Nessun VACUUM automatico durante la run.
+Per ridurre il file fisico serve una compattazione pianificata, con spazio
+temporaneo e sospensione delle scritture. Riferimento:
+[documentazione SQLite VACUUM](https://www.sqlite.org/lang_vacuum.html).
+Il misuratore rende visibile la distinzione tra spazio riutilizzabile interno
+e spazio disponibile nel filesystem.
+
+Priorità proposte per la riduzione dei dati (non ancora applicate):
+compressione lossless degli eventi (campione precedente43,85% dei byte
+originali), codifica compatta e deduplicazione dei genomi identici preservando
+ordine, endpoint uint32, encoding e pesi, aggregati dei campioni vecchi con
+grezzo archiviato dove necessario, archivi separati per run per poter restituire
+spazio eliminando un archivio completo. Nessuna deduplicazione basata sul solo
+colore o hash senza verifica del contenuto. Sottocampionare i campioni incide su
+circa17% del payload osservato, mentre la compressione degli eventi agisce
+sull'83%; risparmi reali complessivi da verificare includendo indici e costi CPU.
+
+Verifiche:3 test di rimozione su database temporanei (protezione, isolamento,
+conferma, origine HTTP, percorsi snapshot, eventi tardivi, ripresa e conflitto
+con lettore genealogico); test JS del meter, conferma annullata, selezione e
+avanzamento;5 regressioni genealogiche e2 integrazioni reali C++/UDP/HTTP passate.
+Nessun dato storico reale cancellato durante le verifiche. Riavvio con nuova
+run autorizzato esplicitamente dall'utente per attivare il backend aggiornato.
+
+Attivazione verificata: run precedente `1792328116532112618-1764166378`
+conclusa al tick485153, riepilogo salvato e coda telemetrica vuota. Nuova run
+`1792328943496482749-875090835`, turbo headless come al momento dello stop.
+Al tick36168: zero errori e messaggi persi; API spazio e tre asset della pagina
+rispondono correttamente. Conservate18 run, zero richieste di rimozione reali.
+File SQLite e scritture circa17,62 GB, spazio disponibile circa808,57 GB.
+
+
+### Genealogie e rappresentazione genetica
+
+Nuova pagina `/static/evolution.html`: composizione dei ceppi e delle famiglie,
+diversità effettiva, ricambio delle quote, esposizione idonea bloccata dal cap,
+dispersione della discendenza, età delle vite concluse e dei vivi, sopravvivenza
+Kaplan–Meier con censura a destra. Tabella ricercabile, ordinabile e paginata di
+ceppi presenti/estinti, albero esplorabile di antenati e rami figli, individui e
+confronto di due genomi alla nascita con tratti PHY separati. Selezionare un ceppo
+mostra anche la sua traiettoria temporale. Ogni grafico spiega calcolo,
+significato e interpretazione; le curve temporali conservano al massimo circa
+201 punti, la curva di sopravvivenza circa300 punti. Intervalli diversi producono
+valori di ricambio diversi; la curva di sopravvivenza combina coorti e ambienti.
+
+Il lettore usa solo SQLite in lettura, un worker, una vista in cache e un limite
+di un milione di individui per vista. La prima ricostruzione di una run lunga
+richiede tempo e RAM; l'aggiornamento è manuale e incrementale. Il limite produce
+un messaggio esplicito. Per storici oltre questo limite servirà un indice
+genealogico persistente, mantenuto dall'unico scrittore, oppure un'analisi per
+finestre con stato genealogico iniziale. Eventi e campione sono confrontati per
+vivi/nascite/morti, genitori mancanti, duplicati e lacune. Tutte le query di un
+aggiornamento usano una transazione di lettura WAL coerente: una prova con
+scritture concorrenti copre il salto di eventi scoperto durante la verifica.
+
+Definizione operativa: ogni fondatore/ripopolamento avvia una famiglia. Un figlio
+naturale mantiene il ceppo del genitore se la somiglianza rispetto al fondatore
+di quel ceppo raggiunge la soglia (default0,90), altrimenti apre un ramo. I ceppi
+dipendono dalla soglia e dalla genealogia; famiglie distinte possono essere
+geneticamente simili. L'abbattimento NewGen resta una causa distinta; le nascite
+forzate aprono famiglie e non incrementano la discendenza naturale del genitore.
+
+Somiglianza `endpoint_weight_v1`, condivisa da C++ e Python: multinsieme di geni
+ordinati per tipo/indice sorgente, tipo/indice destinazione e peso. Geni con gli
+stessi estremi si abbinano per ordine dei pesi; contributo
+`1 − abs(w1−w2)/65535`, spaiati0, normalizzazione per la lunghezza maggiore.
+Due genomi vuoti valgono1. Include duplicati, geni silenti, pesi zero e tutti i
+32 bit degli indici. È una misura del genotipo; PHY e stato neurale acquisito
+dell'adulto restano osservabili separatamente. Il sensore5 legge il vicino vivo
+nella cella adiacente lungo il segno dell'ultima direzione; vuoto/bordo vale0.
+Nessuna scrittura condivisa nelle fasi sense/think.
+
+Colore `projection_v1`: proiezione dell'intero multinsieme, con contributi degli
+estremi e dei pesi, normalizzata con sqrt(numero geni), limitata in RGB64…224.
+Invariante all'ordine e tendenzialmente stabile a piccole mutazioni. Collisioni
+cromatiche possibili: il confronto numerico resta la misura da usare. Firma
+FNV1a64 canonica con collisioni teoricamente possibili. Inspector e SFML usano lo
+stesso colore; snapshot v6 conservano il vecchio colore. Vettore condiviso C++/
+Python: firma `f390b98f0fc55cfc`, RGB `[106,130,89]`.
+
+### Diagnosi della run v6 e nuove misure
+
+Run osservata `1792312991763973395-2439725205`. Al taglio completo7514200:
+147272 individui,147112 vite concluse,160 vivi, contatori concordi e nessuna
+lacuna. Una famiglia fondatrice superstite,3 ceppi presenti alla soglia0,90 su
+13499 complessivi. Figli naturali delle vite concluse: media0,999, mediana0,
+deviazione standard4,037, massimo124. Età mediana627 tick; profondità344.
+Idoneità bloccata al cap79,27%. Il ricambio delle quote nei quattro intervalli
+finali vale circa0,397/0,600/0,469/0,037. La discendenza è diseguale e i rami
+continuano a sostituirsi anche dentro una famiglia; questi risultati non
+supportano l'ipotesi di molte linee persistenti con discendenza simile. Deriva,
+selezione ecologica e NewGen contribuiscono: i dati descrittivi non ne isolano
+le cause. Una media dei figli prossima a1 è compatibile col vincolo demografico.
+
+Ricalcolo completo con snapshot coerente al tick19315800:425037 individui,
+424877 vite concluse,160 vivi, contatori perfettamente concordi, nessun genitore
+mancante o lacuna. Dieci ceppi presenti su40075 alla soglia0,90, una famiglia
+superstite. Figli delle vite concluse: media0,9998, deviazione standard4,9765,
+mediana0, p90=1, massimo156; età mediana637 tick, profondità1079. Blocco al cap
+64,86% delle esposizioni idonee. Ricambio finale0,894/0,769/0,256 su intervalli
+di circa96600 tick (ultimo89200). La ricostruzione completa conferma forte
+disuguaglianza della discendenza e ricambio dei rami; l'effetto causale della
+selezione resta da separare dalla deriva e dagli abbattimenti.
+
+Snapshot individuali ai tick19280328/19282342/19284354 (160 vivi): segnale medio
+0,000840/0,002224/0,000644; modulo medio0,005763/0,007019/0,004842;
+deviazione standard0,01898/0,03036/0,01298. Solo1,875%/3,125%/1,875% dei vivi
+aveva |segnale|<0,0001. La media vicina a0 è quindi in parte compensazione;
+la baseline è progettata per centrare l'esperienza recente. Il segno medio
+non basta per diagnosticare efficacia dell'apprendimento o pressione evolutiva.
+
+Plasticità proposta inferita per individuo da `0,06 × |signal| × mean_abs_trace`,
+poi mediata sui vivi:5,77e-8/1,15e-8/1,27e-8 per connessione/aggiornamento.
+Variazione effettiva media dei pesi:3,51e-7/3,73e-7/4,42e-7. La plasticità è
+piccola anche in modulo; nel codice il decadimento riduce i pesi verso1/8192,
+le sigmoid possono avvicinarsi a0,5 e le tracce moltiplicano gli scostamenti da0,5.
+Questo è un meccanismo plausibile di indebolimento del credito, non una prova
+che l'apprendimento sia riuscito o inutile. Le tracce campionate nella storia
+oscillano: non c'è un azzeramento monotono universale. Il cumulativo della
+plasticità cresce ancora (circa6182 al tick19200000).
+
+Aggiunti `learning.mean_abs_signal`, `signal_std`, `positive_signal_fraction`,
+`near_zero_signal_fraction` (soglia1e-4), `mean_abs_plasticity`, `mean_abs_decay`.
+Plasticità e decadimento sono proposte prima dei limiti; `mean_abs_delta` misura
+la modifica effettiva. Curve separate e descrizioni complete nel catalogo;
+valori piccoli mostrati in notazione scientifica anziché arrotondati a0.
+Nessuna modifica opportunistica ai coefficienti di apprendimento.
+
+### Memoria e conservazione dello storico
+
+Misura durante la run: database17522995200 byte (17,52 GB,16,32 GiB), circa
+807 GB liberi. Sedici run conservate. La run corrente contiene circa2,634 GB
+di payload eventi e0,557 GB di campioni: gli eventi sono circa83% dei due
+payload. Si aggiungono indici, deduplicazione messaggi, ambienti e WAL. La
+crescita continua senza una retention automatica. I processi ordinari osservati
+usavano circa192 MiB (simulatore) e72 MiB (dashboard); la lettura genealogica
+può richiedere centinaia di MiB o più e ha il limite esplicito sopra descritto.
+Il lettore completo di425037 individui e40075 genomi di riferimento ha raggiunto
+circa1,3 GiB RSS; memoria disponibile dell'host circa10,7 GiB in quel momento.
+
+Finestra reale20,18 secondi con GUI a2×: allocazione circa1,62 GiB/giorno se
+quel ritmo persistesse. È una misura breve sensibile ai blocchi SQLite e ai
+riusi, non una previsione garantita. Il payload accumulato nei circa4 ore
+precedenti, in gran parte turbo, corrisponde a circa19 GB/giorno senza indici.
+Il turbo cambia molto l'orizzonte: con i ritmi misurati il rischio riguarda
+settimane/mesi più che pochi giorni; altre scritture sul disco riducono il margine.
+Script ripetibile: `scripts/analyze_learning_storage.py --interval 10`, sola
+lettura e output testuale, incluse distribuzioni individuali e spazio libero.
+
+Piano di retention, senza cancellazioni applicate allo storico:
+
+1. Conservare integralmente nascite, genomi, parentela, morti, cause, contatori
+   finali, configurazione, provenienza e lacune. Compressione senza perdita dei
+   payload e archivi SQLite per run/periodo con lettura trasparente: sui1000
+   eventi recenti, zlib6 per record produce il43,85% dei byte originali. È una
+   misura del payload campionato, non del risparmio dell'intero database.
+2. Conservare campioni200 tick recenti; per dati più vecchi creare aggregati a
+   più risoluzioni (esempio24 ore/7 giorni/oltre7 giorni), con count/min/max/
+   somma/somma dei quadrati, primo/ultimo tick e contatori cumulativi ai bordi.
+   Età della retention riferita al tempo reale di acquisizione, da registrare;
+   la risoluzione analitica resta espressa in tick. L'assegnazione temporale di
+   singoli picchi e le correlazioni nuove richiedono il grezzo archiviato.
+3. Verificare conteggi, integrità e lettura dell'archivio prima della rotazione;
+   lasciare il solo writer responsabile di migrazioni e compattazioni. DELETE
+   da solo libera pagine riutilizzabili, non riduce il file sul filesystem.
+   Compattazioni e backup richiedono spazio temporaneo e vanno pianificati.
+4. Per giorni/settimane di analisi genealogica, mantenere un indice persistente
+   compatto (individui, genomi deduplicati, riferimenti agli archivi) e query per
+   finestre. Un tetto di memoria del lettore e un sottocampionamento dei grafici
+   risolvono problemi diversi dalla conservazione degli eventi.
+
+Validazione v7:12 regressioni C++ standalone passate,5 test genealogici Python
+(incluso writer concorrente),2 test d'integrazione dashboard, regressioni JS
+inspector/rete e nuova pagina evolutiva. Pilot2000 tick in
+`/tmp/popx_v7_pilot.sqlite`: bilanci passati,160 vivi, `short_tick_budget`.
+I test deterministici verificano meccaniche e contabilità, non adattamento di
+lungo periodo. Nessuna esportazione statistica JSON aggiunta.
+
+Riavvio finale autorizzato: la run v6 è stata fermata al tick19367821, con
+riepilogo finale salvato, coda telemetrica svuotata e zero messaggi persi; chiusi
+simulatore, dashboard, launcher e lettore ausiliario precedenti. Nuova run
+`1792328116532112618-1764166378`, v7, GUI a2× e dashboard sulla porta8000;
+storico conservato (17 run). Verifica reale al tick3428: esecuzione attiva,
+zero errori/perdite, nuove metriche presenti, pagina evolutiva HTTP200 e
+conteggi genealogici concordi (306 individui,146 morti,160 vivi al taglio3400).
+Smoke launcher con SSE aperto passato; nessun vecchio processo residuo.
+
+## Intervento v6 — turbo, ricambio e apprendimento temporale, 18 ottobre 2026
+
+Modello `temporal_learning_local_mutation_v6`, base `f6b6fbd042a3cc17eb8da59002ea15cab54e0bcd`
+con working tree preesistente conservato. Implementati i quattro interventi
+approvati dall'utente; run `1792276517115838265-2272337452` fermata al tick457089
+e processi chiusi ordinatamente prima delle modifiche. Le verifiche successive
+usano processi e database isolati; la produzione resta ferma come richiesto.
+
+### Velocità e riproduzione
+
+`--speed 0` abilita turbo headless, senza attese dello scheduler tra tick:
+tempo biologico sempre10 ms/tick. CLI/launcher e comando dashboard accettano0/1/2.
+La dashboard alterna1×,2×,turbo; il turbo chiude la GUI, mentre un'apertura GUI
+riuscita torna a2×. Comandi controllati ogni batch di massimo8 tick. Il turbo
+attende10 ms quando la coda telemetrica raggiunge128 messaggi; nessuna riduzione
+del campionamento200 tick o degli eventi per nascondere carico/perdite.
+
+Cap aumentato da120 a160. La raccolta dei candidati conta separatamente
+`eligible_agent_ticks`, `cap_blocked_agent_ticks` e `cap_blocked_ticks`:
+sono esposizioni ripetute, non figli perduti. Al cap non si tentano nuovi
+accodamenti; i candidati già nella FIFO restano in attesa. Dopo i controlli
+di idoneità, un tentativo effettivo è classificato come nascita o assenza di
+spazio adiacente: `attempts = births + no_space`. Budget3 tentativi/tick,
+coda64, costi e dotazioni riproduttive conservati. Valutazione NewGen ora in
+`Scorer::selection`, formula invariata figli +0,01×energia. I fondatori non
+incrementano `reproduction.births`, che coincide con `counts.natural_births`.
+
+### Mutazione e scorer
+
+Mutazione completa del gene ancora1%, inclusi endpoint e peso; PHY ancora1%.
+Se un gene non è stato sostituito, probabilità configurabile5% di ritoccare
+solo il suo peso, di1…256 quanti con segno casuale (256/8192 =0,03125), con
+limiti int16. Anche i geni silenti restano presenti e possono mutare; nessun
+modulo sugli indici. I costruttori e le vecchie chiamate standalone a `mutated`
+mantengono la semantica precedente; la riproduzione produttiva passa esplicitamente
+`weight_mutation_rate` e `weight_mutation_step` dall'INI.
+
+`Scorer` è individuale, senza accesso al mondo. Centralizza ricompensa e
+componenti, baseline recente e selezione. Coefficienti ecologici effettivi
+espliciti: età0,10; energia0,30; variazione energetica0,35; discendenza0,05;
+temperatura0,20. Rimossi i vecchi coefficienti nominali di `common.h`, che
+erano limitati implicitamente nel calcolo. Primo segnale neutro; poi:
+
+`signal = clamp(reward − baseline_precedente, −1, 1)`
+
+`baseline += learning_baseline_rate × (reward − baseline)`
+
+Baseline aggiornata ogni tick, default0,01. È una media della ricompensa, non
+una funzione di valore appresa o una stima causale del contributo dell'azione.
+Nessun premio specifico per movimento, aggregazione o esplorazione.
+
+Il cervello registra le tracce solo in `act`, dopo la guardia di fase. Nuovo
+credito alle sinapsi dell'uscita scelta e alle coattivazioni hidden; le altre
+uscite conservano soltanto eventuali tracce precedenti. Per ogni azione:
+`trace += (1 − lambda³) × (pre−0,5) × (post−0,5)`, limitata a±0,25.
+Ogni aggiornamento applica `learning_rate × signal × trace`, il decadimento
+precedente e i limiti±4; poi `trace *= lambda`. Default rate0,06, lambda0,9
+(emivita circa6,6 tick). La normalizzazione considera un'azione ogni3 fasi.
+Il primo aggiornamento dei pesi segue la prima azione, non il primo think.
+Tracce, baseline e contatori sono azzerati alla nascita/ricablaggio appropriato;
+ereditarietà dei pesi appresi ancora true. La traccia hidden è una regola locale
+approssimata: nessuna garanzia di miglioramento comportamentale.
+
+### Telemetria e validazione
+
+Grafici dashboard per ricompensa, baseline, segnale e variazione assoluta dei
+pesi; grafici separati per risultati riproduttivi e attese al cap. Le componenti
+della ricompensa, tracce, moduli e frazione di zeri sono disponibili nel catalogo
+misure e nell'inspector grezzo. Medie istantanee dei vivi in `learning.*`;
+numero aggiornamenti e cambiamenti cumulativi anche dei morti in `totals.*`
+e negli eventi individuali. Un cambiamento dei pesi non dimostra apprendimento
+utile; un aumento delle nascite non dimostra maggiore adattamento.
+
+Parametri INI validati e disponibili nella configurazione dashboard:
+`weight_mutation_rate`, `weight_mutation_step`, `learning_rate`,
+`learning_trace_decay`, `learning_baseline_rate`. Nuovi valori applicati a
+Start/Restart. Intervallo termico1000 e correzione RBF della v5 conservati.
+
+Validazione eseguita:11 regressioni standalone (le10 esistenti e la nuova
+`learning_evolution`),2 test di integrazione dashboard, smoke del launcher
+con avvio turbo e SSE aperto, regressioni JS inspector/rete. La nuova fixture
+verifica baseline neutra a ricompensa costante, credito ritardato dopo azione,
+assenza di nuovo credito all'uscita non scelta, reset/non ereditarietà delle
+tracce, mutazione locale senza alterare endpoint uint32, contabilità cap/spazio/
+nascite (escludendo i fondatori) e permanenza dei contatori di apprendimento dopo
+la morte. Build esplicita e tutte le11 regressioni ripetute dopo l'ultima correzione
+dei contatori. Eseguibile SHA256
+`eb567002fbfe84d9cfd2335ed730607c8b87f78eb8e8bb946035eb73a52e8921`.
+Pilot finale2000 tick in `data_out/audit/v6_final_pilot.sqlite`: conservazione passata,
+160 vivi alla fine, stop `short_tick_budget`. Non è una prova di efficacia
+evolutiva o di apprendimento a lungo termine.
+
+Benchmark finito sulla stessa popolazione in evoluzione, in sequenza2×/turbo/2×,
+finestre di circa1,5 secondi:198,0 /1990,0 /199,1 tick/s; circa10× rispetto a2×.
+Nessuna perdita di messaggi o lacuna nella storia; coda vuota a ogni pausa.
+Run diagnostica `1792309137393682685-778329342`, conclusa al tick3833:
+80 fondatori,190 nascite naturali,110 morti,160 vivi;224 tentativi riproduttivi,
+34 fallimenti per spazio. Residui dei bilanci delle risorse e dell'energia pari
+a zero; contatori di apprendimento presenti e coorte istantanea pari ai160 vivi.
+Storia/provenienza e tempi in `data_out/audit/v6_headless_final/`
+(`history.sqlite`, `timings.csv`); protocollo `scripts/benchmark_headless.py`.
+Campione breve, popolazione/ecologia cambiano tra finestre: la velocità non è
+una garanzia per una run lunga o con altra popolazione. Tutti i processi di
+verifica vengono terminati; nessun riavvio automatico della produzione.
+
+Conservati gli artefatti preliminari `v6_pilot.sqlite` (109 vivi al tick2000)
+e `v6_headless_benchmark_2/` (197,5 /1917,7 /199,4 tick/s). In quella versione
+il nuovo contatore `reproduction.births` includeva erroneamente gli80 fondatori;
+`counts.natural_births` era corretto. Corretto l'incremento nello spawn iniziale,
+aggiunte regressione e verifica di uguaglianza nel benchmark; per la contabilità
+riproduttiva v6 usare gli artefatti finali sopra.
+
+### Analisi del margine turbo sulla run viva
+
+Osservazione in sola lettura della run `1792312991763973395-2439725205`, senza
+pausa né riavvio: tra i tick1260953 e1267713, speed0 headless,146→152 vivi,
+6760 tick in circa6 s (1126 tick/s). Il costo recente ricostruito dai contatori
+cumulativi è873 µs/tick: i tick occupano circa98,3% del tempo di parete della
+finestra. CPU del processo circa1,62 s per secondo reale; coda telemetrica0→1,
+messaggi persi0. Il dato dipende da popolazione, geni, ambiente e carico esterno;
+il benchmark breve precedente raggiungeva1990 tick/s. La run era ancora attiva
+alla fine dell'osservazione.
+
+Conclusione limitata: ridurre batch/comandi/attese del turbo difficilmente
+incide molto su questa run; serve diminuire il costo effettivo del tick. Candidati
+dal codice, **non profili misurati**: ogni tick aggiorna14.400 celle, ognuna con
+quattro feromoni in `std::map`, anche quando i valori sono zero; i sensori copiano
+mappe dei feromoni e `Brain::get_connected_sensors()` ricostruisce un vettore e
+scorre le matrici ad ogni sense; `Pop::learn` costruisce stringhe di debug a ogni
+aggiornamento anche col logger impostato a Error. Queste allocazioni e traversate
+sono priorità ragionevoli per prove isolate con verifica di equivalenza delle
+meccaniche e benchmark controllato. Aumentare `num_threads` alla cieca non elimina
+le fasi sequenziali di azione, fisiologia e mondo e può aggiungere overhead.
+
+### Hotfix delle spiegazioni della dashboard sulla stessa run
+
+Le234 definizioni in `dashboard/metrics.py` specificano calcolo, significato e
+interpretazione, con esempi per segno, intervalli, medie, contatori e residui.
+La pagina presenta tre paragrafi distinti nei riquadri «Significato delle misure»
+e nell'esploratore. Aggiornate anche le indicazioni di lettura di eventi,
+diagnostici, avatar, genoma e rete. Rimossi grafico, riepilogo e selezione
+calcio–movimento dalla dashboard; telemetria e storico restano disponibili.
+
+Per applicare i testi senza riavviare Python, `python -m dashboard.metrics`
+genera `dashboard/static/metrics.js`, contenente soltanto definizioni. La pagina
+usa questo catalogo prima dell'endpoint già caricato in memoria dal processo;
+`python -m dashboard.metrics --check` verifica l'allineamento con la fonte Python.
+Gli asset aggiornati hanno un identificatore di versione: ricaricare la pagina
+li applica alla run attiva senza inviare comandi al simulatore.
+
+Verificati sintassi JS, regressioni inspector/rete, copertura di tutti i campi
+numerici del campione reale e inizializzazione della pagina in DOM simulato:
+11 schede, tre parti per spiegazione, selezione della misura e rimozione della
+correlazione. Il server attivo serve i nuovi asset. Run
+`1792312991763973395-2439725205` ancora running al tick3784592, perdite
+telemetriche0; verifiche tramite sole letture HTTP e SQLite.
+
+## Intervento precedente — campane termiche senza deriva, 18 ottobre 2026
+
+Modello `reserve_regulated_water_calcium_neural_rbf_v5`, base `f6b6fbd042a3cc17eb8da59002ea15cab54e0bcd`
+con modifiche locali preesistenti conservate. Mantiene metabolismo, calcio,
+DO_NOTHING ed eredità della v4. Conservato `TemperatureRefreshInterval = 1000`
+scelto dall'utente:10 secondi simulati tra aggiornamenti, passo angolare0,009 radianti.
+
+`RandomUtility::rotate_rbf_set` incrementava le deviazioni standard a ogni
+aggiornamento: `sigma_x += 0,01*cos(delta)` e `sigma_y += 0,01*sin(delta)`.
+Anche tick0 aumentava sigma_x. Con delta0,009, ogni milione di tick e intervallo1000
+aggiungeva circa10 celle a sigma_x e0,09 a sigma_y, senza limite. Il refresh più
+frequente accelerava quindi una dilatazione artificiale delle zone calde.
+Rimossi questi incrementi: orbitano soltanto i centri, con larghezze e ampiezze
+originali costanti. Le ellissi restano allineate agli assi, come prima; non è
+una rotazione rigida dell'intero campo. Sovrapposizioni e bordi della mappa
+possono ancora cambiare la temperatura media locale/globale. Non viene imposta
+una distribuzione termica né una pressione selettiva artificiale.
+
+Validazione: la nuova regressione deterministica fallisce sul codice precedente;
+con la correzione100.000 rotazioni conservano larghezze, picchi, raggio delle
+orbite e profili locali. Verificati anche tick0, passo angolare, raggio0 e insieme
+vuoto. Nella fixture di10 campane su120×120 celle, dopo10.000 aggiornamenti,
+a identici centri e ampiezze, quota >=47 °C:41,05% con larghezze fisse e96,21%
+reintroducendo solo la vecchia dilatazione. È un confronto diagnostico, non una
+misura della run utente. La GUI satura già il rosso sopra40 °C: lo stesso colore
+non prova che le temperature siano uguali.
+
+Build del target esplicito `popx` e tutte le10 regressioni di
+`scripts/run_regressions.sh` passate. Pilot separato2000 tick: controlli di
+conservazione passati,120 vivi, conclusione `short_tick_budget`, risultato SQLite
+`data_out/audit/rbf_v5_pilot.sqlite`. Nessuna esportazione statistica JSON.
+Eseguibile SHA256 `3d57cbd7430f358e81e12d277b77115484733c1ef54dd16d85c280f09a260768`.
+La telemetria registra ora anche intervallo termico e variante RBF; il backend
+conserva commit, diff, INI e provenienza nella sessione SQLite.
+
+Riavvio richiesto completato: run precedente `1792242113105640881-731193789`
+chiusa con Stop al tick6873549, campione finale e riepilogo confermati in SQLite;
+34369 campioni storici conservati. Nuova run `1792276517115838265-2272337452`,
+launcher PID638156, backend638163, simulatore638165; verificata attiva a tick3438
+con120 vivi, GUI aperta e velocità2×, intervallo1000 e variante RBF corretti,
+nessuna perdita/gap di telemetria segnalati. Il riavvio genera un nuovo mondo;
+non riprende la popolazione precedente.
+
+## Intervento precedente — attesa e conservazione dei pesi, 17 ottobre 2026
+
+Modello `reserve_regulated_water_calcium_neural_v4`, intervento richiesto dopo
+l'identificazione di molti pesi esattamente nulli nella run lunga. Conserva le
+modifiche metaboliche e l'erosione del calcio della versione precedente.
+
+### Inspector aggiornato a caldo — 17 ottobre 2026
+
+Modifica dei soli asset web (`dashboard/static/inspector.js`, `inspector.css`,
+`index.html`, `app.js`), su base `f6b6fbd` con working tree già modificato.
+Nessun cambio a modello, INI, eseguibile o backend della run in corso.
+L'avatar usa il colore di `Genome::compute_genetic_color_value`, il nero per i
+morti e la geometria di `Renderer::update_entity`: triangolo verticale quando
+cloroplasti > mitocondri, altrimenti cerchio a11 segmenti. È un ingrandimento
+a scala fissa; non replica la pulsazione delle fasi sense/think. La bussola
+usa x positivo a est, y positivo a sud. La freccia normalizzata visualizza
+`last_direction`, segnalando la direzione iniziale casuale prima del primo
+movimento riuscito; non misura velocità e non ruota artificialmente la sagoma.
+
+Una barretta interattiva per ogni gene originale, nell'ordine del genoma,
+inclusi duplicati, zeri, silenti ed esclusi secondo `Brain::wire`. Anteprima
+al passaggio/focus e selezione persistente al clic/Invio. I dettagli separano
+peso int16, peso normalizzato, somma iniziale dei geni sullo stesso arco e
+peso appreso attuale. Il filtro del grafo neurale non filtra il genoma.
+Ordinamento crescente/decrescente per posizione originale, sorgente o destinazione
+(strato e indice numerici), peso genetico, modulo del peso e stato di cablaggio.
+Numerazione e selezione restano associate al gene originale; le parità conservano
+l'ordine originale. La preferenza resta attiva tra ispezioni nella stessa pagina.
+L'estensione è stata applicata a caldo sulla stessa run a tick3433929, backend
+PID522846 invariato: regressioni inspector/rete e verifica degli asset HTTP passate,
+inclusa la selezione dopo il riordino; nessun messaggio perso segnalato.
+
+Validazione: `node tests/inspector_regression.js`, `node tests/network_regression.js`
+e controllo sintassi JS passati. Controllati via HTTP gli asset aggiornati e
+un'ispezione manuale non persistita:413 geni,47 archi, liste silenti/escluse
+e insieme degli archi identici a quelli C++. Nessun browser grafico disponibile:
+verificati trasformazioni, handler DOM e servizio HTTP, non il layout renderizzato.
+Run `1792242113105640881-731193789` osservata da tick3299522 a3344505, stesso
+identificativo, backend PID522846, telemetria senza messaggi persi né gap segnalati.
+
+Per applicare questi asset basta ricaricare il browser. Lo storico SQLite
+sopravvive al riavvio del backend, ma `scripts/run_popx.sh` usa `wait -n` e
+cleanup congiunto: terminare Python termina anche il simulatore e non consente
+di proseguire lo stato vivo di quella run. Questo intervento non lo ha riavviato.
+
+### Decisione e attuatore DO_NOTHING
+
+L'indice21, prima riservato e già privo di effetti, diventa l'attuatore esplicito
+`DO_NOTHING`. L'INI passa da21 a22 uscite; gli indici precedenti restano invariati
+e `KILL_FORWARD22` richiede ancora23 uscite. Il dominio automatico dei geni segue
+le nuove dimensioni mediante `Genome::encoding_from_config`. Eredità appresa
+ancora true, mutazione0,01, nessuna modifica a metabolismo, cap o ricompense.
+
+Il decisore sceglie il massimo **unico** delle attivazioni. Uscite tutte0,5
+(rete vuota/nulla), tutte0 (saturazione), massimi esattamente pari o valori non
+finiti producono attesa; non viene più scelto implicitamente MOVE_FORWARD0.
+La parità è quella dei float effettivi, senza epsilon aggiuntivo che cancelli
+preferenze piccole ma distinguibili. Un massimo unico successivo a due massimi
+parziali pari viene scelto normalmente. Anche reti legacy con meno di22 uscite
+possono attendere come fallback, ma non hanno il corrispondente neurone selezionabile.
+
+L'attesa viene conteggiata in `actions[21]`, senza tentativi/costi di movimento;
+fisiologia, invecchiamento e condizioni di riproduzione proseguono normalmente.
+Il contatore aggrega scelta esplicita e fallback: da solo non prova una strategia
+evoluta di attesa. Schema configurazione, etichette NN e catalogo Python aggiornati.
+
+### Decadimento ed eredità
+
+Un limite elevato e rigido a tutti i pesi potrebbe imporre segnali artificiali
+e impedire alla plasticità di indebolire una connessione. È stato scelto invece
+il quanto minimo del genoma, `q = 1/8192 ≈ 0,0001220703125`, come limite del solo
+decadimento. La regola diventa:
+
+`decay_term = sign(w) × 0,0001 × max(0, |w| − q)`
+
+`w_nuovo = clamp(w + termine_hebbiano − decay_term, −4, 4)`
+
+Senza termine hebbiano il modulo tende a q senza attraversarlo. Pesi già inferiori
+a q non vengono gonfiati dal decadimento, zeri esatti non vengono attivati e il
+segno è preservato. La plasticità può ancora ridurre il modulo sotto q, annullare
+o invertire un peso: non è un divieto assoluto di dimenticare connessioni.
+
+Alla ricodifica ereditaria si arrotonda `w×8192` all'intero più vicino, mantenendo
+i limiti int16. Se un peso non nullo arrotonderebbe a0, si trasmette +1 o−1
+secondo il suo segno. Lo zero esatto resta0. Questo evita sia la cancellazione dei
+pesi sub-quanto sia l'erosione sistematica di un quanto a ogni nascita dovuta al
+troncamento. Resta una quantizzazione: un peso sub-quanto viene portato al minimo
+rappresentabile nel figlio, non conservato con precisione float. Geni silenti e
+scartati mantengono il percorso di copia precedente. Non si reinizializzano
+casualmente le connessioni né si riattivano automaticamente zeri già ereditati.
+
+Il controllo aggiuntivo degli eventi della run v2 ha ricostruito le connessioni
+cablate alla nascita, filtrando domini e vincoli feedforward e sommando geni
+duplicati sullo stesso arco:0/3.351 zeri negli80 fondatori;6.619/6.719 zeri nelle
+ultime120 nascite (tick18.577.321–18.704.944). Sono coorti diverse dal censimento
+live97,9%, ma confermano che l'accumulo è già presente nei genomi dei neonati e
+non proviene soltanto dalla visualizzazione dei pesi appresi.
+
+### Verifica
+
+Nuova regressione `neural_policy`: rete vuota e zeri espliciti, parità dei massimi,
+preferenza di un solo quanto, attuatore di attesa dominante, compatibilità21/1
+uscite, saturazione a0,200.000 aggiornamenti di decadimento su pesi positivi e
+negativi, zeri invariati, plasticità sotto il minimo e inversione di segno,
+100 ricodifiche ereditarie e attesa di Pop con metabolismo e guard di fase reali.
+La fixture del parallelismo ora usa un gene esplicito per MOVE_FORWARD: continua
+a verificare traiettorie con movimento invece di dipendere dal vecchio fallback.
+Il test dei domini configurati e l'integrazione dashboard controllano22 uscite.
+
+Esito: nove regressioni C++ passate; sonde di conservazione e pilot2.000 tick
+passati (120 vivi al termine del budget); quattro test Python di protocollo e
+integrazione passati. Verificati sintassi delle etichette/catalogo e diff.
+
+```sh
+bash scripts/run_regressions.sh
+bash scripts/run_audit.sh /tmp/popx_neural_v4_pilot.sqlite 2000
+.venv/bin/python -m unittest tests.dashboard_protocol tests.dashboard_integration
+```
+
+Il minimo protegge dalla cancellazione numerica, non garantisce sensibilità
+funzionale di ogni percorso multilivello o comportamenti adattivi. L'attesa
+elimina movimento artificiale: la sua introduzione può ridurre i tentativi
+osservati e non va interpretata automaticamente come regressione evolutiva.
+
+Run v3 `1792232706491281466-2902466650` archiviata con Stop al tick990.882,
+poi Exit e riavvio del launcher conservando GUI attiva e velocità corrente1×.
+Nuova run `1792238220943446053-2507469525`, binario SHA256
+`cde496c0262205168c3bd86404e0ad625127ec03134468e5727ae9a9157b102e`.
+Al controllo tick2.927: running,120 vivi, nessun errore del ricevitore. Campione
+2.800:7.464 azioni di attesa registrate,22.994 tentativi di movimento, residui
+di tutte le risorse e dell'energia nulli. Inspector live conferma22 uscite;
+catalogo Python espone la descrizione di DO_NOTHING. È una verifica di operatività,
+non una prova di maggiore adattamento a lungo termine.
+
+## Calcio, run lunga e dashboard — 17 ottobre 2026 (versione v3)
+
+Modello produttivo `reserve_regulated_water_calcium_v3`: conserva l'acqua metabolica
+e introduce erosione conservativa dei soli depositi saturi di carbonato. Analisi
+rapida della run v2 fino a18.680.000 tick, controllo live successivo e Stop/Exit
+esplicitamente richiesti dall'utente; la run è archiviata al tick18.705.028.
+La stabilità descritta negli audit precedenti vale per i rispettivi prefissi:
+**non è persistenza ininterrotta sull'intera run lunga**.
+
+### Evidenza della run precedente
+
+Run `1792138698673088289-2625920900`, binario SHA256
+`1c5fcdc06d464660d9aadf0e1e28da28bf4fa33deb77c8bd1abd4c99dd243bdc`, zero gap al
+cutoff18.680.000.120 vivi,108.242 nascite naturali,4.880 forzate,113.082 morti:
+87.130 energia,17.282 temperatura,4.734 età e3.936 esterne/NewGen. Primo recupero
+dopo estinzione al tick12.053.952;244 tick distinti di recupero,20 semi ciascuno.
+Tutte le nascite forzate hanno genitore vuoto. I120 vivi al cutoff discendono da
+`pop_6876115`, introdotto dall'ultimo recupero al tick18.210.815, profondità9–20.
+Questa è una linea recente, non la precedente linea `pop_36` ancora persistente.
+
+Glucosio nelle celle6.986.448/7.200.000 (97,03%); ossigeno13.661.696/14.400.000
+(94,87%); acqua mondo+vivi7.081.969/8.794.281 iniziali (80,53%). L'acqua era
+6.293.793 al tick12.000.000 e poi è risalita: non c'è esaurimento globale imminente
+dimostrato da questa serie. Restano possibili scarsità locali, costi termici e
+dipendenza dal cap; le estinzioni non sono attribuibili causalmente al solo calcio
+o alla sola acqua. Al tick18.000.000 si osservano2 vivi; la presenza successiva
+di120 individui non dimostra autosostentamento senza interventi.
+
+**Calcio confermato come problema strutturale.** Nel codice v2 una cella vuota
+con500 unità è impraticabile, non ha erosione/diffusione e non può essere scavata
+da un agente adiacente. Da20 celle sature iniziali si ricostruisce un minimo di
+2.682 celle permanentemente bloccate (18,625% della mappa): un residuo di calcio
+non restituito alla morte prova saturazione della cella. È un limite inferiore:
+i riempimenti esatti senza overflow non sono identificabili dagli eventi.
+Inferenza valida solo per v2, dove nessun processo svuota una cella satura vuota.
+Il totale di calcio diminuisce per gli overflow, mentre i blocchi possono crescere.
+
+Controllo live iniziato al tick18.698.578:120 agenti,80 senza distanza percorsa
+dalla nascita. Le destinazioni delle ultime azioni osservate si classificano in
+41 calcio confermato,47 occupante,26 pendenza,5 azione non deterministica/non di
+movimento e1 reattività non ricostruita. La pendenza è valutata prima dell'accesso
+alla cella come nel codice; solo azioni deterministiche senza incrementi di
+reattività sono attribuite. Le ispezioni sono sequenziali su una run in movimento:
+è un censimento delle destinazioni, non un conteggio storico delle cause dei
+tentativi falliti né un campione perfettamente simultaneo. Il calcio non spiega
+tutta l'immobilità. Il prelievo automatico di2 unità/tick dalla propria cella e
+il deposito alla morte favoriscono accumuli terminali; non abbiamo evidenza di
+costruzione strategica degli ostacoli. L'auto-prelievo contrasta anche il mantenimento
+di una saturazione ottenuta con LEAVE_CALCIUM mentre l'agente resta sulla cella.
+
+Reti ispezionate:6.571/6.712 connessioni con peso **esattamente zero** (97,90%);
+minimo modulo non nullo8,035e−15, massimo4. Lo snapshot esporta direttamente
+i float delle matrici: non è un arrotondamento Python. Nel codice il decadimento
+hebbiano è0,0001; la ricodifica ereditaria tronca `peso×8192` a int16, azzerando
+moduli sotto1/8192. Se le uscite sono tutte0,5, argmax favorisce l'azione0, avanti.
+Sono meccanismi compatibili con la ripetizione osservata, non una misura causale
+del contributo di ciascuno. Eredità appresa, apprendimento e scelta delle azioni
+rimangono quelli autorizzati; nessun premio al movimento è stato introdotto.
+
+### Intervento e nuove osservazioni
+
+- Ogni1.000 aggiornamenti ambientali, una cella a500 trasferisce1 unità a ciascuno
+  degli8 vicini validi con calcio inferiore a499: massimo8 unità per intervallo.
+  I destinatari restano sotto500, quindi l'erosione non sposta semplicemente il
+  blocco su un'altra cella. Il calcio totale è conservato, i cap rispettati;
+  nessuna modifica alle altre risorse o ricompense. Una cella può riaprirsi entro
+  il prossimo intervallo se c'è capacità locale; un'area interamente satura può
+  restare bloccata. È un modello astratto di redistribuzione, non una reazione chimica.
+- Stats registra `calcium_saturated_cells` e `calcium_distance_correlation`:
+  Pearson tra calcio medio nei vicini alla fine della finestra e distanza percorsa
+  nella finestra dagli stessi individui presenti ai due campioni. Sono esposti
+  numerosità, durata e medie; n<2 o varianza nulla produce `null`, non0. Nati/morti
+  nell'intervallo sono esclusi; età, pendenza, occupazione e censura restano possibili
+  confondenti. I campioni duplicati allo stesso tick non azzerano la finestra.
+- Corretta la contabilità dei semi di recupero: ingressi espliciti di materia ed
+  energia, separati dalle nascite naturali. Nella vecchia run i residui
+  `[488000,488000,0,0,97600,97600]` e488.000 di energia corrispondono esattamente
+  alle dotazioni di4.880 semi, non a materia prodotta dal ciclo metabolico. La
+  cronologia v2 è preservata; le descrizioni segnalano il limite storico.
+- Dashboard: tutte le6 risorse nelle celle più azoto (attualmente0 senza ciclo),
+  grafici separati per saturazione e correlazione, catalogo Python `/api/metrics`
+  con etichette italiane e definizioni. Copertura di tutte le188 misure numeriche
+  presenti nel campione v2 controllato. Dati mancanti/null diventano lacune, non
+  zeri inventati; la misura selezionata mostra definizione e ultimo valore.
+- Grafo NN: pesi piccoli in notazione scientifica, zeri esatti opzionali tratteggiati,
+  filtro inclusivo sul modulo con soglia validata, conteggio archi visibili, opzione
+  per nodi isolati. Spessore `max(0,4;6×|peso|/massimo_modulo)` px, scala stabile
+  rispetto all'intero snapshot durante il filtraggio. Cambiare run cancella
+  l'inspector precedente. Nessun peso della simulazione è modificato dal grafico.
+- Chiusura backend: limite di3 secondi all'attesa delle connessioni HTTP/SSE
+  durante lo shutdown. Il primo rilancio ha rilevato il vecchio backend ancora
+  proprietario della porta UDP dopo Exit: la run era già persistita e conclusa.
+  Il processo bloccato è stato terminato; una fixture con stream SSE aperto
+  verifica ora che Exit rilasci entrambi i processi del launcher.
+
+### Validazione e protocollo
+
+Build target `popx`; otto regressioni standalone passate, inclusa nuova fixture
+calcio (durata, conservazione, bordi, capacità, nessun nuovo blocco, Pearson inversa,
+varianza nulla, sostituzione campione e reset). Estesa la fixture del recupero per
+controllare ingressi e residui di materia/energia con campione iniziale esplicito.
+Sonde di conservazione e pilot2.000 tick passati; pilot concluso al budget con120
+vivi. Quattro test Python di protocollo/integrazione passati; controllo Node dei
+pesi nulli/minuscoli, soglie inclusive, spessori e grafo con Cytoscape vendorizzato
+passato. Sintassi JS/Python controllata. Nessuna suite CTest dichiarata, nessuna
+nuova dipendenza installata e nessuna prova evolutiva lunga del nuovo equilibrio:
+le fixture verificano meccanica e osservabilità, non garantiscono nuove strategie.
+
+```sh
+python3 scripts/analyze_calcium.py data_out/popx.sqlite \
+  --run 1792138698673088289-2625920900 --tick 18680000 --live
+bash scripts/run_regressions.sh
+bash scripts/run_audit.sh /tmp/popx_calcium_conservation.sqlite probes
+bash scripts/run_audit.sh /tmp/popx_calcium_pilot.sqlite 2000
+.venv/bin/python -m unittest tests.dashboard_protocol tests.dashboard_integration
+node tests/network_regression.js
+.venv/bin/python -m tests.launcher_smoke
+```
+
+Il protocollo d'analisi è limitato al modello v2; `--live` usa solo `agents` e
+`inspect`, senza salvare snapshot neurali. Rapporti testuali locali in
+`data_out/audit/calcium_18680000/{report,final,restart}.txt`; le letture live originali
+non sono ripetibili dopo Stop. Vecchia run archiviata con reason `stop`; rilancio
+del launcher sulla stessa configurazione/database, GUI e velocità2×. La nuova
+run registra modello, binario, commit+diff, sorgenti, INI e costanti attraverso
+la provenienza esistente; RNG globali non deterministici come prima.
+
+Rilancio verificato: run `1792232706491281466-2902466650`, binario SHA256
+`60d5c9d776b35e7fd3e43f2f9b388686cc3f631c2f5623d58c3d14ab43e6deda`. Al controllo
+tick3.833: running, GUI attiva, velocità2×,120 vivi, nessuna perdita di telemetria
+o errore del ricevitore. Campione3.800:2 celle sature, correlazione0,07235 su114
+individui nell'intervallo200 tick, residui delle6 risorse ed energia nulli.
+Tutte le199 misure numeriche/null definite presenti sono coperte dal catalogo.
+Questa verifica di avvio non è un confronto evolutivo causale con la mappa precedente.
+
+## Follow-up della stabilità — tick4.690.000, 16 ottobre 2026
+
+Seconda analisi della stessa run `1792138698673088289-2625920900`,
+`reserve_regulated_water_v2`, al cutoff4.690.000. Stessa configurazione/provenienza
+del precedente controllo227.800 (binario SHA256
+`1c5fcdc06d464660d9aadf0e1e28da28bf4fa33deb77c8bd1abd4c99dd243bdc`). Nessuna
+modifica produttiva o interruzione della run. Zero lacune registrate; conteggi
+nascite/morti/vivi ed età completate ricostruiti dagli eventi concordano con Stats.
+
+### Continuità, ricambio e perdita delle linee
+
+120 vivi,8.997 nascite naturali,0 forzate e0 recuperi dopo estinzione.
+8.957 decessi:4.786 energia,1.618 temperatura,1.437 vecchiaia,1.116 abbattimenti
+NewGen. Vita media conclusa61.416 tick; tra i nati naturalmente mediana15.154 e
+media61.763. Restano quindi mortalità e ricambio: la popolazione costante non è
+una popolazione di individui immortali. Il mantenimento naturale è osservato per
+oltre23 durate massime individuali, ma non è una garanzia di persistenza infinita.
+
+Delle11 radici rappresentate al tick227.800 rimane solo `pop_36`, già fondatore
+iniziale. L'ultima morte fuori da questa genealogia è al tick2.458.580: la linea
+persiste da sola per oltre2,23 milioni di tick. Profondità genealogica massima43;
+120 vivi alle profondità40:6,41:29,42:66,43:19. Al tick227.800 questa radice aveva
+solo3 vivi; a1.000.000 ne aveva51, a2.000.000 ne aveva66. I120 vivi hanno120 genomi
+di nascita distinti: radice comune non significa identità genetica o funzionale.
+La perdita di79 radici è osservata; selezione, deriva, FIFO e NewGen non sono
+isolati causalmente. Non si può concludere che la linea superstite sia l'ottimo.
+
+Cap120 in23.340/23.451 campioni (99,53%); coda64 e275.915.225 rifiuti cumulativi
+di accodamento (richieste ripetute, non figli distinti). Il cap limita le occasioni
+di riproduzione e la dimensione della popolazione non misura la capacità ecologica
+massima del mondo. NewGen contribuisce al ricambio e alla selezione artificiale.
+
+### Staticità misurata
+
+Prima lettura appaiata ai tick4.693.917–4.695.929:119 individui comuni,118 senza
+successi,110 con tentativi tutti falliti,8 senza tentativi.74.445 tentativi e1
+movimento riuscito. Tutti119 effettuano fotosintesi e sono idonei alla riproduzione
+alla fine della finestra;117 hanno15 cloroplasti e2 ne hanno16. Energia mediana99,21.
+Posizioni nel rettangolo x23–68,y14–31: nessuno è sul bordo del mondo120×120; il
+vicinato è spesso occupato (7 dei119 hanno tutti gli8 vicini rappresentati nel
+campione), ma non è sufficiente per attribuire tutti i fallimenti all'occupazione.
+
+Seconda misura indipendente ai tick4.715.799–4.716.804,120 individui appaiati:
+37.185 tentativi,0 successi;111 tentano senza riuscire,9 non tentano.35.845 tentativi
+sono `MOVE_FORWARD` (96,40%),670 `MOVE_LEFT`,335 `MOVE_EAST`,335 `MOVE_SOUTH`.
+Gli altri atti sono2.680 `LEAVE_GLUCOSE` e335 `GET_H2O`. Tutti120 fotosintetizzano,
+119 sono riproduttivamente idonei, energia mediana99,31;119 hanno15 cloroplasti.
+Il costo delle azioni fallite viene comunque pagato. Questi dati documentano
+ripetizione di un'azione inefficace, non soltanto una strategia deliberatamente
+sedentaria. Cause esatte dei fallimenti (occupante/pendenza/destinazione/altro)
+non sono registrate e restano da isolare; nessun snapshot neurale è stato richiesto.
+
+I movimenti riusciti per1000 agent-tick passano da6,12 nei primi227.800 tick a
+2,19 fra227.800–1.000.000,0,85 fra1–2 milioni,0,15 fra2–3 milioni,0,10 fra3–4
+milioni,0,64 fra4–4,69 milioni (quindi non monotoni). Nell'ultima finestra
+4.650.000–4.690.000:170 successi su1.486.156 tentativi. Esposizione ricavata dal
+costo basale/0,02, con l'approssimazione della costante float esplicitata nel
+protocollo precedente. Nessun aumento del movimento è un obiettivo implicito.
+
+### Risorse e interpretazione
+
+Al cutoff, **nelle sole celle**:7.112.612 glucosio su capacità7.200.000 (98,79%),
+14.155.728 ossigeno su14.400.000 (98,30%). Totali mondo+vivi: glucosio7.201.098,
+ossigeno14.301.366. La rigenerazione effettiva del glucosio rallenta molto dopo la
+saturazione iniziale:282.564 negli ultimi690.000 tick contro2.261.410 nei primi
+227.800. È una misura di spazio residuo/consumo, non l'intensità nominale di regen.
+Le concentrazioni globali non provano assenza di scarsità in ogni nicchia o figlio.
+
+Acqua mondo+vivi7.436.310 contro8.794.281 iniziali (84,56% residuo): riciclo molto
+più sostenibile ma **non acqua infinita o perfettamente stazionaria**. Bilancio:
+`8.794.281 + 81.731.157 respirazioni - 82.707.319 fotosintesi - 381.809 overflow
+= 7.436.310`. La fotosintesi netta trattiene equivalenti d'acqua nei prodotti del
+modello; overflow e trasformazioni aperte impediscono di dedurre un equilibrio
+indefinito. CO2 totale anch'essa in calo, da7.176.879 a5.554.130. Residui delle sei
+risorse nulli; residuo energetico5,47e−9 compatibile con precisione numerica.
+
+Conclusioni supportate: l'obiettivo di una linea che persiste e si rinnova senza
+nascite forzate è raggiunto sull'orizzonte osservato. Il regime è prevalentemente
+fotosintetico, residente e limitato dal cap, con ripetuti tentativi di movimento
+falliti. Auto-acquisizione e riciclo consentono sostentamento locale; assenza di
+costi specifici dei cloroplasti e di competizione per luce riduce i compromessi
+per la strategia fotosintetica. L'energia elevata nonostante azioni fallite sostiene
+l'ipotesi di debole vantaggio selettivo per navigazione efficiente, non prova assenza
+di selezione o adattamento causale. La dinamica genealogica mostra sostituzione
+delle linee; la funzione dei diversi genomi non è stata confrontata.
+
+Prima di nuove modifiche ecologiche, distinguere cause dei movimenti falliti e
+opportunità riproduttive effettivamente bloccate dal cap. Un confronto diagnostico
+su stessa mappa/genoma potrebbe misurare i vantaggi di navigare; questi interventi
+non sono stati eseguiti. Nessun premio al movimento o modifica di risorse/cap
+introdotti da questa analisi.
+
+### Protocollo e artefatti
+
+```sh
+python3 scripts/analyze_stability.py data_out/popx.sqlite \
+  --run 1792138698673088289-2625920900 --tick 4690000 \
+  --output data_out/audit/stability_followup_4690000
+python3 scripts/analyze_lineages.py data_out/popx.sqlite \
+  --run 1792138698673088289-2625920900 --tick 4690000
+```
+
+Le letture live originali usavano `--live-seconds 10` e poi5; il secondo rapporto
+è in `actions/`. Lo script ora registra anche delta per singola azione nel CSV.
+Rapporti, CSV, grafici, genealogie e controllo aggiuntivo `extra.txt` nella cartella
+indicata, ignorata da Git; nessuna esportazione JSON statistica. Le finestre live
+sono successive al cutoff e non riproducibili a posteriori. La verifica aggiuntiva
+raggruppa gli eventi per radice ereditata dal genitore e confronta i genomi dei vivi
+al cutoff; usa solo gli eventi già persistiti. Nessuna nuova simulazione o suite
+C++ eseguita per questa analisi in sola lettura del modello.
+
+## Osservazione della run con acqua metabolica — 16 ottobre 2026
+
+Analisi richiesta dall'utente della run attiva `1792138698673088289-2625920900`,
+modello `reserve_regulated_water_v2`, prefisso al tick227.800. Nessuna modifica dei
+parametri o comando di controllo; due letture `agents` sincronizzate sul thread
+principale, senza snapshot neurali, ai tick228.051 e230.058. Il processo è rimasto
+in esecuzione. Metadata: commit `f6b6fbd042a3cc17eb8da59002ea15cab54e0bcd` con diff
+registrato delle modifiche autorizzate, SHA256 binario
+`1c5fcdc06d464660d9aadf0e1e28da28bf4fa33deb77c8bd1abd4c99dd243bdc`.
+Nessuna differenza negli hash dei sorgenti registrati rispetto ai file correnti;
+nessuna lacuna di telemetria registrata. Configurazione effettiva nei metadata.
+
+### Stabilità demografica e risorse
+
+Al cutoff:120 vivi,483 nascite naturali,0 forzate,0 recuperi dopo estinzione,
+443 decessi (212 energia,126 temperatura,57 vecchiaia,48 NewGen). Tutti gli80
+fondatori originali sono morti; restano discendenti di11 radici genealogiche.
+Profondità massima4: vivi di profondità1:5,2:55,3:57,4:3. Il rinnovo naturale è
+quindi osservato oltre la durata massima individuale200.000, ma solo attraverso
+poche generazioni; non dimostra ancora stabilità indefinita o ottimizzazione.
+
+Confronto descrittivo allo **stesso tick227.800** con la precedente run
+`1792105551429747751-4236462813` (ambienti/genomi iniziali indipendenti, nessun
+accoppiamento RNG; più modifiche produttive intercorse):
+
+| Misura | Run precedente | Acqua metabolica |
+|---|---:|---:|
+|Vivi|120|120|
+|Nascite naturali|5.544|483|
+|Morti per energia|5.005|212|
+|Morti per temperatura|451|126|
+|Morti per vecchiaia|0|57|
+|Acqua totale iniziale|8.786.249|8.794.281|
+|Acqua totale finale|6.116.103|8.670.084|
+|Glucosio totale iniziale|3.767.191|3.814.060|
+|Glucosio totale finale|4.453.541|5.892.379|
+|Energia media dei vivi|50,33|97,49|
+
+La nuova run conserva98,59% dell'acqua iniziale e ha54,49% di glucosio totale in
+più rispetto all'inizio. Bilanci centrali delle sei risorse e dell'energia nulli.
+La coppia fotosintesi–respirazione mantiene in circolo l'acqua; la fotosintesi
+può fornire glucosio localmente. Quasi tutti gli agenti del campione breve sono
+fotosinteticamente attivi (118/119 individui presenti in entrambe le letture).
+Questo sostiene l'interpretazione di nicchie alimentate localmente, ma non misura
+la disponibilità delle risorse in ogni cella né isola causalmente l'effetto della
+sola acqua. La vecchia run non aveva ancora avuto forzature a questo stesso tick
+e manteneva anch'essa120 vivi: il numero dei vivi da solo non distingueva i modelli.
+
+### Movimento, riproduzione e pressione selettiva
+
+Nei2.007 tick fra le due letture dei vivi,119 individui sono presenti in entrambe
+(le nascite/morti non appaiate sono escluse dal confronto individuale):
+
+-116 senza alcun movimento riuscito;54 senza tentativi,62 con tentativi ma tutti
+  falliti. Solo3 si sono mossi;41.306 tentativi,1.340 successi (3,24%).
+-118 hanno effettuato fotosintesi;117 soddisfano alla lettura finale le condizioni
+  naturali di età, energia e glucosio. Energia mediana99,60, glucosio mediano827,
+  acqua mediana49; queste mediane non descrivono gli individui morti.
+-Il contatore dei tentativi conta le azioni di movimento eseguite; un fallimento
+  non distingue occupazione, confine, pendenza o altre condizioni. Senza telemetria
+  aggiuntiva non attribuire i62 casi bloccati a una causa specifica.
+
+Nella finestra200.000–227.800 la nuova run registra4,74 movimenti riusciti ogni1000
+agent-tick contro37,53 nella vecchia run allo stesso intervallo. Le esposizioni
+sono ricavate dal costo basale cumulativo/0,02 (approssimazione della costante
+float produttiva). Sono differenze descrittive fra run, non effetto causale stimato.
+
+Cap120 raggiunto in1.130/1.140 campioni (99,12%). Coda riproduttiva64 al cutoff;
+12.810.698 rifiuti di accodamento cumulativi: **tentativi ripetuti**, non altrettanti
+figli perduti o individui distinti. La mortalità ridotta libera pochi posti e quindi
+rallenta il ricambio genealogico: stabilità ecologica e velocità evolutiva sono
+misure diverse. NewGen continua a intervenire ogni50.000 tick e seleziona sul numero
+di figli e sull'energia, non sulla persistenza dei discendenti.
+
+Interpretazione: minore evidenza di stress energetico; maggiore limitazione delle
+opportunità riproduttive da spazio globale disponibile e FIFO. Non è dimostrata una
+riduzione universale della selezione. Il codice non assegna un costo specifico di
+mantenimento ai cloroplasti né competizione per la luce fra agenti: una nicchia
+fotosintetica favorevole può sostenere individui immobili. Molti movimenti falliti
+possono persistere quando il relativo costo è facilmente compensato. Non introdurre
+premi al movimento o scarsità artificiale come risposta a questa osservazione.
+Anche l'innalzamento del cap richiederebbe una prova separata: può ampliare il numero
+di posti, ma non garantisce ricambio continuo dopo una nuova saturazione.
+
+Protocollo ripetibile e artefatti:
+
+```sh
+python3 scripts/analyze_stability.py data_out/popx.sqlite \
+  --run 1792138698673088289-2625920900 --tick 227800 \
+  --baseline 1792105551429747751-4236462813 \
+  --output data_out/audit/stability_2026-10-16 \
+  > data_out/audit/stability_2026-10-16/report.txt
+python3 scripts/analyze_lineages.py data_out/popx.sqlite \
+  --run 1792138698673088289-2625920900 --tick 227800
+```
+
+L'esecuzione originale aggiungeva `--live-seconds 10` per il confronto dei vivi;
+quelle letture non sono riproducibili a posteriori. Conservate in
+`live_movement.csv` (identità, posizione finale, età, tratti, risorse, delta di
+movimento/reazioni/figli), con tick iniziale/finale nel rapporto. Grafico
+`comparison.png`, rapporto e verifica genealogica `lineages.txt` nella stessa
+cartella ignorata da Git. Nessuna esportazione JSON statistica. Conteggi genealogici
+verificati contro `Stats`; nessuna nuova simulazione o regressione C++ eseguita
+per questa analisi, che non modifica il modello.
+
+## Stato corrente — acqua metabolica, 16 ottobre 2026
+
+Implementata l'estensione autorizzata: ogni reazione respiratoria **effettivamente
+completata** produce una unità d'acqua, complementare alla fotosintesi nelle unità
+astratte1:1 già usate dal simulatore:
+
+- fotosintesi: CO2 + acqua → glucosio + O2;
+- respirazione: glucosio + O2 → CO2 + acqua, con energia/calore regolati come prima.
+
+Queste sono reazioni del modello, non equazioni molecolari reali. Nessuna risorsa
+H2/H+ né nuova reazione indipendente è stata introdotta. L'acqua prodotta viene
+ceduta alla cella fino alla sua capacità; la parte non accettata resta nella
+riserva dell'agente. `released[1]` registra solo la quantità effettivamente ceduta.
+La redistribuzione alla morte approvata in precedenza continua a gestire l'eccesso
+locale. Nessuna produzione per capacità non utilizzata, credito frazionario,
+scarsità di substrati, temperatura inibitoria o riserva energetica già soddisfatta.
+Nessuna modifica a rendimento, calore, soglie riproduttive, cap, eredità dei pesi
+appresi o tasso di mutazione.
+
+Il ledger centrale `Stats` e quello indipendente dell'audit usano ora
+`delta_acqua_metabolica = respirazioni_completate - fotosintesi_completate`.
+Il numero di unità d'acqua prodotte è quindi già disponibile nel contatore
+`respirations`, senza nuove esportazioni o contatori ridondanti. Le nuove sessioni
+produttive e diagnostiche sono identificate come `reserve_regulated_water_v2`;
+i dati storici `reserve_regulated_v1` conservano i propri bilanci originali.
+
+### Validazione dell'acqua metabolica
+
+Eseguiti build Release target `popx`, tutte le sette regressioni standalone,
+audit `probes` e pilot2000 tick:
+
+```sh
+bash scripts/run_regressions.sh
+bash scripts/run_audit.sh /tmp/popx_water_conservation_20261016.sqlite probes
+bash scripts/run_audit.sh /tmp/popx_water_pilot_20261016.sqlite 2000
+```
+
+La regressione respiratoria verifica ora anche: acqua prodotta per reazione,
+cella parzialmente piena/piena, conservazione nella riserva e conteggio delle
+sole cessioni accettate, target energetico raggiunto a metà batch, nessuna acqua
+senza glucosio/ossigeno o con respirazione inibita, credito frazionario e ciclo
+fotosintesi–respirazione senza rifornimenti. Il ciclo deterministico ripristina
+acqua e CO2 iniziali. La probe indipendente misura delta acqua+1 per respirazione
+e−1 per fotosintesi.
+
+Pilot concluso a2000 tick (`short_tick_budget`),120 vivi,126 nascite naturali e
+0 forzate. Respirazioni44.099, fotosintesi40.951, overflow acqua alla morte10.786:
+`9.957.836 + 44.099 - 40.951 - 10.786 = 9.950.198` unità d'acqua finali mondo+vivi.
+Residui inspiegati nulli per tutte le sei risorse e per l'energia, sia nel ledger
+indipendente sia in `Stats` (roundoff energetico contabilizzato). Output SQLite,
+provenienza e log in `data_out/audit/metabolic_water_2026-10-16/`, ignorati da Git.
+Il pilot non è accoppiato a quello precedente e non dimostra un miglioramento
+causale della stabilità evolutiva; le differenze di overflow tra pilot non sono
+un confronto della capacità di riciclo.
+
+La coppia di reazioni chiude il riciclo metabolico dell'acqua nelle unità del
+modello, non l'intero ecosistema: glucosio/ossigeno rigenerati e semi sono ingressi
+esterni; overflow rimane una perdita. La lacuna preesistente dei ledger sugli
+apporti dei semi, descritta nell'analisi della run lunga, non è stata modificata.
+La run lunga già avviata resta sul vecchio processo: il nuovo modello richiede
+un nuovo avvio dell'eseguibile, non soltanto Restart della run nella GUI.
+
+## Stato corrente — riproduzione naturale e recupero locale dell'acqua, 16 ottobre 2026
+
+Implementate le tre modifiche approvate dopo l'analisi della run lunga:
+
+- **Nessuna nascita forzata da individui vivi sotto20**. Raccolta candidati,
+  estrazione dalla FIFO e `try_reproduce` richiedono l'idoneità naturale attuale.
+  Restano età>1000, energia>50 e glucosio>20, costo dissipato e trasferimento1/8.
+  Un candidato diventato inidoneo mentre attende non produce figli né paga costi.
+- **Nessun moltiplicatore di mutazione sotto20**. Genoma e PHY usano sempre il
+  tasso configurato (INI0,01); l'ereditarietà dei pesi appresi resta true.
+- **Acqua restituita alla morte:** prima alla cella occupata, poi l'eccesso agli
+  otto vicini validi, in quote ripartite fra quelli con capacità disponibile.
+  Ripartizione ripetuta dopo la saturazione di un vicino; ordine iniziale ruotato
+  casualmente per non privilegiare una direzione nei resti interi. Non modifica
+  `MaxH2o`, dotazione iniziale o altre risorse. Solo le quantità accettate vengono
+  sottratte e registrate in `released[1]`; il residuo non collocabile rimane sink
+  esplicito del morto. Nessuna propagazione oltre il vicinato, nessuna diffusione
+  per tick. La morte resta idempotente e viene elaborata nelle fasi sequenziali.
+
+Il budget extra `forced_repro_priority_per_tick` rimane leggibile per compatibilità
+INI, ma è dichiarato inattivo nello schema. `MinPopulationAllowed=20` resta il
+numero obiettivo dei semi di recupero dopo **estinzione completa**, non un minimo
+mantenuto tramite riproduzione. Nelle run infinite questo recupero resta attivo,
+con `forced=true`, `recovery_seed=true` e genitore vuoto. Il flag legacy di recupero
+indica ora l'avvenuta reintroduzione fino al successivo aggiornamento; non abilita
+riproduzioni da superstiti. Cap120, durata massima200000 e NewGen invariati.
+
+### Validazione delle modifiche
+
+Eseguiti:
+
+```sh
+bash scripts/run_regressions.sh
+bash scripts/run_audit.sh /tmp/popx_conservation_20261016.sqlite probes
+bash scripts/run_audit.sh /tmp/popx_pilot_20261016.sqlite 2000
+build-release/src/popx --validate-config config/popx.ini
+```
+
+Build Release del solo target `popx` riuscita. Sette regressioni standalone
+riuscite (respirazione, ciclo, parallelismo, codifica, feromoni, stats/runtime,
+nuova `recovery`). La nuova fixture controlla separatamente maturità/energia/
+glucosio, candidati FIFO divenuti inidonei, nascita naturale sotto20, assenza di
+riscritture del tasso di mutazione, trasferimenti parent–figlio, restituzione acqua
+locale/vicini, capacità diverse, confini, mondo1×1, residui, ripartizione uniforme
+entro un'unità e doppia chiamata di morte. Le fixture impostano esplicitamente gli
+stati necessari; non rappresentano popolazioni evolute. La fixture di nascita
+nell'audit generale è stata resa esplicitamente naturale (età1001 e glucosio100),
+senza introdurre deroghe nella produzione.
+
+Audit `probes` passato. Pilot produttivo diagnostico2000 tick:133 nascite naturali,
+0 forzate,120 vivi finali, conclusione `short_tick_budget`; residui inspiegati nulli
+per le sei risorse e per l'energia dopo il roundoff contabilizzato. Overflow acqua
+residuo2707: la redistribuzione non garantisce capacità locale infinita. Protocollo,
+provenienza e risultati SQLite/log conservati in
+`data_out/audit/recovery_2026-10-16/` (ignorati da Git). Il pilot stocastico non è un
+confronto causale col vecchio modello e non dimostra ancora stabilità di un ceppo.
+
+La run lunga esistente non è stata fermata o riavviata. Continua sul vecchio
+eseguibile già caricato; il nuovo binario richiede un nuovo avvio del **processo**.
+Start/Restart dell'interfaccia ricrea la run nello stesso processo e non carica
+il codice appena compilato.
+
+### Estensione idrica discussa, non implementata
+
+Non è stato aggiunto idrogeno né acqua metabolica. La respirazione biologica
+produce acqua attraverso riduzione dell'ossigeno con elettroni e protoni; per
+modellare il ritorno d'acqua non è necessario simulare un serbatoio di H2 libero.
+Il modello PopX usa reazioni astratte1:1, non coefficienti molecolari bilanciati:
+una futura reazione complementare alla fotosintesi va definita nelle stesse unità
+oppure va ricalibrata insieme all'intera stechiometria. Richiede aggiornamento dei
+ledger e prove per reazioni effettivamente completate, riserve e capacità; non
+basta aggiungere acqua in presenza di ossigeno. Glucosio rigenerato, semi e overflow
+mantengono comunque aperto il sistema. Fonte biochimica consultata:
+[Mailloux2015, trasporto elettronico mitocondriale](https://pubmed.ncbi.nlm.nih.gov/25744690/).
+
+## Analisi della run lunga — 16 ottobre 2026
+
+Obiettivo: persistenza genealogica e rinnovo con nascite naturali, non identità
+immutabile del genoma o semplice permanenza del processo. Analisi osservazionale
+in sola lettura della run `1792105551429747751-4236462813`, prefisso concluso al
+tick **6.242.200**; processo lasciato in esecuzione, nessun Restart/Stop o comando
+all'inspector. Nessuna modifica a parametri INI, fisiologia o codice produttivo.
+
+### Evidenza e provenienza
+
+- Commit registrato `f6b6fbd042a3cc17eb8da59002ea15cab54e0bcd`, modello
+  `reserve_regulated_v1`, Clang18.1.3; diff produttivo registrato vuoto.
+- SHA256 binario `64cb6ca45bd70105a4973cdece6047758c456b1fd5dd7ef4633727ba34526c05`,
+  verificato uguale al binario locale. Hash sorgenti registrati confrontati con i
+  file presenti: unica differenza `scripts/render_readme_figures.py`, estranea al
+  simulatore. INI effettivo, costanti, backend, RNG e provenienza completa restano
+  nei metadata SQLite; nessuna garanzia di riproducibilità globale.
+- Nessuna lacuna registrata; zero messaggi persi nel campione finale. Ricostruzione
+  con zero genitori mancanti; conteggi verificati contro i campioni cumulativi.
+  Gli individui vivi al cutoff sono censurati, non trattati come vite concluse.
+- 80 fondatori, **169.767 nascite naturali**, **256.383 nascite forzate con genitore**,
+  **3.120 nuovi semi senza genitore**, in **156 recuperi dopo estinzione completa**.
+  I contatori della dashboard includono i semi nelle 259.503 nascite forzate.
+- 429.230 vite concluse: 372.061 morti per energia, 56.569 per temperatura, 600
+  abbattimenti NewGen. **Nessuna morte per vecchiaia**; massimo osservato112.804,
+  contro `MaxAge=200000`.
+- **Primi337.573 tick senza nascite forzate né nuovi semi**. Al campione337.400:
+  9.451 nascite naturali,28 vivi. Tutti gli80 fondatori iniziali erano già morti
+  entro46.757 tick: il rinnovo naturale è quindi realmente avvenuto. Questa fase
+  comprende gli abbattimenti NewGen, non è una popolazione priva di interventi.
+- Profondità genealogica massima203; massima catena di archi di nascita naturale89.
+  La catena naturale riparte da zero a ogni nascita forzata; ciò non esclude antenati
+  forzati precedenti. Al cutoff120 vivi, tutti da una radice, profondità naturale
+  consecutiva2–8: una fotografia di espansione, non una prova di stabilità futura.
+
+### Colli di bottiglia osservati e ipotesi
+
+**Soccorso riproduttivo sotto20.** Tra i figli forzati: energia iniziale mediana
+0,413, glucosio mediano0, età alla morte mediana34 tick e media166,5. Il79,8% nasce
+senza glucosio;147.003 nascite forzate su256.383 provengono da genitori con età
+<=1000, non ancora maturi per la riproduzione naturale. L'energia mediana del
+parent prima del costo/trasferimento, ricostruita da `8*energia_figlio+0,3`, è3,604.
+La produzione sottrae risorse ai genitori già fragili e può ripetersi: il soccorso
+non è gratuito né garantisce recupero. Solo1.354 figli forzati conclusi (0,53%)
+hanno avuto almeno un figlio naturale. È il candidato principale a un confronto
+controllato; questi dati non quantificano quante estinzioni avrebbe evitato la sua
+rimozione. Sotto20 resta inoltre la mutazione×10, anche PHY e anche per eventuali
+nascite naturali: amplifica le perturbazioni ereditarie proprio nel collo
+popolazionale. Nessun confronto causale della mutazione è stato eseguito qui.
+
+**Ecologia non stazionaria e acqua finita.** Acqua totale mondo+vivi da8.786.249 a
+1.533.032 (-82,55%). Bilancio indipendente al cutoff:
+`8.786.249 + 312.000 (semi) - 5.667.168 (fotosintesi) - 1.898.049 (overflow morti)
+= 1.533.032`. La fotosintesi consuma acqua; respirazione e rigenerazione corrente
+non la restituiscono. Glucosio e ossigeno, invece, rigenerano. Questo limita la
+persistenza delle strategie fotosintetiche e cambia l'ambiente selettivo: attendere
+più tick non equivale a ripetere l'evoluzione nello stesso ambiente. Al primo
+collasso l'acqua globale era ancora circa4,48 milioni: non è provata una causa
+unica, e disponibilità globale non implica accesso locale. Il77,8% dei figli
+naturali nasce senza acqua, ma può acquisirla dall'ambiente; non è automaticamente
+una condanna alla morte.
+
+**Sopravvivenza dei figli naturali.** Mediana680 tick, media1.591;106.261 su169.647
+vite naturali concluse terminano entro1000 tick (62,6%). Solo21.617 (12,7%) hanno
+prodotto figli naturali, per148.242 figli naturali totali:0,874 per individuo
+concluso di questa coorte. È una media osservata con cap, ecologia variabile e
+forzature, non una stima causale del tasso riproduttivo intrinseco. La soglia
+naturale (`age>1000`, energia>50, glucosio>20) è superabile, come attestano le
+catene naturali. Abbassarla può anticipare trasferimenti e aumentare nascite fragili;
+non risolve da sola scarsità, termica o conservazione dei caratteri favorevoli.
+
+**Cap e NewGen.** Cap120 presente in5.713/31.212 campioni (18,3%), nel79,5% dei
+campioni dei primi500.000 tick. Può limitare espansione/diversità: l'occupazione
+campionata non conta però le nascite effettivamente impedite. Non è il limite nelle
+fasi di collasso sotto20; aumentarlo può accelerare esaurimento delle risorse.
+NewGen abbatte600 individui,416 dei quali giovani; il punteggio usa numero totale
+di figli, inclusi i forzati, e riserva energetica, non discendenti autosufficienti.
+Il conteggio ridotto non esclude effetti sulle linee rare, ma non prova causalità.
+
+**Limite dei bilanci attuali.** Residui energia312.000, glucosio312.000,
+acqua312.000, ossigeno62.400 e lipidi62.400 coincidono con le dotazioni dei3.120
+semi di recupero. Sono ingressi esterni non separati nei ledger, non una prova di
+creazione spontanea durante le reazioni. Gli eventi `recovery_seed` permettono la
+riconciliazione. Tenere distinta questa lacuna contabile dalla demografia.
+
+### Decisioni e validazione dell'analisi
+
+Conservati durata massima, soglie riproduttive e cap: non emerge una giustificazione
+sufficiente per cambiarli come rimedio alla stabilità. Allungare la vita non
+intercetta alcuna morte osservata; anticipare la riproduzione o aumentare il cap
+può aggravare il drenaggio. Conservata l'eredità dei pesi appresi true.
+Priorità sperimentali: isolare il costo del soccorso sui genitori immaturi/deboli,
+il moltiplicatore di mutazione e la sostenibilità del ciclo idrico; confronti su
+stesso ambiente/coorti prima di trasferire correzioni alla produzione. Nessuna
+nuova politica, dotazione o rigenerazione è stata introdotta in questa analisi.
+
+Protocollo ripetibile (lettura SQLite, output testuale; grafico facoltativo con
+Matplotlib già disponibile nel Python di sistema):
+
+```sh
+python3 scripts/analyze_lineages.py /pop_proj/data_out/popx.sqlite \
+  --run 1792105551429747751-4236462813 --tick 6242200 \
+  --plot data_out/audit/lineages_2026-10-16/demography.png \
+  > data_out/audit/lineages_2026-10-16/report.txt
+```
+
+Script e protocollo conservati; rapporto e grafico locali ignorati da Git.
+Verifica su dati reali: conteggi nascite/decessi, vivi ricostruiti e somma età delle
+vite concluse confrontati con `Stats`. Nessuna nuova simulazione, regressione C++
+o prova evolutiva controfattuale eseguita; il codice produttivo non è cambiato.
+
 ## Stato corrente — osservabilità, controllo e dashboard locale, 14 ottobre 2026
 
 L'intervento separa processo, run e finestra. Fisiologia, ereditarietà dei pesi
