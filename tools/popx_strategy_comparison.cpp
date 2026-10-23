@@ -178,7 +178,7 @@ class SimulationAudit {
             const auto parents = manager.pops_;
             unsigned budget = cfg->get_max_reproducers_per_tick();
             for (auto parent : parents) {
-                if (!budget || manager.pops_.size() >= MaxPopulationAllowed)
+                if (!budget || manager.pops_.size() >= cfg->get_max_population_allowed())
                     break;
                 if (!parent->wants_to_reproduce())
                     continue;
@@ -201,7 +201,7 @@ class SimulationAudit {
                                       {"depth", depths[n]}});
                 }
             }
-            if (manager.pops_.size() >= MaxPopulationAllowed)
+            if (manager.pops_.size() >= cfg->get_max_population_allowed())
                 ++cap_ticks;
             if (tick % 500 == 0 || manager.pops_.empty())
                 samples.push_back({{"tick", tick},

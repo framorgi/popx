@@ -134,7 +134,7 @@ class SimulationAudit {
         c->take_lipids(MaxLipids);
         auto p = std::make_shared<Pop>(w, logger, config, Genome(0), PhyT{1, 0, 1, 80});
         p->try_spawn({1, 1});
-        p->temperature_ = 37;
+        p->temperature_ = config->get_phy_opt_temperature();
         p->glucose_ = 10;
         p->o2_ = 10;
         p->co2_ = 0;
@@ -144,6 +144,7 @@ class SimulationAudit {
         p->run_mitochondrions();
         const auto after = total(*p, *c);
         out["one_respiration"] = {{"glucose_delta", after[0] - before[0]},
+                                  {"water_delta", after[1] - before[1]},
                                   {"o2_delta", after[4] - before[4]},
                                   {"co2_delta", after[3] - before[3]},
                                   {"energy_gain", p->energy_ - e}};
@@ -152,7 +153,9 @@ class SimulationAudit {
         out["reproduction_cost"] = {{"energy_before", pre_cost},
                                     {"energy_after", p->energy_},
                                     {"recorded", p->total_reproduction_energy_loss_}};
-        p->energy_ = 100.0f; // Independent birth fixture: sufficient parental reserve.
+        p->energy_ = 100.0f; // Independent natural birth fixture: mature and sufficiently supplied.
+        p->age_ = 1001;
+        p->glucose_ = 100;
         auto manager = std::make_shared<PopsManager>(w, logger, config);
         manager->pops_.push_back(p);
         const auto parent_before = resources(*p);
@@ -221,7 +224,8 @@ class SimulationAudit {
         for (const auto& a : out["release_actions"])
             for (const auto& d : a["total_delta"])
                 ok = ok && d == 0;
-        ok = ok && out["one_respiration"]["co2_delta"] == 1;
+        ok = ok && out["one_respiration"]["co2_delta"] == 1 && out["one_respiration"]["water_delta"] == 1;
+        ok = ok && out["photosynthesis_full_cell"]["water_delta"] == -1;
         ok = ok && std::abs(out["reproduction_cost"]["energy_before"].get<double>() -
                             out["reproduction_cost"]["energy_after"].get<double>() - 0.3) < 1e-4;
         if (!out.contains("one_birth"))
@@ -522,7 +526,7 @@ class SimulationAudit {
             roundoff += p->total_energy_roundoff_;
         }
         const std::array<long long, 6> expected = {world->glucose_regenerated + photosynthesis - respirations,
-                                                   -photosynthesis,
+                                                   respirations - photosynthesis,
                                                    0,
                                                    respirations - photosynthesis,
                                                    world->oxygen_regenerated + photosynthesis - respirations,

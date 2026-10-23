@@ -168,7 +168,7 @@ class SimulationAudit {
             manager.sense_bucket_.clear();
             manager.think_bucket_.clear();
             manager.act_bucket_.clear();
-            cap_ticks += manager.pops_.size() == MaxPopulationAllowed;
+            cap_ticks += manager.pops_.size() == config->get_max_population_allowed();
             if (std::chrono::steady_clock::now() - start > std::chrono::seconds(30))
                 throw std::runtime_error("garden time budget exceeded");
         }
@@ -325,7 +325,7 @@ int main(int argc, char** argv) {
         auto logger = std::make_shared<ConsoleLogger>();
         logger->set_level(LogLevel::Error);
         Json report;
-        report["respiration_model"] = "reserve_regulated_v1";
+        report["respiration_model"] = "lineages_genetic_sensing_v7";
         std::ifstream config_file(argv[1]);
         report["config_contents"] = std::string(std::istreambuf_iterator<char>(config_file), {});
         report["protocol"] = "2000 ticks; isolated immobile individual; no learning/reproduction/photosynthesis; "
