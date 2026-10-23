@@ -37,10 +37,10 @@ class IAgentsManager {
     /// @brief Trigger a new generation selection step.
     virtual void trigger_new_generation() = 0;
 
-    /// @brief True while population is below minimum alive threshold and forced respawn logic is active.
+    /// @brief True after extinction reseeding, until the next population update.
     [[nodiscard]] virtual bool get_forced_respawn_active() const = 0;
 
-    /// @brief Minimum alive threshold used by forced respawn logic.
+    /// @brief Target seed count for extinction recovery; not a minimum maintained population.
     [[nodiscard]] virtual int get_forced_respawn_min_alive() const = 0;
 
     /// @brief Current generation index, incremented whenever NewGen is applied.

@@ -7,13 +7,20 @@
 #include "render_state.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 
 namespace {
 std::atomic<uint64_t> s_pop_counter{0};
 }
-constexpr float move_cost = 0.01f;
+uint64_t Pop::next_id() {
+    return s_pop_counter.load();
+}
+void Pop::reserve_ids(uint64_t next) {
+    s_pop_counter.store(std::max(next, s_pop_counter.load()));
+}
+constexpr float action_attempt_cost = 0.01f;
 constexpr float basal_metabolism_cost = 0.02f;
 constexpr float thermoregulation_energy_cost = 0.05f;
 constexpr float thermoregulation_heat_gain = 0.5f;
@@ -68,7 +75,10 @@ void Pop::init() {
     thermoregulation_heat_ = 0.0f;
     temperature_ = config_->get_phy_init_temperature();
     last_reward_ = 0.0f;
+    last_move_failed_ = false;
+    scorer_.reset();
     total_movement_energy_loss_ = 0.0f;
+    total_other_action_energy_loss_ = 0.0f;
     total_metabolism_energy_loss_ = 0.0f;
     total_reproduction_energy_loss_ = 0.0f;
     total_respiration_energy_gain_ = 0.0f;
@@ -89,6 +99,7 @@ void Pop::init() {
             random_util_->rnd_int(1, static_cast<int>(config_->get_phy_init_sensitiveness_max())));
         phy_.adipose_stock_max = config_->get_phy_adipose_stock_max();
     }
+    probe_dist_ = static_cast<int>(std::clamp(phy_.sensitiveness, 1u, 12u));
     lipids_ = std::min(lipids_, phy_.adipose_stock_max);
     sensor_values_.assign(brain_->get_size_s(), 0.0f);
     brain_->wire(genome_);
@@ -96,6 +107,7 @@ void Pop::init() {
     acquired_.fill(0);
     released_.fill(0);
     movement_attempts_ = movement_successes_ = 0;
+    movement_failures_.fill(0);
 }
 
 void Pop::die() {
@@ -115,6 +127,43 @@ void Pop::die() {
             water_ -= accepted;
             released_[1] += accepted;
         }
+        // Share death overflow locally, respecting finite capacity and world boundaries.
+        // Rotate the starting neighbour so indivisible remainders have no fixed direction.
+        std::array<std::shared_ptr<ICell>, 8> neighbours;
+        std::size_t count = 0;
+        if (water_ > 0) {
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    const PositionT pos{pos_.x + dx, pos_.y + dy};
+                    if ((dx == 0 && dy == 0) || pos.x < 0 || pos.y < 0 || pos.x >= world->get_width() ||
+                        pos.y >= world->get_height())
+                        continue;
+                    auto neighbour = world->get_cell(pos);
+                    if (neighbour->get_water() < MaxH2o)
+                        neighbours[count++] = std::move(neighbour);
+                }
+            }
+        }
+        if (count > 1)
+            std::rotate(neighbours.begin(), neighbours.begin() + random_util_->rnd_int(0, static_cast<int>(count) - 1),
+                        neighbours.begin() + count);
+        while (water_ > 0 && count > 0) {
+            const unsigned share = std::max(1u, water_ / static_cast<unsigned>(count));
+            unsigned distributed = 0;
+            std::size_t available = 0;
+            for (std::size_t i = 0; i < count; ++i) {
+                const auto accepted = neighbours[i]->give_water(std::min(share, water_));
+                water_ -= accepted;
+                released_[1] += accepted;
+                distributed += accepted;
+                if (neighbours[i]->get_water() < MaxH2o)
+                    neighbours[available++] = neighbours[i];
+            }
+            count = available;
+            if (distributed == 0)
+                break;
+        }
+        // Any remainder stays in the dead agent for the explicit overflow sink ledger.
         {
             const auto accepted = cell->give_o2(o2_);
             o2_ -= accepted;
@@ -153,62 +202,8 @@ bool Pop::try_spawn(PositionT p) {
 }
 
 float Pop::calculate_reward() const {
-    logger_->debug("Calculating reward for Pop at position (" + std::to_string(pos_.x) + ", " + std::to_string(pos_.y) +
-                   ") with age " + std::to_string(age_) + ", energy " + std::to_string(energy_) +
-                   ", and offspring count " + std::to_string(offspring_count_) + ".");
-    // Long-term survival signal in [0,1]: rewards living longer without saturating too early.
-    const float age_signal = std::clamp(static_cast<float>(age_) / MaxAge, 0.0f, 1.0f);
-
-    // Energy baseline signal in [-1,1]:
-    // values below ~25% energy become negative, above become progressively positive.
-    const float energy_score = std::clamp(energy_ / MaxEnergy, 0.0f, 1.0f);
-    const float energy_signal = std::clamp((energy_score - 0.25f) / 0.75f, -1.0f, 1.0f);
-
-    // Short-term trend signal in [-1,1]: compares this tick energy delta to the pop's own
-    // theoretical per-tick respiration capacity (based on its current mitochondria count).
-    const float per_respiration = static_cast<float>(config_->get_phy_energy_per_respiration());
-    const float max_energy_delta =
-        std::max(static_cast<float>(std::max(phy_.mitochondrions, 1u)) * per_respiration, 1e-6f);
-    const float energy_delta = energy_ - previous_energy_;
-    const float delta_signal = std::clamp(energy_delta / max_energy_delta, -1.0f, 1.0f);
-
-    // Thermal homeostasis signal in [-1,1]: positive near optimal body temperature,
-    // negative when far from it.
-    const float opt_temp = static_cast<float>(config_->get_phy_opt_temperature());
-    const float temp_distance = std::abs(static_cast<float>(temperature_) - opt_temp);
-    const float temp_half_range = static_cast<float>(config_->get_phy_efficiency_half_range_c());
-    const float temp_score = std::clamp(1.0f - (temp_distance / temp_half_range), 0.0f, 1.0f);
-    const float temp_signal = 2.0f * temp_score - 1.0f;
-
-    // Reproduction bonus in [0,1]: kept as a bounded bonus so reward is not dominated by offspring count.
-    const float offspring_bonus = std::clamp(static_cast<float>(offspring_count_) / 25.0f, 0.0f, 1.0f);
-
-    // Weight policy:
-    // - keep at least a minimal survival/energy pressure,
-    // - cap offspring dominance,
-    // - assign remaining mass to temperature management.
-    const float w_age = std::max(AgeRewardWeight, 0.10f);
-    const float w_energy = std::max(EnergyRewardWeight, 0.30f);
-    const float w_delta = EnergyDeltaRewardWeight;
-    const float w_offspring = std::min(OffspringRewardWeight, 0.05f);
-    const float w_temp = std::clamp(1.0f - (w_age + w_energy + w_delta + w_offspring), 0.0f, 1.0f);
-
-    // Final reward is a weighted sum of interpretable signals and stays in [-1,1].
-    const float reward_raw = w_age * age_signal + w_energy * energy_signal + w_delta * delta_signal +
-                             w_offspring * offspring_bonus + w_temp * temp_signal;
-
-    if (!std::isfinite(reward_raw)) {
-        logger_->warning("Non-finite reward_raw detected for Pop " + pop_id_ + ". Forcing reward to -1.");
-        return -1.0f;
-    }
-
-    if (age_ % 1000 == 0 && std::abs(delta_signal) > 0.98f) {
-        logger_->warning("Reward delta component near saturation for Pop " + pop_id_ +
-                         " (delta=" + std::to_string(energy_delta) + ", max_delta=" + std::to_string(max_energy_delta) +
-                         ", ratio=" + std::to_string(delta_signal) + ").");
-    }
-
-    return std::clamp(reward_raw, -1.0f, 1.0f);
+    return Scorer::reward({age_, offspring_count_, phy_.mitochondrions, energy_, previous_energy_, temperature_},
+                          *config_);
 }
 
 void Pop::learn(float reward) {
@@ -236,9 +231,10 @@ void Pop::update() {
         }
         die();
     } else {
-        const float reward = calculate_reward();
-        last_reward_ = reward;
-        learn(reward);
+        const float signal = scorer_.observe(
+            {age_, offspring_count_, phy_.mitochondrions, energy_, previous_energy_, temperature_}, *config_);
+        last_reward_ = scorer_.raw_reward();
+        learn(signal);
     }
 }
 
@@ -311,8 +307,33 @@ void Pop::sense() {
     // gradient: clamp((dir - here) * 0.5 + 0.5, 0, 1) → [0,1] where 1=rising
     auto gradient = [](float here, float dir) -> float { return std::clamp((dir - here) * 0.5f + 0.5f, 0.0f, 1.0f); };
 
-    auto signal_gradient = [&](FeromoneT type, int dx, int dy) {
-        return gradient(fero_at(pos_, type), fero_scan(dx, dy, type));
+    std::array<float, 4> signal_density{};
+    bool signal_density_ready = false;
+    auto surrounding_signal_density = [&]() {
+        if (signal_density_ready)
+            return;
+        signal_density_ready = true;
+        unsigned cells = 0;
+        for (int dy = -probe_dist_; dy <= probe_dist_; ++dy) {
+            for (int dx = -probe_dist_; dx <= probe_dist_; ++dx) {
+                if ((dx == 0 && dy == 0) || pos_.x + dx < 0 || pos_.x + dx >= W ||
+                    pos_.y + dy < 0 || pos_.y + dy >= H)
+                    continue;
+                const auto cell = world->get_cell({pos_.x + dx, pos_.y + dy});
+                if (!cell)
+                    continue;
+                const auto signals = cell->get_feromone_map();
+                for (unsigned type = 0; type < signal_density.size(); ++type) {
+                    const auto found = signals.find(static_cast<FeromoneT>(type));
+                    if (found != signals.end())
+                        signal_density[type] += found->second / static_cast<float>(MaxFeromones);
+                }
+                ++cells;
+            }
+        }
+        if (cells)
+            for (auto& density : signal_density)
+                density /= static_cast<float>(cells);
     };
 
     // Distance to boundaries, normalized to [0,1] with 0.5=center and 1=at boundary.
@@ -341,9 +362,20 @@ void Pop::sense() {
             case Sensor::BOUNDARY_DIST:
                 val = std::min(bx, by);
                 break;
-            case Sensor::GENETIC_SIM_FWD:
-                val = 0.5f;
-                break; // TODO: needs genome API on IAgent
+            case Sensor::GENETIC_SIM_FWD: {
+                // One adjacent cell in the heading direction, independent of movement stride.
+                const int dx = (last_direction_.x > 0) - (last_direction_.x < 0);
+                const int dy = (last_direction_.y > 0) - (last_direction_.y < 0);
+                if (dx || dy) {
+                    const auto cell = world->get_cell({pos_.x + dx, pos_.y + dy});
+                    if (cell) {
+                        const auto neighbour = std::dynamic_pointer_cast<Pop>(cell->get_occupant().lock());
+                        if (neighbour && neighbour.get() != this && neighbour->alive_)
+                            val = static_cast<float>(genome_.similarity(neighbour->genome_));
+                    }
+                }
+                break;
+            }
             case Sensor::LAST_MOVE_DIR_X:
                 val = last_direction_.x * 0.5f + 0.5f;
                 break;
@@ -406,17 +438,12 @@ void Pop::sense() {
             case Sensor::SENSE_SIGNAL_HOME:
                 val = fero_at(pos_, FeromoneT::HOME_FEROMONE);
                 break;
-            case Sensor::SENSE_SIGNAL_DRV_N:
-                val = gradient(fero_at(pos_, FeromoneT::FOOD_FEROMONE), fero_scan(0, -1, FeromoneT::FOOD_FEROMONE));
-                break;
-            case Sensor::SENSE_SIGNAL_DRV_W:
-                val = gradient(fero_at(pos_, FeromoneT::FOOD_FEROMONE), fero_scan(-1, 0, FeromoneT::FOOD_FEROMONE));
-                break;
-            case Sensor::SENSE_SIGNAL_DRV_E:
-                val = gradient(fero_at(pos_, FeromoneT::FOOD_FEROMONE), fero_scan(1, 0, FeromoneT::FOOD_FEROMONE));
-                break;
-            case Sensor::SENSE_SIGNAL_DRV_S:
-                val = gradient(fero_at(pos_, FeromoneT::FOOD_FEROMONE), fero_scan(0, 1, FeromoneT::FOOD_FEROMONE));
+            case Sensor::SENSE_SIGNAL_DENSITY_FOOD:
+            case Sensor::SENSE_SIGNAL_DENSITY_DANGER:
+            case Sensor::SENSE_SIGNAL_DENSITY_MATE:
+            case Sensor::SENSE_SIGNAL_DENSITY_HOME:
+                surrounding_signal_density();
+                val = signal_density[i - static_cast<unsigned>(Sensor::SENSE_SIGNAL_DENSITY_FOOD)];
                 break;
             case Sensor::SENSE_DANGER_DRV_N:
             case Sensor::SENSE_DANGER_DRV_W:
@@ -434,7 +461,8 @@ void Pop::sense() {
                 constexpr FeromoneT types[] = {DANGER_FEROMONE, MATE_FEROMONE, HOME_FEROMONE};
                 constexpr int dx[] = {0, -1, 1, 0};
                 constexpr int dy[] = {-1, 0, 0, 1};
-                val = signal_gradient(types[offset / 4], dx[offset % 4], dy[offset % 4]);
+                val = gradient(fero_at(pos_, types[offset / 4]),
+                               fero_scan(dx[offset % 4], dy[offset % 4], types[offset / 4]));
                 break;
             }
             case Sensor::GLUCOSE_DENSITY_N:
@@ -473,8 +501,33 @@ void Pop::sense() {
             case Sensor::RANDOM:
                 val = static_cast<float>(random_util_->rnd_int(0, 10000)) / 10000.0f;
                 break;
-            case Sensor::RESERVED_INPUT:
-            case Sensor::NUM_SENSES:
+            case Sensor::LAST_MOVE_FAILED:
+                // Old 49-input checkpoints retain the historical zero-valued slot.
+                val = sensor_number >= static_cast<unsigned>(Sensor::SENSOR_COUNT) && last_move_failed_ ? 1.0f : 0.0f;
+                break;
+            case Sensor::MOVE_OPEN_N:
+            case Sensor::MOVE_OPEN_NE:
+            case Sensor::MOVE_OPEN_E:
+            case Sensor::MOVE_OPEN_SE:
+            case Sensor::MOVE_OPEN_S:
+            case Sensor::MOVE_OPEN_SW:
+            case Sensor::MOVE_OPEN_W:
+            case Sensor::MOVE_OPEN_NW: {
+                constexpr int dx[] = {0, 1, 1, 1, 0, -1, -1, -1};
+                constexpr int dy[] = {-1, -1, 0, 1, 1, 1, 0, -1};
+                const unsigned direction = i - static_cast<unsigned>(Sensor::MOVE_OPEN_N);
+                const PositionT target{pos_.x + static_cast<int>(dx[direction] * responsiveness_),
+                                       pos_.y + static_cast<int>(dy[direction] * responsiveness_)};
+                // The read-only predicate mirrors try_move and GridWorld::move_entity.
+                val = (target.x != pos_.x || target.y != pos_.y) && target.x >= 0 && target.y >= 0 &&
+                              target.x < W && target.y < H && world->is_free(target) &&
+                              world->get_elevation(target) - world->get_elevation(pos_) <
+                                  MaxClimbableSlope * (1.0f - lazyness_)
+                          ? 1.0f
+                          : 0.0f;
+                break;
+            }
+            case Sensor::SENSOR_COUNT:
                 break;
         }
         sensor_values_[i] = val;
@@ -489,7 +542,6 @@ void Pop::think() {
     // Consume the sensors from the preceding sense phase.
     last_action_ = brain_->feed_forward(sensor_values_);
     next_phase_ = State::ACT;
-    first_run_ = false; // Clear the first-run guard after the initial think() to allow learning in subsequent cycles
 }
 
 void Pop::serialize_brain(unsigned generation) const {
@@ -509,66 +561,59 @@ void Pop::act() {
         return;
     }
 
+    brain_->record_action(last_action_);
+    first_run_ = false;
     ++action_requests_[last_action_];
-    if (last_action_ < 8)
-        ++movement_attempts_;
-    const double distance_before = lifetime_distance_;
     PositionT p = pos_;
     auto world = world_.lock();
+    const auto action = static_cast<Action>(last_action_);
+    // Charge the attempt, including blocked moves and ineffective transfers.
+    // BURN_CALORIES already pays its larger thermoregulation cost; waiting is free.
+    if (action != Action::DO_NOTHING && action != Action::BURN_CALORIES) {
+        energy_cost_ += action_attempt_cost;
+        if (last_action_ <= static_cast<int>(Action::MOVE_SOUTH))
+            total_movement_energy_loss_ += action_attempt_cost;
+        else
+            total_other_action_energy_loss_ += action_attempt_cost;
+    }
 
-    switch (static_cast<Action>(last_action_)) {
+    switch (action) {
         // ── movement ────────────────────────────────────────────────────────
         case Action::MOVE_FORWARD:
             p.x += last_direction_.x * (responsiveness_);
             p.y += last_direction_.y * (responsiveness_);
             try_move(p);
-            energy_cost_ += move_cost;
-            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_LEFT:
             p.x -= last_direction_.y * responsiveness_;
             p.y += last_direction_.x * responsiveness_;
             try_move(p);
-            energy_cost_ += move_cost;
-            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_RIGHT:
             p.x += last_direction_.y * responsiveness_;
             p.y -= last_direction_.x * responsiveness_;
             try_move(p);
-            energy_cost_ += move_cost;
-            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_RANDOM:
             p.x += random_util_->rnd_int(-1, 1) * responsiveness_;
             p.y += random_util_->rnd_int(-1, 1) * responsiveness_;
             try_move(p);
-            energy_cost_ += move_cost;
-            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_EAST:
             p.x += 1 * responsiveness_;
             try_move(p);
-            energy_cost_ += move_cost;
-            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_WEST:
             p.x -= 1 * responsiveness_;
             try_move(p);
-            energy_cost_ += move_cost;
-            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_NORTH:
             p.y -= 1 * responsiveness_;
             try_move(p);
-            energy_cost_ += move_cost;
-            total_movement_energy_loss_ += move_cost;
             break;
         case Action::MOVE_SOUTH:
             p.y += 1 * responsiveness_;
             try_move(p);
-            energy_cost_ += move_cost;
-            total_movement_energy_loss_ += move_cost;
             break;
         // ── feromone signalling ─────────────────────────────────────────────
         case Action::EMIT_SIGNAL_FOOD:
@@ -650,9 +695,11 @@ void Pop::act() {
         }
         case Action::SET_RESPONSIVENESS:
             responsiveness_ = std::clamp(responsiveness_ + 0.001f, 1.0f, 2.0f);
+            probe_dist_ = std::min(probe_dist_ + 1,
+                                   static_cast<int>(std::min(config_->get_phy_init_sensitiveness_max(), 12u)));
             break;
-        // ── sentinels ────────────────────────────────────────────────────────────
-        case Action::RESERVED_ACTION:
+        // Waiting has no action cost. Physiology and ordinary life processes still run.
+        case Action::DO_NOTHING:
         case Action::NUM_ACTIONS:
             break;
         case Action::KILL_FORWARD: {
@@ -665,21 +712,30 @@ void Pop::act() {
             auto occ = cell->get_occupant().lock();
             if (!occ)
                 break;
-            auto agent = std::dynamic_pointer_cast<IAgent>(occ);
+            auto agent = std::dynamic_pointer_cast<Pop>(occ);
             if (agent)
                 agent->die();
             break;
         }
     }
-    if (lifetime_distance_ > distance_before)
-        ++movement_successes_;
 }
 
 bool Pop::try_move(PositionT p) {
+    ++movement_attempts_;
+    last_move_failed_ = true;
     auto world = world_.lock();
     if (!world) {
+        ++movement_failures_[5];
         logger_->error("Failed to move: World no longer exists.");
         return false; // World no longer exists
+    }
+    if (p.x == pos_.x && p.y == pos_.y) {
+        ++movement_failures_[4];
+        return false;
+    }
+    if (p.x < 0 || p.y < 0 || p.x >= world->get_width() || p.y >= world->get_height()) {
+        ++movement_failures_[3];
+        return false;
     }
     auto stiff = world->get_elevation(p) - world->get_elevation(pos_);
     if (stiff < MaxClimbableSlope * (1.0f - lazyness_)) {
@@ -692,9 +748,20 @@ bool Pop::try_move(PositionT p) {
             const double dy = static_cast<double>(pos_.y - old_pos.y);
             lifetime_distance_ += std::sqrt(dx * dx + dy * dy);
             update_last_direction(pos_, old_pos);
+            ++movement_successes_;
+            last_move_failed_ = false;
             return true;
         }
+        const auto cell = world->get_cell(p);
+        if (cell && !cell->get_occupant().expired())
+            ++movement_failures_[0];
+        else if (cell && cell->get_calcium() == MaxCaco3)
+            ++movement_failures_[1];
+        else
+            ++movement_failures_[5];
         logger_->debug("Move to position (" + std::to_string(p.x) + ", " + std::to_string(p.y) + ") failed.");
+    } else {
+        ++movement_failures_[2];
     }
     return false;
 }
@@ -735,15 +802,20 @@ bool Pop::wants_to_reproduce() const {
     return alive_ && energy_ > 50.0f && age_ > 1000 && glucose_ > 20;
 }
 
-Genome Pop::make_offspring_genome() const {
+Genome Pop::heritable_genome() const {
     if (config_->get_hebbian_inheritance()) {
         if (auto lg = brain_->get_learned_genome()) {
             if (!lg->get_genes().empty()) {
-                return lg->mutated(config_->get_point_mutation_rate(), Genome::encoding_from_config(*config_));
+                return *lg;
             }
         }
     }
-    return genome_.mutated(config_->get_point_mutation_rate(), Genome::encoding_from_config(*config_));
+    return genome_;
+}
+
+Genome Pop::make_offspring_genome() const {
+    return heritable_genome().mutated(config_->get_point_mutation_rate(), Genome::encoding_from_config(*config_),
+                                      config_->get_weight_mutation_rate(), config_->get_weight_mutation_step());
 }
 
 PhyT Pop::make_offspring_phy() const {
@@ -946,19 +1018,25 @@ void Pop::run_mitochondrions() {
         const float heat = static_cast<float>(config_->get_phy_heat_per_respiration());
         metabolism_heat_ += heat;
         total_respiration_heat_ += heat;
+        // Abstract 1:1 inverse of photosynthesis: glucose + O2 -> CO2 + water.
         co2_++;
+        water_++;
         co2_produced++;
         ++total_respiration_count_;
     }
     if (energy_ >= target || glucose_ == 0 || o2_ == 0)
         respiration_credit_ = 0.0;
-    // Release produced CO2 into the cell
+    // Release the completed reactions' products; retain anything the cell cannot accept.
     if (co2_produced > 0) {
         auto world = world_.lock();
         if (world) {
-            const auto accepted = world->get_cell(pos_)->give_co2(co2_produced);
+            auto cell = world->get_cell(pos_);
+            const auto accepted = cell->give_co2(co2_produced);
             co2_ -= accepted;
             released_[3] += accepted;
+            const auto water_accepted = cell->give_water(co2_produced);
+            water_ -= water_accepted;
+            released_[1] += water_accepted;
         }
     }
 }
@@ -1026,14 +1104,27 @@ nlohmann::json Pop::telemetry(bool detailed) const {
                               {{"energy", energy_},
                                {"distance", lifetime_distance_},
                                {"offspring", offspring_count_},
+                               {"repro_eligible_ticks", repro_eligible_ticks_},
+                               {"repro_cap_ticks", repro_cap_ticks_},
+                               {"repro_queue_exclusions", repro_queue_exclusions_},
+                               {"repro_admissions", repro_admissions_},
+                               {"repro_wait_ticks", repro_wait_ticks_},
+                               {"repro_wait_max", repro_wait_max_},
                                {"movement_attempts", movement_attempts_},
                                {"movement_successes", movement_successes_},
+                               {"movement_blocked_occupied", movement_failures_[0]},
+                               {"movement_blocked_calcium", movement_failures_[1]},
+                               {"movement_blocked_slope", movement_failures_[2]},
+                               {"movement_blocked_boundary", movement_failures_[3]},
+                               {"movement_no_displacement", movement_failures_[4]},
+                               {"movement_blocked_other", movement_failures_[5]},
                                {"respirations", total_respiration_count_},
                                {"photosynthesis", total_photosynthesis_count_},
                                {"respiration_gain", total_respiration_energy_gain_},
                                {"respiration_heat", total_respiration_heat_},
                                {"metabolism_cost", total_metabolism_energy_loss_},
                                {"movement_cost", total_movement_energy_loss_},
+                               {"other_action_cost", total_other_action_energy_loss_},
                                {"pending_action_cost", energy_cost_},
                                {"reproduction_cost", total_reproduction_energy_loss_},
                                {"thermoregulation_cost", total_thermoregolation_energy_loss_},
@@ -1041,7 +1132,34 @@ nlohmann::json Pop::telemetry(bool detailed) const {
                                {"roundoff", total_energy_roundoff_},
                                {"body_temperature", temperature_},
                                {"abs_temp_delta", std::abs(temperature_ - config_->get_phy_opt_temperature())}}}};
+    const auto learning = brain_->learning_stats();
+    const auto& components = scorer_.last_components();
+    result["learning"] = {{"reward", scorer_.raw_reward()},
+                          {"baseline", scorer_.baseline()},
+                          {"signal", scorer_.signal()},
+                          {"mean_abs_delta", learning.mean_abs_delta},
+                          {"mean_abs_plasticity", learning.mean_abs_plasticity},
+                          {"mean_abs_decay", learning.mean_abs_decay},
+                          {"mean_abs_trace", learning.mean_abs_trace},
+                          {"mean_abs_weight", learning.mean_abs_weight},
+                          {"zero_fraction", learning.zero_fraction},
+                          {"age_component", components.age},
+                          {"energy_component", components.energy},
+                          {"delta_component", components.delta},
+                          {"offspring_component", components.offspring},
+                          {"temperature_component", components.temperature}};
+    result["totals"]["learning_updates"] = learning.updates;
+    result["totals"]["learning_abs_weight_change"] = learning.abs_weight_change_sum;
+    result["totals"]["learning_abs_plasticity"] = learning.abs_plasticity_sum;
     if (detailed) {
+        result["sensor_model"] = "chemical_density_v2";
+        result["sensing_radius"] = probe_dist_;
+        const auto color = genome_.get_genetic_color();
+        result["genetics"] = {{"version", 1},
+                              {"fingerprint", genome_.fingerprint()},
+                              {"similarity_model", "endpoint_weight_v1"},
+                              {"color_model", "projection_v1"},
+                              {"color", {color.r, color.g, color.b}}};
         result["genes"] = nlohmann::json::array();
         for (const auto& gene : genome_.get_genes())
             result["genes"].push_back({gene.get_source_type(), gene.get_source_num(), gene.get_sink_type(),

@@ -8,6 +8,7 @@
 #include "i_world.h"
 #include "neuron.h"
 #include "random_utility.h"
+#include "scorer.h"
 
 #include <array>
 #include <cstddef>
@@ -45,6 +46,8 @@ struct PhyT {
 /// -----------------------------------------------------------------------------
 class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
   public:
+    static uint64_t next_id();
+    static void reserve_ids(uint64_t next);
     ///----------------------------------------------------------------------------
     /// @brief Constructor for Pop class.
     /// @param world Weak pointer to the world the Pop belongs to.
@@ -128,6 +131,9 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Creates a (possibly mutated) copy of this genome for an offspring.
     ///----------------------------------------------------------------------------
     [[nodiscard]] Genome make_offspring_genome() const;
+    /// @brief Genetic information eligible for inheritance, before mutation (including learned weights when enabled).
+    [[nodiscard]] Genome heritable_genome() const;
+    [[nodiscard]] const std::string& birth_genome_fingerprint() const { return genome_.fingerprint(); }
 
     ///----------------------------------------------------------------------------
     /// @brief Creates a (possibly mutated) copy of this Pop's physical traits for an offspring.
@@ -156,6 +162,22 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Increments the offspring count for this Pop (called when an offspring is successfully spawned).
     // ---------------------------------------------------------------------------
     void increment_offspring_count();
+    /// @brief One admission observation per eligible tick; queued ticks are accounted separately.
+    void record_reproduction_admission(bool cap_blocked, bool queued, bool admitted) {
+        ++repro_eligible_ticks_;
+        if (cap_blocked)
+            ++repro_cap_ticks_;
+        else if (!queued && !admitted)
+            ++repro_queue_exclusions_;
+        if (admitted) {
+            ++repro_admissions_;
+            repro_wait_max_ = std::max(repro_wait_max_, repro_wait_ticks_);
+            repro_wait_ticks_ = 0;
+        } else if (!queued) {
+            ++repro_wait_ticks_;
+            repro_wait_max_ = std::max(repro_wait_max_, repro_wait_ticks_);
+        }
+    }
 
     // ---------------------------------------------------------------------------
     /// @brief get the cause of death for this Pop (used for logging and analysis).
@@ -247,6 +269,7 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     }
 
   private:
+    friend class CheckpointCodec;
     // Narrow access for the standalone dynamic audit and its regression fixtures.
     friend class SimulationAudit;
 
@@ -325,6 +348,10 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     std::array<uint64_t, 23> action_requests_{};
     std::array<uint64_t, 6> acquired_{}, released_{};
     uint64_t movement_attempts_ = 0, movement_successes_ = 0;
+    // Exclusive reasons for failed movement attempts: occupied, calcium, slope,
+    // boundary, zero displacement and other (including unavailable world).
+    std::array<uint64_t, 6> movement_failures_{};
+    bool last_move_failed_ = false;
     std::string pop_id_;
 
     /// @brief Birth provenance for scientific diagnostics (empty for founders).
@@ -339,7 +366,7 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// ---------------------------------------------------------------------------
     std::vector<float> sensor_values_;
     /// ---------------------------------------------------------------------------
-    /// @brief Directional scan radius in cells (used by POPULATION_DENSITY etc.).
+    /// @brief Effective spatial sensing radius; initialized from inherited PHY, adjustable by action 20.
     /// ---------------------------------------------------------------------------
     int probe_dist_ = 4;
     /// ---------------------------------------------------------------------------
@@ -379,6 +406,7 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// ---------------------------------------------------------------------------
     /// @brief Last reward used by learning update (displayed in inspector).
     /// ---------------------------------------------------------------------------
+    Scorer scorer_;
     float last_reward_ = 0.0f;
     /// ---------------------------------------------------------------------------
     /// @brief Lifetime cumulative traveled distance (Euclidean, successful moves only).
@@ -388,6 +416,8 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Counter for the number of offspring produced by this Pop
     ///----------------------------------------------------------------------------
     int offspring_count_ = 0;
+    uint64_t repro_eligible_ticks_ = 0, repro_cap_ticks_ = 0, repro_queue_exclusions_ = 0;
+    uint64_t repro_admissions_ = 0, repro_wait_ticks_ = 0, repro_wait_max_ = 0;
 
     ///----------------------------------------------------------------------------
     /// @brief The cause of death for this Pop (used for logging and analysis).
@@ -426,6 +456,8 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Lifetime cumulative movement energy losses.
     /// ---------------------------------------------------------------------------
     double total_movement_energy_loss_ = 0.0;
+    /// @brief Lifetime cost of non-movement active attempts except thermoregulation.
+    double total_other_action_energy_loss_ = 0.0;
     /// ---------------------------------------------------------------------------
     /// @brief Lifetime cumulative basal metabolism energy losses.
     /// ---------------------------------------------------------------------------

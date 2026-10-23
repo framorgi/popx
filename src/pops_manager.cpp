@@ -83,6 +83,18 @@ bool PopsManager::spawn_population() {
     return true;
 }
 
+void PopsManager::remember_for_recovery(const Pop& pop) {
+    const auto phy = pop.get_phy();
+    const auto key = pop.birth_genome_fingerprint() + ":" + std::to_string(phy.mitochondrions) + ":" +
+                     std::to_string(phy.chloroplasts) + ":" + std::to_string(phy.sensitiveness) + ":" +
+                     std::to_string(phy.adipose_stock_max);
+    // One latest donor per birth-genome/PHY profile prevents identical deaths from filling the archive.
+    std::erase_if(recovery_bank_, [&](const RecoverySeed& seed) { return seed.profile_key == key; });
+    recovery_bank_.push_back({pop.heritable_genome(), phy, pop.get_pop_id(), key});
+    if (recovery_bank_.size() > recovery_bank_capacity_)
+        recovery_bank_.pop_front();
+}
+
 bool PopsManager::recover_from_extinction() {
     if (!pops_.empty())
         return true;
@@ -90,19 +102,28 @@ bool PopsManager::recover_from_extinction() {
     clear_reproduction_backlog();
     const auto capacity =
         static_cast<std::size_t>(world_->get_width()) * static_cast<std::size_t>(world_->get_height());
-    const auto target = std::min<std::size_t>(MinPopulationAllowed, capacity);
+    const auto target = std::min<std::size_t>({MinPopulationAllowed, capacity, config_->get_max_population_allowed()});
     if (target == 0)
         return false;
 
     auto random_util = std::make_shared<RandomUtility>();
+    std::vector<std::size_t> donors;
+    for (std::size_t i = 0; i < recovery_bank_.size(); ++i)
+        donors.push_back(i);
     for (std::size_t i = 0; i < target; ++i) {
-        auto pop = std::make_shared<Pop>(world_, logger_, config_);
-        pop->set_birth_provenance("", true);
+        // Balanced random sampling: use every archived profile once before repeating any donor.
+        if (!donors.empty() && i % donors.size() == 0)
+            for (std::size_t n = donors.size(); n > 1; --n)
+                std::swap(donors[n - 1], donors[static_cast<std::size_t>(random_util->rnd_int(0, static_cast<int>(n - 1)))]);
+        const auto* seed = donors.empty() ? nullptr : &recovery_bank_[donors[i % donors.size()]];
+        auto pop = seed ? std::make_shared<Pop>(world_, logger_, config_, seed->genome, seed->phy)
+                        : std::make_shared<Pop>(world_, logger_, config_);
+        pop->set_birth_provenance(seed ? seed->parent_id : "", true);
 
         bool spawned = false;
         for (unsigned attempt = 0; attempt < 1000 && !spawned; ++attempt) {
             spawned = pop->try_spawn(
-                {random_util->rnd_int(0, world_->get_width()), random_util->rnd_int(0, world_->get_height())});
+                {random_util->rnd_int(0, world_->get_width() - 1), random_util->rnd_int(0, world_->get_height() - 1)});
         }
         for (int y = 0; y < world_->get_height() && !spawned; ++y)
             for (int x = 0; x < world_->get_width() && !spawned; ++x)
@@ -126,6 +147,8 @@ bool PopsManager::recover_from_extinction() {
         if (stats_) {
             auto event = pop->telemetry(true);
             event["recovery_seed"] = true;
+            event["recovery_from_archive"] = seed != nullptr;
+            event["recovery_parent_external"] = seed && !seed->parent_in_run;
             stats_->record_event({LifeEvent::Birth, std::move(event)});
         }
     }
@@ -171,6 +194,7 @@ void PopsManager::update_cycle() {
 
     for (auto& pop : pops_) {
         if (!pop->is_alive()) {
+            remember_for_recovery(*pop);
             if (stats_)
                 stats_->record_event({LifeEvent::Death, pop->telemetry(false)});
             world_->remove_entity(pop);
@@ -188,7 +212,7 @@ void PopsManager::update_cycle() {
     erase_dead(act_bucket_);
     erase_dead(pops_);
 
-    forced_respawn_active_ = pops_.size() < MinPopulationAllowed;
+    forced_respawn_active_ = false; // Only extinction recovery sets this flag; low counts do not force births.
 
     collect_reproducer_candidates();
     process_reproduction_backlog();
@@ -204,27 +228,42 @@ void PopsManager::update_cycle() {
 }
 
 void PopsManager::collect_reproducer_candidates() {
-    std::size_t forced_slots = 0;
-    if (forced_respawn_active_) {
-        forced_slots = static_cast<std::size_t>(MinPopulationAllowed - pops_.size());
-    }
-
     uint64_t dropped_this_tick = 0;
-    for (auto& pop : pops_) {
+    const bool full = pops_.size() >= config_->get_max_population_allowed();
+    if (full)
+        ++repro_cap_blocked_ticks_;
+    std::size_t start = pops_.empty() ? 0 : repro_next_index_ % pops_.size();
+    for (std::size_t i = 0; i < pops_.size(); ++i)
+        if (pops_[i] && pops_[i]->get_pop_id() == repro_next_id_) {
+            start = i;
+            break;
+        }
+    for (std::size_t offset = 0; offset < pops_.size(); ++offset) {
+        const auto index = (start + offset) % pops_.size();
+        auto& pop = pops_[index];
         if (!pop || !pop->is_alive()) {
             continue;
         }
 
-        const bool wants = pop->wants_to_reproduce();
-        const bool forced = !wants && forced_slots > 0;
-        if (!wants && !forced) {
+        if (!pop->wants_to_reproduce()) {
             continue;
         }
 
+        ++repro_eligible_agent_ticks_;
+        if (full) {
+            ++repro_cap_blocked_agent_ticks_;
+            pop->record_reproduction_admission(true, repro_backlog_ids_.contains(pop->get_pop_id()), false);
+            continue;
+        }
         const uint64_t dropped_before = repro_dropped_total_;
-        if (enqueue_reproducer_candidate(pop) && forced) {
-            --forced_slots;
-        } else if (repro_dropped_total_ != dropped_before) {
+        const bool queued = repro_backlog_ids_.contains(pop->get_pop_id());
+        const bool admitted = enqueue_reproducer_candidate(pop);
+        pop->record_reproduction_admission(false, queued, admitted);
+        if (admitted) {
+            repro_next_index_ = (index + 1) % pops_.size();
+            repro_next_id_ = pops_[repro_next_index_]->get_pop_id();
+        }
+        if (repro_dropped_total_ != dropped_before) {
             ++dropped_this_tick;
         }
     }
@@ -238,14 +277,10 @@ void PopsManager::collect_reproducer_candidates() {
 void PopsManager::process_reproduction_backlog() {
     repro_processed_this_tick_ = 0;
 
-    unsigned budget = config_->get_max_reproducers_per_tick();
-    if (forced_respawn_active_) {
-        budget += config_->get_forced_repro_priority_per_tick();
-    }
-    budget = std::max(1u, budget);
+    const unsigned budget = std::max(1u, config_->get_max_reproducers_per_tick());
 
     unsigned inspected = 0;
-    while (!repro_backlog_.empty() && inspected < budget && pops_.size() < MaxPopulationAllowed) {
+    while (!repro_backlog_.empty() && inspected < budget && pops_.size() < config_->get_max_population_allowed()) {
         ReproBacklogEntry entry = repro_backlog_.front();
         repro_backlog_.pop_front();
         repro_backlog_ids_.erase(entry.pop_id);
@@ -255,7 +290,7 @@ void PopsManager::process_reproduction_backlog() {
         if (!parent || !parent->is_alive()) {
             continue;
         }
-        if (!parent->wants_to_reproduce() && !forced_respawn_active_) {
+        if (!parent->wants_to_reproduce()) {
             continue;
         }
 
@@ -293,28 +328,37 @@ void PopsManager::clear_reproduction_backlog() {
 }
 
 void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
+    if (!parent || !parent->wants_to_reproduce())
+        return;
     const float reproduction_energy_loss = static_cast<float>(config_->get_phy_energy_per_respiration());
     if (parent->get_energy() <= reproduction_energy_loss)
-        return; // Even forced reproduction must leave energy to transfer to a living child.
-    // Temporarily increase mutation rate for offspring creation, then reset to original rate
-    auto old_mutation_rate = config_->get_point_mutation_rate();
-    if (pops_.size() < MinPopulationAllowed) {
-        auto temp_mutation_rate = old_mutation_rate * 10; // Increase mutation rate by 10% for each offspring
-        config_->set_point_mutation_rate(temp_mutation_rate);
-    }
+        return;
+    ++repro_attempts_;
+    // The configured mutation rate applies to both genome and PHY at every population size.
     auto child =
         std::make_shared<Pop>(world_, logger_, config_, parent->make_offspring_genome(), parent->make_offspring_phy());
-    child->set_birth_provenance(parent->get_pop_id(), !parent->wants_to_reproduce());
+    child->set_birth_provenance(parent->get_pop_id(), false);
 
-    config_->set_point_mutation_rate(old_mutation_rate);
-    // Try all 8 adjacent cells (cardinal first, then diagonal)
-    const int dx[] = {0, 1, 0, -1, 1, 1, -1, -1};
-    const int dy[] = {-1, 0, 1, 0, -1, 1, 1, -1};
     const PositionT pp = parent->get_position();
-
-    for (int i = 0; i < 8; ++i) {
-        PositionT candidate{pp.x + dx[i], pp.y + dy[i]};
-        if (child->try_spawn(candidate)) {
+    // Shuffle each ring to avoid a persistent compass bias; try outer rings only after inner ones fail.
+    const unsigned max_radius = std::min(config_->get_offspring_dispersal_radius(),
+                                         static_cast<unsigned>(std::max(world_->get_width(), world_->get_height()) - 1));
+    for (unsigned radius = 1; radius <= max_radius; ++radius) {
+        std::vector<PositionT> candidates;
+        candidates.reserve(radius * 8);
+        for (int dy = -static_cast<int>(radius); dy <= static_cast<int>(radius); ++dy)
+            for (int dx = -static_cast<int>(radius); dx <= static_cast<int>(radius); ++dx)
+                if (std::max(std::abs(dx), std::abs(dy)) == static_cast<int>(radius)) {
+                    const PositionT candidate{pp.x + dx, pp.y + dy};
+                    if (candidate.x >= 0 && candidate.x < world_->get_width() && candidate.y >= 0 &&
+                        candidate.y < world_->get_height())
+                        candidates.push_back(candidate);
+                }
+        for (std::size_t i = candidates.size(); i > 1; --i)
+            std::swap(candidates[i - 1], candidates[static_cast<std::size_t>(rand()) % i]);
+        for (const PositionT candidate : candidates) {
+            if (!child->try_spawn(candidate))
+                continue;
             unsigned g = 0, w = 0, ca = 0, co2 = 0, o2 = 0, lipids = 0;
             float energy = 0.0f;
             parent->add_reproduction_energy_loss(reproduction_energy_loss);
@@ -334,6 +378,9 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
                            std::to_string(pp.y) + ").");
             parent->increment_offspring_count();
             ++total_births_;
+            ++repro_births_;
+            if (radius > 1)
+                ++repro_dispersed_births_;
             if (stats_)
                 stats_->record_event({LifeEvent::Birth, child->telemetry(true)});
 
@@ -342,7 +389,8 @@ void PopsManager::try_reproduce(std::shared_ptr<Pop>& parent) {
             return;
         }
     }
-    // No free adjacent cell this cycle — parent retains resources, will retry next cycle.
+    ++repro_no_space_;
+    // No free cell within the configured radius; parent retains resources.
 }
 
 void PopsManager::rotate_buckets() {
@@ -360,7 +408,7 @@ double PopsManager::score_pop_for_newgen(const std::shared_ptr<Pop>& pop) const 
         return -1.0;
     }
     // Default criterion: offspring count (easy to replace with reward-based score).
-    return static_cast<double>(pop->get_offspring_count()) + 0.01 * static_cast<double>(pop->get_energy());
+    return Scorer::selection(pop->get_offspring_count(), pop->get_energy());
 }
 
 void PopsManager::trigger_new_generation() {
@@ -415,12 +463,15 @@ void PopsManager::trigger_new_generation() {
 }
 
 void PopsManager::reset_population_state() {
+    repro_next_id_.clear();
+    repro_next_index_ = 0;
     for (auto& pop : pops_) {
         if (pop) {
             world_->remove_entity(pop);
         }
     }
     pops_.clear();
+    recovery_bank_.clear();
     sense_bucket_.clear();
     think_bucket_.clear();
     act_bucket_.clear();
@@ -432,6 +483,8 @@ void PopsManager::reset_population_state() {
     generation_count_ = 0;
     cycle_counter_ = 0;
     repro_dropped_total_ = 0;
+    repro_eligible_agent_ticks_ = repro_cap_blocked_agent_ticks_ = repro_cap_blocked_ticks_ = 0;
+    repro_attempts_ = repro_no_space_ = repro_births_ = repro_dispersed_births_ = 0;
     repro_backlog_peak_ = 0;
 }
 

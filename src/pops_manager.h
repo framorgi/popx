@@ -38,7 +38,7 @@ class PopsManager : public IAgentsManager {
         return forced_respawn_active_;
     }
     [[nodiscard]] int get_forced_respawn_min_alive() const override {
-        return static_cast<int>(MinPopulationAllowed);
+        return static_cast<int>(std::min(MinPopulationAllowed, config_->get_max_population_allowed()));
     }
     [[nodiscard]] unsigned get_generation_count() const override {
         return generation_count_;
@@ -51,6 +51,18 @@ class PopsManager : public IAgentsManager {
     }
     [[nodiscard]] uint64_t get_repro_backlog_peak() const override {
         return repro_backlog_peak_;
+    }
+    nlohmann::json reproduction_stats() const {
+        return {{"eligible_agent_ticks", repro_eligible_agent_ticks_},
+                {"cap_blocked_agent_ticks", repro_cap_blocked_agent_ticks_},
+                {"cap_blocked_ticks", repro_cap_blocked_ticks_},
+                {"attempts", repro_attempts_},
+                {"no_space", repro_no_space_},
+                {"births", repro_births_},
+                {"dispersed_births", repro_dispersed_births_},
+                {"recovery_bank_size", recovery_bank_.size()},
+                {"recovery_bank_capacity", recovery_bank_capacity_},
+                {"capacity", config_->get_max_population_allowed()}};
     }
     [[nodiscard]] uint64_t get_repro_dropped_total() const override {
         return repro_dropped_total_;
@@ -67,6 +79,7 @@ class PopsManager : public IAgentsManager {
     nlohmann::json inspect(const std::string& id) const;
 
   private:
+    friend class CheckpointCodec;
     std::shared_ptr<IStats> stats_;
     // Narrow access for the standalone dynamic audit and its regression fixtures.
     friend class SimulationAudit;
@@ -83,9 +96,25 @@ class PopsManager : public IAgentsManager {
     bool forced_respawn_active_ = false;
     unsigned generation_count_ = 0;
     uint64_t cycle_counter_ = 0;
+    std::string repro_next_id_;
+    std::size_t repro_next_index_ = 0;
     uint64_t repro_processed_this_tick_ = 0;
     uint64_t repro_dropped_total_ = 0;
+    uint64_t repro_eligible_agent_ticks_ = 0, repro_cap_blocked_agent_ticks_ = 0, repro_cap_blocked_ticks_ = 0;
+    uint64_t repro_attempts_ = 0, repro_no_space_ = 0, repro_births_ = 0, repro_dispersed_births_ = 0;
     uint64_t repro_backlog_peak_ = 0;
+
+    // Compact hereditary records, never live/dead Pop objects or neural activation state.
+    static constexpr std::size_t recovery_bank_capacity_ = 64;
+    struct RecoverySeed {
+        Genome genome;
+        PhyT phy;
+        std::string parent_id;
+        std::string profile_key;
+        bool parent_in_run = true; // False after restoring a checkpoint without its old event history.
+    };
+    std::deque<RecoverySeed> recovery_bank_;
+    void remember_for_recovery(const Pop& pop);
 
     struct ReproBacklogEntry {
         std::weak_ptr<Pop> pop;
@@ -105,7 +134,7 @@ class PopsManager : public IAgentsManager {
     ///--------------------------------------------------------------------------
     void rotate_buckets();
     ///--------------------------------------------------------------------------
-    /// @brief Attempts to spawn an offspring of parent into an adjacent free cell.
+    /// @brief Attempts placement in successive rings up to the configured dispersal radius.
     ///--------------------------------------------------------------------------
     void try_reproduce(std::shared_ptr<Pop>& parent);
     void collect_reproducer_candidates();

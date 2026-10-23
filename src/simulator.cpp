@@ -61,8 +61,8 @@ void Simulator::command(const std::string& name, const nlohmann::json& arguments
         if (!arguments.at("value").is_number_integer())
             throw std::invalid_argument("Speed must be an integer");
         const auto value = arguments.at("value").get<int64_t>();
-        if (value != 1 && value != 2)
-            throw std::invalid_argument("Speed must be 1 or 2");
+        if (value < 0 || value > 2)
+            throw std::invalid_argument("Speed must be 0 (turbo), 1 or 2");
         speed_ = value;
         return;
     }
@@ -72,7 +72,8 @@ void Simulator::command(const std::string& name, const nlohmann::json& arguments
         state_ = "running";
     else if (name == "stop" && state_ != "finished") {
         state_ = "finished";
-        reason_ = "stop";
+        const auto cause = arguments.value("reason", std::string("stop"));
+        reason_ = cause == "storage_limit" ? cause : "stop";
     } else if (name == "newgen" && state_ != "finished") {
         agents_manager_->trigger_new_generation();
         if (agents_manager_->get_alive_count() == 0) {
