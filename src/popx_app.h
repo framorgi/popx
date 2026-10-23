@@ -10,7 +10,7 @@
 #include <map>
 
 struct AppOptions {
-    std::string config_path;
+    std::string config_path, checkpoint_path;
     unsigned udp_port = 8001, speed = 1;
     bool headless = false;
 };
@@ -21,12 +21,14 @@ class PopXApp {
     int run();
 
   private:
-    void start();
+    void start(const std::string& checkpoint_path = {});
     void show_gui();
     void hide_gui();
     void dispatch(nlohmann::json command);
     void finish_if_needed();
     nlohmann::json status() const;
+    std::string active_ini_, locked_ini_, loaded_checkpoint_;
+    nlohmann::json migration_origin_ = nullptr;
     AppOptions options_;
     std::shared_ptr<ILogger> logger_;
     std::shared_ptr<Config> config_;

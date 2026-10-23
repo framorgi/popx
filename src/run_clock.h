@@ -12,6 +12,6 @@ struct RunClock {
         return minutes > 0 && tick >= duration_ticks(minutes);
     }
     static std::chrono::microseconds interval(unsigned speed) {
-        return std::chrono::microseconds(10000 / speed);
+        return std::chrono::microseconds(speed ? 10000 / speed : 0);
     }
 };

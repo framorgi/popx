@@ -35,7 +35,11 @@ inline void persist_diagnostic(const nlohmann::json& report, const std::string& 
     if (!port)
         throw std::runtime_error("Use scripts/run_*: POPX_UDP_PORT receiver required");
     Stats stats(std::make_unique<UdpCommunicator>(std::stoul(port)));
-    stats.begin_session({{"kind", kind}, {"model", "reserve_regulated_v1"}, {"diagnostic", true}});
+    stats.begin_session({{"kind", kind},
+                         {"model", "lineages_genetic_sensing_v7"},
+                         {"temperature_refresh_interval_ticks", TemperatureRefreshInterval},
+                         {"temperature_rbf_model", "orbiting_centers_fixed_widths_v1"},
+                         {"diagnostic", true}});
     auto persisted = report;
     if (report.contains("run") && report["run"].contains("central_records")) {
         for (const auto& record : report["run"]["central_records"]) {

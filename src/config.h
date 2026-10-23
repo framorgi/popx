@@ -14,9 +14,16 @@ struct ConfigParams {
 
     // Simulation
     unsigned map_size = 120;
+    unsigned source_count = 2;
+    unsigned source_move_interval_ticks = 40;
+    unsigned source_glucose_interval_ticks = 40;
+    unsigned source_glucose_per_neighbor = 8;
     double max_duration_minutes = 0.0;
+    double database_limit_gb = 10.0;
     unsigned gui_fps = 30;
     unsigned population = 100;
+    unsigned max_population_allowed = 240;
+    unsigned offspring_dispersal_radius = 1;
     unsigned steps_per_generation = 300;
     unsigned max_generations = 200000;
     unsigned num_threads = 4;
@@ -29,6 +36,13 @@ struct ConfigParams {
 
     // Mutation / reproduction
     double point_mutation_rate = 0.001;
+    double weight_mutation_rate = 0.05;
+    unsigned weight_mutation_step = 256;
+    double learning_rate = 0.06;
+    double learning_trace_decay = 0.97;
+    double learning_weight_decay = 0.00003;
+    double learning_baseline_rate = 0.01;
+
     double gene_insertion_deletion_rate = 0.0;
     double deletion_ratio = 0.5;
     bool sexual_reproduction = true;
@@ -83,6 +97,12 @@ class Config : public IConfig {
     explicit Config(const std::string& filepath, bool strict = false);
     static nlohmann::json schema();
     nlohmann::json values() const;
+    unsigned get_source_count() const override { return params_.source_count; }
+    unsigned get_max_population_allowed() const override { return params_.max_population_allowed; }
+    unsigned get_offspring_dispersal_radius() const override { return params_.offspring_dispersal_radius; }
+    unsigned get_source_move_interval_ticks() const override { return params_.source_move_interval_ticks; }
+    unsigned get_source_glucose_interval_ticks() const override { return params_.source_glucose_interval_ticks; }
+    unsigned get_source_glucose_per_neighbor() const override { return params_.source_glucose_per_neighbor; }
     unsigned get_map_size() const override {
         return params_.map_size;
     }
@@ -110,6 +130,25 @@ class Config : public IConfig {
     unsigned get_max_generations() const override;
     unsigned get_num_threads() const override;
     double get_point_mutation_rate() const override;
+    double get_weight_mutation_rate() const override {
+        return params_.weight_mutation_rate;
+    }
+    unsigned get_weight_mutation_step() const override {
+        return params_.weight_mutation_step;
+    }
+    double get_learning_rate() const override {
+        return params_.learning_rate;
+    }
+    double get_learning_trace_decay() const override {
+        return params_.learning_trace_decay;
+    }
+    double get_learning_weight_decay() const override {
+        return params_.learning_weight_decay;
+    }
+    double get_learning_baseline_rate() const override {
+        return params_.learning_baseline_rate;
+    }
+
     double get_gene_insertion_deletion_rate() const override;
     double get_deletion_ratio() const override;
     bool get_sexual_reproduction() const override;
@@ -149,6 +188,7 @@ class Config : public IConfig {
     void update_from_file(unsigned generation) override;
 
   private:
+    friend class PopXApp;
     void set_defaults();
     void ingest_parameter(const std::string& name, const std::string& value);
     /// Converts a relative directory path to absolute, anchored at the

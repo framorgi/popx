@@ -2,23 +2,34 @@
 
 #include "pops_manager.h"
 
+#include <algorithm>
 #include <cmath>
 #include <random>
 
 using Json = nlohmann::json;
 namespace {
 Json empty_totals() {
-    return {{"energy", 0.0},
+    return {{"learning_updates", 0.0},
+            {"learning_abs_weight_change", 0.0},
+            {"learning_abs_plasticity", 0.0},
+            {"energy", 0.0},
             {"distance", 0.0},
             {"offspring", 0.0},
             {"movement_attempts", 0.0},
             {"movement_successes", 0.0},
+            {"movement_blocked_occupied", 0.0},
+            {"movement_blocked_calcium", 0.0},
+            {"movement_blocked_slope", 0.0},
+            {"movement_blocked_boundary", 0.0},
+            {"movement_no_displacement", 0.0},
+            {"movement_blocked_other", 0.0},
             {"respirations", 0.0},
             {"photosynthesis", 0.0},
             {"respiration_gain", 0.0},
             {"respiration_heat", 0.0},
             {"metabolism_cost", 0.0},
             {"movement_cost", 0.0},
+            {"other_action_cost", 0.0},
             {"pending_action_cost", 0.0},
             {"reproduction_cost", 0.0},
             {"thermoregulation_cost", 0.0},
@@ -54,8 +65,14 @@ void Stats::record_session(SessionRecord session) {
     closed_["actions"] = std::vector<uint64_t>(23, 0);
     closed_["acquired"] = Json::array({0, 0, 0, 0, 0, 0});
     closed_["released"] = Json::array({0, 0, 0, 0, 0, 0});
-    counts_ = {{"founders", 0}, {"natural_births", 0}, {"forced_births", 0}, {"deaths", 0}, {"culled", 0}};
+    counts_ = {{"founders", 0}, {"natural_births", 0}, {"forced_births", 0}, {"inherited_recovery_births", 0},
+               {"deaths", 0}, {"culled", 0}};
     rate_history_.clear();
+    previous_distances_.clear();
+    current_distances_.clear();
+    calcium_window_ticks_ = 0;
+    recovery_resources_.fill(0);
+    recovery_energy_ = 0;
     started_ = std::chrono::steady_clock::now();
     cpu_started_ = std::clock();
     metadata_ = std::move(metadata);
@@ -73,6 +90,15 @@ void Stats::record_event(AgentEvent event) {
                                 : data.value("forced", false) ? "forced_births"
                                                               : "natural_births";
         counts_[key] = counts_[key].get<uint64_t>() + 1;
+        if (type == "birth" && data.value("recovery_from_archive", false))
+            counts_["inherited_recovery_births"] = counts_.value("inherited_recovery_births", uint64_t(0)) + 1;
+        // Recovery endowments are external inputs even when the seed has a known genetic donor.
+        if (type == "birth" && data.value("forced", false) &&
+            (data.value("recovery_seed", false) || data.value("parent_id", std::string()).empty())) {
+            for (std::size_t i = 0; i < recovery_resources_.size(); ++i)
+                recovery_resources_[i] += data["resources"][i].get<int64_t>();
+            recovery_energy_ += data["totals"]["energy"].get<double>();
+        }
         peak_alive_ =
             std::max(peak_alive_, counts_["founders"].get<uint64_t>() + counts_["natural_births"].get<uint64_t>() +
                                       counts_["forced_births"].get<uint64_t>() - counts_["deaths"].get<uint64_t>());
@@ -106,17 +132,68 @@ void Stats::sample(uint64_t tick, const PopsManager& agents, const IWorld& world
     const double previous_correlation = replace ? latest_.value("corr_offspring_distance_alive", 0.0) : 0.0;
     if (replace && !rate_history_.empty())
         rate_history_.pop_back();
+    if (!replace) {
+        calcium_window_ticks_ = samples_ ? tick - latest_["tick"].get<uint64_t>() : 0;
+        previous_distances_ = std::move(current_distances_);
+        current_distances_.clear();
+    }
 
     tick_ = tick;
     auto live = agents.telemetry(false);
     Json active = empty_totals();
+    Json learning = Json::object();
     auto all = closed_;
-    auto total_resources = resources(world.get_total_organics());
+    const auto world_organics = world.get_total_organics();
+    auto total_resources = resources(world_organics);
+    std::size_t saturated_cells = 0;
+    for (const auto& cell : world.get_cells())
+        saturated_cells += cell->get_calcium() == MaxCaco3;
+    // Online centred covariance avoids cancellation when movement or calcium is nearly constant.
+    std::size_t calcium_n = 0;
+    double calcium_mean = 0, recent_distance_mean = 0, calcium_m2 = 0, recent_distance_m2 = 0, covariance = 0;
     double max_distance = 0, offspring_sq = 0, distance_sq = 0, product = 0;
+    double signal_abs = 0, signal_sq = 0, signal_positive = 0, signal_near_zero = 0;
     for (const auto& p : live) {
+        if (p.contains("learning")) {
+            add(learning, p["learning"]);
+            const double signal = p["learning"]["signal"];
+            signal_abs += std::abs(signal);
+            signal_sq += signal * signal;
+            signal_positive += signal > 0;
+            signal_near_zero += std::abs(signal) < 1e-4;
+        }
         add(active, p["totals"]);
         add(all, p["totals"]);
         const double d = p["totals"]["distance"], o = p["totals"]["offspring"];
+        const std::string id = p["pop_id"];
+        current_distances_[id] = d;
+        const auto previous = previous_distances_.find(id);
+        if (calcium_window_ticks_ && previous != previous_distances_.end()) {
+            const int x = p["position"][0], y = p["position"][1];
+            double calcium = 0;
+            unsigned neighbours = 0;
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (!dx && !dy)
+                        continue;
+                    if (const auto cell = world.get_cell(PositionT{x + dx, y + dy})) {
+                        calcium += cell->get_calcium();
+                        ++neighbours;
+                    }
+                }
+            }
+            if (neighbours) {
+                calcium /= neighbours;
+                const double distance = d - previous->second;
+                ++calcium_n;
+                const double dc = calcium - calcium_mean, dd = distance - recent_distance_mean;
+                calcium_mean += dc / calcium_n;
+                recent_distance_mean += dd / calcium_n;
+                calcium_m2 += dc * (calcium - calcium_mean);
+                recent_distance_m2 += dd * (distance - recent_distance_mean);
+                covariance += dc * (distance - recent_distance_mean);
+            }
+        }
         max_distance = std::max(max_distance, d);
         offspring_sq += o * o;
         distance_sq += d * d;
@@ -127,9 +204,23 @@ void Stats::sample(uint64_t tick, const PopsManager& agents, const IWorld& world
             for (std::size_t i = 0; i < p[key].size(); ++i)
                 all[key][i] = all[key][i].get<double>() + p[key][i].get<double>();
     }
+    const auto regen = world.get_regeneration_totals();
     if (initial_.empty())
-        initial_ = {{"resources", total_resources}, {"energy", active["energy"]}};
+        initial_ = {{"resources", total_resources},
+                    {"energy", active["energy"]},
+                    {"respirations", all["respirations"]},
+                    {"photosynthesis", all["photosynthesis"]},
+                    {"regenerated_glucose", regen.first},
+                    {"regenerated_o2", regen.second}};
     const auto n = live.size();
+    for (auto it = learning.begin(); it != learning.end(); ++it)
+        it.value() = n ? it.value().get<double>() / n : 0;
+    learning["n"] = n;
+    const double mean_signal = learning.value("signal", 0.0);
+    learning["mean_abs_signal"] = n ? signal_abs / n : 0;
+    learning["signal_std"] = n ? std::sqrt(std::max(0.0, signal_sq / n - mean_signal * mean_signal)) : 0;
+    learning["positive_signal_fraction"] = n ? signal_positive / n : 0;
+    learning["near_zero_signal_fraction"] = n ? signal_near_zero / n : 0;
     Json averages = active;
     for (auto it = averages.begin(); it != averages.end(); ++it)
         it.value() = n ? it.value().get<double>() / n : 0;
@@ -140,19 +231,29 @@ void Stats::sample(uint64_t tick, const PopsManager& agents, const IWorld& world
             ? (product / n - averages["offspring"].get<double>() * averages["distance"].get<double>()) /
                   std::sqrt(vx * vy)
             : 0;
-    const int64_t respiration = all["respirations"].get<int64_t>(), photo = all["photosynthesis"].get<int64_t>();
-    const auto regen = world.get_regeneration_totals();
-    const std::vector<int64_t> changes = {int64_t(regen.first) + photo - respiration,  -photo, 0, respiration - photo,
-                                          int64_t(regen.second) + photo - respiration, 0};
+    const int64_t respiration = all["respirations"].get<int64_t>() - initial_["respirations"].get<int64_t>(),
+                  photo = all["photosynthesis"].get<int64_t>() - initial_["photosynthesis"].get<int64_t>();
+    const auto glucose_input = regen.first - initial_["regenerated_glucose"].get<uint64_t>();
+    const auto oxygen_input = regen.second - initial_["regenerated_o2"].get<uint64_t>();
+    const std::vector<int64_t> changes = {int64_t(glucose_input) + photo - respiration,
+                                          respiration - photo,
+                                          0,
+                                          respiration - photo,
+                                          int64_t(oxygen_input) + photo - respiration,
+                                          0};
     Json residual = Json::array();
     for (std::size_t i = 0; i < 6; ++i)
         residual.push_back(total_resources[i].get<int64_t>() - initial_["resources"][i].get<int64_t>() - changes[i] +
-                           closed_["resources"][i].get<int64_t>());
-    const double expected = all["respiration_gain"].get<double>() - all["metabolism_cost"].get<double>() -
-                            all["movement_cost"].get<double>() - all["reproduction_cost"].get<double>() -
-                            all["thermoregulation_cost"].get<double>() - all["energy_cap"].get<double>() -
-                            closed_["energy"].get<double>() + all["roundoff"].get<double>() +
-                            all["pending_action_cost"].get<double>();
+                           closed_["resources"][i].get<int64_t>() - recovery_resources_[i]);
+    double expected = all["respiration_gain"].get<double>() - all["metabolism_cost"].get<double>() -
+                      all["movement_cost"].get<double>() - all["other_action_cost"].get<double>() -
+                      all["reproduction_cost"].get<double>() -
+                      all["thermoregulation_cost"].get<double>() - all["energy_cap"].get<double>() -
+                      closed_["energy"].get<double>() + all["roundoff"].get<double>() +
+                      all["pending_action_cost"].get<double>() + recovery_energy_;
+    if (!initial_.contains("flow_origin"))
+        initial_["flow_origin"] = expected;
+    expected -= initial_["flow_origin"].get<double>();
     const auto births = counts_["natural_births"].get<uint64_t>() + counts_["forced_births"].get<uint64_t>();
     double birth_rate = 0, death_rate = 0;
     if (!rate_history_.empty() && tick > rate_history_.front()["tick"].get<uint64_t>()) {
@@ -171,11 +272,22 @@ void Stats::sample(uint64_t tick, const PopsManager& agents, const IWorld& world
                {"alive", n},
                {"generation", agents.get_generation_count()},
                {"counts", counts_},
+               {"learning", learning},
+               {"reproduction", agents.reproduction_stats()},
                {"active", active},
                {"averages", averages},
                {"totals", all},
-               {"world_resources", resources(world.get_total_organics())},
-               {"world_nitrogen", world.get_total_organics().n2},
+               {"world_resources", resources(world_organics)},
+               {"world_nitrogen", world_organics.n2},
+               {"calcium_saturated_cells", saturated_cells},
+               {"calcium_distance_correlation",
+                {{"pearson", calcium_n >= 2 && calcium_m2 > 0 && recent_distance_m2 > 0
+                                 ? Json(std::clamp(covariance / std::sqrt(calcium_m2 * recent_distance_m2), -1.0, 1.0))
+                                 : Json(nullptr)},
+                 {"n", calcium_n},
+                 {"window_ticks", calcium_window_ticks_},
+                 {"mean_neighbour_calcium", calcium_n ? Json(calcium_mean) : Json(nullptr)},
+                 {"mean_distance", calcium_n ? Json(recent_distance_mean) : Json(nullptr)}}},
                {"max_distance_alive", max_distance},
                {"corr_offspring_distance_alive", correlation},
                {"birth_rate_simulated_second", birth_rate},
@@ -214,8 +326,8 @@ void Stats::sample(uint64_t tick, const PopsManager& agents, const IWorld& world
                           total_resources.get<std::array<int64_t, 6>>(),
                           closed_["resources"].get<std::array<int64_t, 6>>(),
                           residual.get<std::array<int64_t, 6>>(),
-                          regen.first,
-                          regen.second,
+                          glucose_input,
+                          oxygen_input,
                           initial_["energy"].get<double>(),
                           active["energy"].get<double>(),
                           closed_["energy"].get<double>(),
@@ -288,9 +400,11 @@ void Stats::record_sample(SampleRecord sample) {
                                   {"residual", b.resource_residual},
                                   {"regenerated_glucose", b.regenerated_glucose},
                                   {"regenerated_o2", b.regenerated_o2}};
+    latest_["resource_ledger"]["recovery_input"] = recovery_resources_;
     latest_["energy_ledger"] = {{"initial", b.initial_energy},
                                 {"final_alive", b.final_energy},
                                 {"dead_sink", b.dead_energy_sink},
                                 {"residual", b.energy_residual}};
+    latest_["energy_ledger"]["recovery_input"] = recovery_energy_;
     publish("sample", latest_);
 }

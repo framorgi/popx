@@ -63,9 +63,11 @@ class SimulationAudit {
         PopsManager manager(world, logger, config);
         if (manager.phase_arena_.max_concurrency() != static_cast<int>(threads))
             throw std::runtime_error("thread configuration ignored");
-        // Empty configured genome chooses action0; set its direction and movement trait explicitly.
+        // An explicit forward connection keeps this movement fixture independent of the idle fallback.
+        Genome genome(0, Genome::encoding_from_config(*config));
+        genome.add_gene(Gene(1, 0, 7, static_cast<unsigned>(Action::MOVE_FORWARD), 8192));
         for (int i = 0; i < 120; ++i) {
-            auto p = std::make_shared<Pop>(world, logger, config, Genome(0, Genome::encoding_from_config(*config)),
+            auto p = std::make_shared<Pop>(world, logger, config, genome,
                                            PhyT{1, 0, 1, 80});
             p->try_spawn({i % 12, i / 12});
             p->last_direction_ = {1, 0};

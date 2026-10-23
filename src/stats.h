@@ -7,6 +7,7 @@
 #include <ctime>
 #include <deque>
 #include <memory>
+#include <unordered_map>
 
 class PopsManager;
 /// @brief Authoritative observations and lifetime ledgers, independent of GUI and transport.
@@ -50,6 +51,10 @@ class Stats final : public IStats {
     uint64_t peak_alive_ = 0, completed_age_ = 0;
     double peak_distance_ = 0, correlation_sum_ = 0;
     std::deque<nlohmann::json> rate_history_;
+    std::unordered_map<std::string, double> previous_distances_, current_distances_;
+    uint64_t calcium_window_ticks_ = 0;
+    std::array<int64_t, 6> recovery_resources_{};
+    double recovery_energy_ = 0;
     std::chrono::steady_clock::time_point started_;
     std::clock_t cpu_started_ = 0;
 };

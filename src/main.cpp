@@ -17,13 +17,16 @@ int main(int argc, char** argv) {
                 return argv[i];
             };
             if (arg == "--help") {
-                std::cout << "PopX --headless --config PATH --udp-port PORT --speed 1|2\n"
+                std::cout << "PopX --headless --checkpoint PATH --config PATH --udp-port PORT --speed 0|1|2 (0 = turbo "
+                             "headless)\n"
                              "     --config-schema | --validate-config PATH | --help\n";
                 return 0;
             } else if (arg == "--headless")
                 options.headless = true;
             else if (arg == "--config")
                 options.config_path = value();
+            else if (arg == "--checkpoint")
+                options.checkpoint_path = value();
             else if (arg == "--udp-port")
                 options.udp_port = std::stoul(value());
             else if (arg == "--speed")
@@ -45,8 +48,10 @@ int main(int argc, char** argv) {
             std::cout << config.values().dump() << '\n';
             return 0;
         }
-        if (options.udp_port == 0 || options.udp_port > 65535 || (options.speed != 1 && options.speed != 2))
+        if (options.udp_port == 0 || options.udp_port > 65535 || (options.speed > 2))
             throw std::invalid_argument("Invalid UDP port or speed");
+        if (options.speed == 0)
+            options.headless = true;
         return PopXApp(std::move(options)).run();
     } catch (const std::exception& e) {
         std::cerr << "PopX: " << e.what() << '\n';

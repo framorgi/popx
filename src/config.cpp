@@ -262,7 +262,7 @@ nlohmann::json Config::schema() {
          {"type", "integer"},
          {"default", 5},
          {"group", "brain"},
-         {"description", "Inputs 0..48 implemented; 32 reserved"},
+         {"description", "Ingressi 0..56: 24..27 densità FOOD/DANGER/MATE/HOME, 32 ultimo movimento fallito, 49..56 percorribilità"},
          {"effective", true},
          {"min", 1},
          {"max", 4096}},
@@ -278,7 +278,7 @@ nlohmann::json Config::schema() {
          {"type", "integer"},
          {"default", 5},
          {"group", "brain"},
-         {"description", "Actions 0..20, 22 implemented; 21 reserved"},
+         {"description", "22 outputs enable DO_NOTHING at 21; 23 also enables KILL_FORWARD at 22"},
          {"effective", true},
          {"min", 1},
          {"max", 4096}},
@@ -298,6 +298,38 @@ nlohmann::json Config::schema() {
          {"effective", true},
          {"min", 4},
          {"max", 1024}},
+        {{"name", "source_count"},
+         {"type", "integer"},
+         {"default", 2},
+         {"group", "simulation"},
+         {"description", "Physical glucose sources spawned at random free cells; applied on restart"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 32}},
+        {{"name", "source_move_interval_ticks"},
+         {"type", "integer"},
+         {"default", 40},
+         {"group", "simulation"},
+         {"description", "Ticks between Source movement attempts; applied on restart"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 100000}},
+        {{"name", "source_glucose_interval_ticks"},
+         {"type", "integer"},
+         {"default", 40},
+         {"group", "simulation"},
+         {"description", "Ticks between Source glucose deposits; applied on restart"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 100000}},
+        {{"name", "source_glucose_per_neighbor"},
+         {"type", "integer"},
+         {"default", 8},
+         {"group", "simulation"},
+         {"description", "Units offered to each neighboring cell; overflow floods outward; applied on restart"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 500}},
         {{"name", "max_duration_minutes"},
          {"type", "number"},
          {"default", 0.0},
@@ -306,6 +338,16 @@ nlohmann::json Config::schema() {
          {"effective", true},
          {"min", 0},
          {"max", 1000000000.0}},
+        {{"name", "database_limit_gb"},
+         {"type", "number"},
+         {"default", 10.0},
+         {"group", "simulation"},
+         {"description", "Limite database in GB decimali (SQLite + WAL + SHM): la dashboard salva e verifica un "
+                         "checkpoint, elimina tutti gli storici e riparte dalla snapshot; checkpoint esterni esclusi. "
+                         "Applicato al prossimo Start/Restart."},
+         {"effective", true},
+         {"min", 0.001},
+         {"max", 1000000.0}},
         {{"name", "gui_fps"},
          {"type", "integer"},
          {"default", 30},
@@ -322,6 +364,23 @@ nlohmann::json Config::schema() {
          {"effective", true},
          {"min", 1},
          {"max", 120}},
+        {{"name", "max_population_allowed"},
+         {"label", "Cap massimo dei Pop vivi"},
+         {"type", "integer"},
+         {"default", 240},
+         {"group", "simulation"},
+         {"description", "Numero massimo di Pop vivi contemporaneamente. Al raggiungimento del limite, le nuove nascite attendono capacità libera. Applicato al prossimo Start/Restart."},
+         {"effective", true},
+         {"min", 1},
+         {"max", 10000}},
+        {{"name", "offspring_dispersal_radius"},
+         {"type", "integer"},
+         {"default", 1},
+         {"group", "simulation"},
+         {"description", "Raggio massimo di deposizione dei figli: prova le corone successive solo se le precedenti non offrono spazio."},
+         {"effective", true},
+         {"min", 1},
+         {"max", 8}},
         {{"name", "steps_per_generation"},
          {"type", "integer"},
          {"default", 300},
@@ -378,6 +437,54 @@ nlohmann::json Config::schema() {
          {"effective", true},
          {"min", 0},
          {"max", 2147483647}},
+        {{"name", "weight_mutation_rate"},
+         {"type", "number"},
+         {"default", 0.05},
+         {"group", "genome"},
+         {"description", "Probabilità di ritoccare solo il peso, se il gene non è stato sostituito"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 1}},
+        {{"name", "weight_mutation_step"},
+         {"type", "integer"},
+         {"default", 256},
+         {"group", "genome"},
+         {"description", "Ampiezza massima del ritocco in quanti genetici (8192 quanti = peso 1)"},
+         {"effective", true},
+         {"min", 1},
+         {"max", 32767}},
+        {{"name", "learning_rate"},
+         {"type", "number"},
+         {"default", 0.06},
+         {"group", "learning"},
+         {"description", "Intensità della plasticità modulata dal vantaggio rispetto alla ricompensa recente"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 1}},
+        {{"name", "learning_trace_decay"},
+         {"type", "number"},
+         {"default", 0.97},
+         {"group", "learning"},
+         {"description", "Persistenza per tick delle tracce delle azioni eseguite; 0 = solo tick corrente"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 0.9999}},
+        {{"name", "learning_weight_decay"},
+         {"type", "number"},
+         {"default", 0.00003},
+         {"group", "learning"},
+         {"description", "Decadimento per tick dell'eccesso del modulo del peso sopra 1/8192"},
+         {"effective", true},
+         {"min", 0},
+         {"max", 0.01}},
+        {{"name", "learning_baseline_rate"},
+         {"type", "number"},
+         {"default", 0.01},
+         {"group", "learning"},
+         {"description", "Velocità di aggiornamento della media recente della ricompensa"},
+         {"effective", true},
+         {"min", 1e-06},
+         {"max", 1}},
         {{"name", "point_mutation_rate"},
          {"type", "number"},
          {"default", 0.001},
@@ -464,7 +571,7 @@ nlohmann::json Config::schema() {
          {"type", "integer"},
          {"default", 6},
          {"group", "physiology"},
-         {"description", "phy init sensitiveness max"},
+         {"description", "Massimo del raggio sensoriale ereditato. Il raggio effettivo è limitato a 12 celle e può crescere tramite l'azione 20."},
          {"effective", true},
          {"min", 1},
          {"max", 4294967295}},
@@ -630,8 +737,8 @@ nlohmann::json Config::schema() {
          {"type", "integer"},
          {"default", 1},
          {"group", "simulation"},
-         {"description", "forced repro priority per tick"},
-         {"effective", true},
+         {"description", "Legacy: forced reproduction disabled; retained for INI compatibility"},
+         {"effective", false},
          {"min", 0},
          {"max", 32}},
     });
@@ -643,9 +750,16 @@ nlohmann::json Config::values() const {
         {"brain_size_y", params_.brain_size_y},
         {"brain_num_hidden_layers", params_.brain_num_hidden_layers},
         {"map_size", params_.map_size},
+        {"source_count", params_.source_count},
+        {"source_move_interval_ticks", params_.source_move_interval_ticks},
+        {"source_glucose_interval_ticks", params_.source_glucose_interval_ticks},
+        {"source_glucose_per_neighbor", params_.source_glucose_per_neighbor},
         {"max_duration_minutes", params_.max_duration_minutes},
+        {"database_limit_gb", params_.database_limit_gb},
         {"gui_fps", params_.gui_fps},
         {"population", params_.population},
+        {"max_population_allowed", params_.max_population_allowed},
+        {"offspring_dispersal_radius", params_.offspring_dispersal_radius},
         {"steps_per_generation", params_.steps_per_generation},
         {"max_generations", params_.max_generations},
         {"num_threads", params_.num_threads},
@@ -654,6 +768,13 @@ nlohmann::json Config::values() const {
         {"genome_source_index_count", params_.genome_source_index_count},
         {"genome_sink_index_count", params_.genome_sink_index_count},
         {"point_mutation_rate", params_.point_mutation_rate},
+        {"weight_mutation_rate", params_.weight_mutation_rate},
+        {"weight_mutation_step", params_.weight_mutation_step},
+        {"learning_rate", params_.learning_rate},
+        {"learning_trace_decay", params_.learning_trace_decay},
+        {"learning_weight_decay", params_.learning_weight_decay},
+        {"learning_baseline_rate", params_.learning_baseline_rate},
+
         {"gene_insertion_deletion_rate", params_.gene_insertion_deletion_rate},
         {"deletion_ratio", params_.deletion_ratio},
         {"sexual_reproduction", params_.sexual_reproduction},
@@ -690,10 +811,14 @@ nlohmann::json Config::values() const {
     };
 }
 void Config::validate() const {
+    if (params_.population > params_.max_population_allowed)
+        throw std::invalid_argument("population must not exceed max_population_allowed");
     if (params_.genome_min_length > params_.genome_max_length)
         throw std::invalid_argument("genome_min_length must not exceed genome_max_length");
     if (params_.phy_alpha_min > params_.phy_alpha_max)
         throw std::invalid_argument("phy_alpha_min must not exceed phy_alpha_max");
+    if (params_.population + params_.source_count > uint64_t(params_.map_size) * params_.map_size)
+        throw std::invalid_argument("population plus sources exceeds world capacity");
     if (params_.population > uint64_t(params_.map_size) * params_.map_size)
         throw std::invalid_argument("population exceeds world capacity");
 }
@@ -740,8 +865,16 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
             params_.map_size = to_uint(value);
             return;
         }
+        if (name == "source_count") { params_.source_count = to_uint(value); return; }
+        if (name == "source_move_interval_ticks") { params_.source_move_interval_ticks = to_uint(value); return; }
+        if (name == "source_glucose_interval_ticks") { params_.source_glucose_interval_ticks = to_uint(value); return; }
+        if (name == "source_glucose_per_neighbor") { params_.source_glucose_per_neighbor = to_uint(value); return; }
         if (name == "max_duration_minutes") {
             params_.max_duration_minutes = to_double(value);
+            return;
+        }
+        if (name == "database_limit_gb") {
+            params_.database_limit_gb = to_double(value);
             return;
         }
         if (name == "gui_fps") {
@@ -750,6 +883,14 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
         }
         if (name == "population") {
             params_.population = to_uint(value);
+            return;
+        }
+        if (name == "max_population_allowed") {
+            params_.max_population_allowed = to_uint(value);
+            return;
+        }
+        if (name == "offspring_dispersal_radius") {
+            params_.offspring_dispersal_radius = to_uint(value);
             return;
         }
         if (name == "steps_per_generation") {
@@ -778,6 +919,30 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
         }
         if (name == "genome_sink_index_count") {
             params_.genome_sink_index_count = to_uint(value);
+            return;
+        }
+        if (name == "weight_mutation_rate") {
+            params_.weight_mutation_rate = to_double(value);
+            return;
+        }
+        if (name == "weight_mutation_step") {
+            params_.weight_mutation_step = to_uint(value);
+            return;
+        }
+        if (name == "learning_rate") {
+            params_.learning_rate = to_double(value);
+            return;
+        }
+        if (name == "learning_trace_decay") {
+            params_.learning_trace_decay = to_double(value);
+            return;
+        }
+        if (name == "learning_weight_decay") {
+            params_.learning_weight_decay = to_double(value);
+            return;
+        }
+        if (name == "learning_baseline_rate") {
+            params_.learning_baseline_rate = to_double(value);
             return;
         }
         if (name == "point_mutation_rate") {

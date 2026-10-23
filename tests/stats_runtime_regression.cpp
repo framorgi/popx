@@ -33,6 +33,7 @@ class MemoryTransport final : public ICommunicator {
 class SimulationAudit {
   public:
     static void extinction() {
+        require(RunClock::interval(0).count() == 0, "turbo should not pace biological ticks");
         auto log = std::make_shared<ConsoleLogger>();
         log->set_level(LogLevel::Error);
         auto config = std::make_shared<Config>("config/popx.ini");
@@ -64,6 +65,7 @@ class SimulationAudit {
         Simulator sim(world, manager, log);
         sim.set_duration(0);
         sim.init();
+        stats->sample(0, *manager, *world);
         for (auto& pop : manager->pops_)
             pop->die();
         sim.update();
@@ -73,6 +75,16 @@ class SimulationAudit {
         stats->sample(sim.tick(), *manager, *world);
         require(stats->latest()["counts"]["forced_births"] == MinPopulationAllowed,
                 "endless recovery was not recorded as forced births");
+        require(stats->latest()["counts"]["inherited_recovery_births"] == MinPopulationAllowed,
+                "extinction discarded the hereditary archive");
+        for (const auto& pop : manager->pops_)
+            require(!pop->parent_id_.empty(), "recovery lost the donor identity");
+        require(stats->latest()["resource_ledger"]["recovery_input"][1] == MinPopulationAllowed * 100,
+                "recovery endowment not observed");
+        for (const auto& residual : stats->latest()["resource_ledger"]["residual"])
+            require(residual == 0, "recovery matter balance");
+        require(std::abs(stats->latest()["energy_ledger"]["residual"].get<double>()) < 1e-5,
+                "recovery energy balance");
     }
     static void pending_action() {
         auto log = std::make_shared<ConsoleLogger>();

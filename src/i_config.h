@@ -16,6 +16,13 @@ class IConfig {
     virtual unsigned get_gui_fps() const {
         return 30;
     }
+    virtual unsigned get_max_population_allowed() const { return 240; }
+    virtual unsigned get_offspring_dispersal_radius() const { return 1; }
+
+    virtual unsigned get_source_count() const { return 2; }
+    virtual unsigned get_source_move_interval_ticks() const { return 40; }
+    virtual unsigned get_source_glucose_interval_ticks() const { return 40; }
+    virtual unsigned get_source_glucose_per_neighbor() const { return 8; }
 
     // --- Brain (neural network) layer sizes ----------------------------------
     virtual unsigned get_brain_size_s() const = 0;            ///< Sensor (input) layer
@@ -39,6 +46,25 @@ class IConfig {
 
     // --- Genetics / mutation -------------------------------------------------
     virtual double get_point_mutation_rate() const = 0;
+    virtual double get_weight_mutation_rate() const {
+        return 0.05;
+    }
+    virtual unsigned get_weight_mutation_step() const {
+        return 256;
+    }
+    virtual double get_learning_rate() const {
+        return 0.06;
+    }
+    virtual double get_learning_trace_decay() const {
+        return 0.97;
+    }
+    virtual double get_learning_weight_decay() const {
+        return 0.00003;
+    }
+    virtual double get_learning_baseline_rate() const {
+        return 0.01;
+    }
+
     virtual double get_gene_insertion_deletion_rate() const = 0;
     virtual double get_deletion_ratio() const = 0;
     virtual bool get_sexual_reproduction() const = 0;

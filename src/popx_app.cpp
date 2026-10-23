@@ -1,5 +1,6 @@
 #include "popx_app.h"
 
+#include "checkpoint.h"
 #include "console_logger.h"
 #include "run_clock.h"
 #include "udp_communicator.h"
@@ -24,14 +25,62 @@ PopXApp::PopXApp(AppOptions options) : options_(std::move(options)) {
     logger_->set_level(LogLevel::Error);
     stats_ = std::make_shared<Stats>(std::make_unique<UdpCommunicator>(options_.udp_port));
 }
-void PopXApp::start() {
-    auto config = std::make_shared<Config>(options_.config_path, true);
-    auto world = std::make_shared<GridWorld>(config->get_map_size(), config->get_map_size(), logger_);
+void PopXApp::start(const std::string& checkpoint_path) {
+    nlohmann::json checkpoint;
+    std::filesystem::path candidate;
+    if (!checkpoint_path.empty()) {
+        checkpoint = CheckpointCodec::read(checkpoint_path);
+        candidate = options_.config_path + ".checkpoint-candidate";
+        std::ofstream ini(candidate, std::ios::trunc);
+        ini << checkpoint.at("ini").get<std::string>();
+        ini.close();
+        if (!ini)
+            throw std::runtime_error("Cannot stage checkpoint configuration");
+    }
+    struct RemoveCandidate {
+        std::filesystem::path p;
+        ~RemoveCandidate() {
+            if (!p.empty()) {
+                std::error_code ec;
+                std::filesystem::remove(p, ec);
+            }
+        }
+    } cleanup{candidate};
+    auto config = std::make_shared<Config>(candidate.empty() ? options_.config_path : candidate.string(), true);
+    if (!checkpoint.is_null()) {
+        auto saved_config = checkpoint.at("config");
+        // v4 checkpoints written before this parameter used the same 240-Pop default.
+        if (!saved_config.contains("max_population_allowed"))
+            saved_config["max_population_allowed"] = 240;
+        if (!saved_config.contains("offspring_dispersal_radius"))
+            saved_config["offspring_dispersal_radius"] = 1;
+        if (config->values() != saved_config)
+            throw std::runtime_error("Checkpoint INI differs from saved configuration");
+    }
+    auto world = std::make_shared<GridWorld>(config->get_map_size(), config->get_map_size(), logger_,
+        SourceSettings{config->get_source_count(), config->get_source_move_interval_ticks(),
+                       config->get_source_glucose_interval_ticks(), config->get_source_glucose_per_neighbor()});
     auto agents = std::make_shared<PopsManager>(world, logger_, config);
     auto sim = std::make_shared<Simulator>(world, agents, logger_);
     sim->set_duration(config->get_max_duration_minutes());
     sim->command("speed", {{"value", options_.speed}});
-    sim->init(); // Prepare fully before replacing the old run.
+    if (checkpoint.is_null())
+        sim->init();
+    else {
+        CheckpointCodec::restore(checkpoint, *world, *agents);
+        sim->command("speed", {{"value", checkpoint.at("speed")}});
+        sim->command("pause", {}); // The dashboard resumes only after storage/configuration is ready.
+        int fd = ::open(candidate.c_str(), O_RDONLY);
+        if (fd < 0)
+            throw std::runtime_error("Cannot sync checkpoint INI");
+        int ok = ::fsync(fd);
+        ::close(fd);
+        if (ok)
+            throw std::runtime_error("Cannot sync checkpoint INI");
+        std::filesystem::rename(candidate, options_.config_path);
+        config->filepath_ = options_.config_path;
+    }
+    // All validation and reconstruction succeeded before replacing the old run.
     if (sim_ && !finished_recorded_)
         stats_->end_session(sim_->tick(), "restart", *agents_, *world_);
     const bool visible = bool(gui_);
@@ -42,17 +91,50 @@ void PopXApp::start() {
     sim_ = std::move(sim);
     std::ifstream ini(options_.config_path);
     std::string raw((std::istreambuf_iterator<char>(ini)), {});
-    stats_->begin_session({{"kind", "evolution"},
-                           {"config", config_->values()},
-                           {"ini", raw},
-                           {"config_path", config_->path()},
-                           {"rng", "random_device and rand; no global deterministic seed"},
-                           {"build", __VERSION__},
-                           {"tick_seconds", 0.01},
-                           {"model", "reserve_regulated_v1"}});
+    active_ini_ = raw;
+    locked_ini_ = checkpoint.is_null() ? std::string{} : raw;
+    loaded_checkpoint_ = checkpoint_path;
+    migration_origin_ = nullptr;
+    if (!checkpoint.is_null()) {
+        migration_origin_ = checkpoint.value("migration_origin", nlohmann::json(nullptr));
+        if (checkpoint.at("partial").get<bool>())
+            migration_origin_ = {
+                {"source_run", checkpoint.at("source_run")},
+                {"source_tick", checkpoint.at("source_tick")},
+                {"reconstruction", checkpoint.value("reconstruction", std::string("Legacy partial migration"))}};
+    }
+    stats_->begin_session(
+        {{"kind", "evolution"},
+         {"checkpoint", checkpoint.is_null() ? nlohmann::json(nullptr)
+                                             : nlohmann::json{{"path", checkpoint_path},
+                                                              {"source_run", checkpoint.at("source_run")},
+                                                              {"source_tick", checkpoint.at("source_tick")},
+                                                              {"partial_migration", !migration_origin_.is_null()},
+                                                              {"state_complete", !checkpoint.at("partial").get<bool>()},
+                                                              {"migration_origin", migration_origin_}}},
+         {"config_locked", !locked_ini_.empty()},
+         {"sensor_model", "chemical_density_v2"},
+         {"config", config_->values()},
+         {"ini", raw},
+         {"config_path", config_->path()},
+         {"rng", "random_device and rand; no global deterministic seed"},
+         {"build", __VERSION__},
+         {"tick_seconds", 0.01},
+         {"temperature_refresh_interval_ticks", TemperatureRefreshInterval},
+         {"temperature_rbf_model", "orbiting_centers_fixed_widths_v1"},
+         {"population_capacity", config_->get_max_population_allowed()},
+         {"genetic_similarity_model", "endpoint_weight_v1"},
+         {"genetic_color_model", "projection_v1"},
+         {"extinction_recovery_model", "recent_distinct_heritable_profiles_64_v1"},
+         {"model", "moving_glucose_source_v10"}});
     agents_->set_stats(stats_);
-    for (auto& p : agents_->telemetry(true))
+    for (auto& p : agents_->telemetry(true)) {
+        if (!checkpoint.is_null()) {
+            p["checkpoint_entry"] = true;
+            p["entry_age"] = p["age"];
+        }
         stats_->record_event({LifeEvent::Founder, std::move(p)});
+    }
     stats_->record_environment(*world_);
     stats_->sample(0, *agents_, *world_);
     finished_recorded_ = false;
@@ -83,6 +165,8 @@ void PopXApp::show_gui() {
     gfx_ = std::move(gfx);
     renderer_ = std::move(renderer);
     gui_ = std::move(gui);
+    if (sim_->speed() == 0)
+        sim_->command("speed", {{"value", 2}});
     reset_clock_ = true;
 }
 void PopXApp::hide_gui() {
@@ -99,6 +183,8 @@ nlohmann::json PopXApp::status() const {
             {"speed", sim_->speed()},
             {"gui", bool(gui_)},
             {"alive", agents_->get_alive_count()},
+            {"checkpoint_supported", true},
+            {"config_locked", !locked_ini_.empty()},
             {"run_id", stats_->run_id()},
             {"transport", stats_->transport_status()}};
 }
@@ -119,7 +205,35 @@ void PopXApp::dispatch(nlohmann::json command) {
             throw std::runtime_error("Run has changed; refresh status");
         const auto name = command.at("command").get<std::string>();
         const auto args = command.value("arguments", nlohmann::json::object());
-        if (name == "restart" || name == "start") {
+        if (name == "checkpoint_save") {
+            const auto path = args.at("path").get<std::string>();
+            // Disk edits after Start are proposals for another run. A checkpoint must
+            // carry the exact INI that constructed this live world and its Pop brains.
+            if (active_ini_.empty())
+                throw std::runtime_error("Active run INI is unavailable");
+            auto doc = CheckpointCodec::capture(*world_, *agents_, active_ini_, config_->values(), stats_->run_id(),
+                                                sim_->tick(), sim_->speed());
+            doc["migration_origin"] = migration_origin_;
+            CheckpointCodec::write(path, doc);
+            if (args.value("pause", false) && sim_->state() == "running")
+                sim_->command("pause", {});
+            reply["result"] = {
+                {"path", path}, {"tick", sim_->tick()}, {"run_id", stats_->run_id()}, {"complete", true}};
+        } else if (name == "checkpoint_verify") {
+            auto doc = CheckpointCodec::read(args.at("path").get<std::string>());
+            if (doc.at("config") != config_->values())
+                throw std::runtime_error("Verification requires matching active configuration");
+            auto world = std::make_shared<GridWorld>(config_->get_map_size(), config_->get_map_size(), logger_,
+                SourceSettings{config_->get_source_count(), config_->get_source_move_interval_ticks(),
+                               config_->get_source_glucose_interval_ticks(), config_->get_source_glucose_per_neighbor()});
+            PopsManager agents(world, logger_, config_);
+            CheckpointCodec::restore(doc, *world, agents);
+            reply["result"] = {{"valid", true}, {"populations", agents.get_alive_count()}};
+        } else if (name == "checkpoint_load") {
+            start(args.at("path").get<std::string>());
+        } else if (name == "restart" || name == "start") {
+            if (!locked_ini_.empty())
+                throw std::runtime_error("Configuration locked: load a checkpoint to restart this run");
             if (name == "start" && sim_->state() != "finished")
                 throw std::runtime_error("Run already active; use Restart");
             start();
@@ -141,6 +255,8 @@ void PopXApp::dispatch(nlohmann::json command) {
             reply["result"] = std::move(snapshot);
         } else {
             sim_->command(name, args);
+            if (name == "speed" && sim_->speed() == 0)
+                hide_gui();
             reset_clock_ = true;
         }
         if (renderer_ && name == "newgen")
@@ -169,7 +285,7 @@ void PopXApp::finish_if_needed() {
 int PopXApp::run() {
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
-    start();
+    start(options_.checkpoint_path);
     if (!options_.headless) {
         try {
             show_gui();
@@ -182,20 +298,29 @@ int PopXApp::run() {
     std::string failure;
     try {
         while (!quit_ && !interrupted) {
-            for (auto& command : stats_->commands())
+            for (auto& command : stats_->commands()) {
                 dispatch(std::move(command));
-            while (!control_.commands.empty()) {
+                if (quit_)
+                    break;
+            }
+            while (!quit_ && !control_.commands.empty()) {
                 auto cmd = std::move(control_.commands.front());
                 control_.commands.pop_front();
                 dispatch(std::move(cmd));
             }
+            if (quit_ || interrupted)
+                break;
             if (reset_clock_) {
                 next_tick = Clock::now() + RunClock::interval(sim_->speed());
                 next_frame = Clock::now();
                 last_frame = Clock::now();
                 reset_clock_ = false;
             }
-            for (unsigned count = 0; count < 8 && sim_->state() == "running" && Clock::now() >= next_tick; ++count) {
+            const bool turbo = sim_->speed() == 0;
+            const bool transport_busy = turbo && stats_->transport_status().value("queued", 0u) >= 128;
+            for (unsigned count = 0;
+                 count < 8 && !transport_busy && sim_->state() == "running" && (turbo || Clock::now() >= next_tick);
+                 ++count) {
                 stats_->set_tick(sim_->tick() + 1);
                 const auto begin = Clock::now();
                 sim_->update();
@@ -241,8 +366,8 @@ int PopXApp::run() {
                 next_publish = Clock::now() + std::chrono::seconds(1);
             }
             auto wake = Clock::now() + std::chrono::milliseconds(10);
-            if (sim_->state() == "running")
-                wake = std::min(wake, next_tick);
+            if (sim_->state() == "running" && !transport_busy)
+                wake = turbo ? Clock::now() : std::min(wake, next_tick);
             if (redraw)
                 wake = std::min(wake, next_frame);
             std::this_thread::sleep_until(wake);

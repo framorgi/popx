@@ -3,11 +3,20 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 cmake --build build-release --target popx -j 2
-for regression in respiration pop_cycle parallel_phase genome_encoding pheromone stats_runtime; do
+for regression in respiration pop_cycle parallel_phase genome_encoding pheromone stats_runtime recovery calcium neural_policy temperature_rbf learning_evolution genetic_similarity checkpoint source movement_failure local_mobility action_cost extinction_recovery; do
     clang++ -std=c++23 -O2 -Isrc \
         -Ibuild-release/_deps/eigen3-src -Ibuild-release/_deps/nlohmann_json-src/include \
         "tests/${regression}_regression.cpp" \
         build-release/src/CMakeFiles/popx.dir/{brain,cell,config,console_logger,gene,genome,grid_world,pop,pops_manager,random_utility,simulator,stats}.cpp.o \
         -ltbb -lstdc++fs -o "/tmp/popx_${regression}_regression"
-    "/tmp/popx_${regression}_regression"
+    if [[ "$regression" == checkpoint ]]; then
+        checkpoint_tmp=$(mktemp -d /tmp/popx-checkpoint-regression.XXXXXX)
+        trap 'rm -rf -- "$checkpoint_tmp"' EXIT
+        cp config/popx.ini "$checkpoint_tmp/config.ini"
+        "/tmp/popx_${regression}_regression" "$checkpoint_tmp/config.ini"
+        rm -rf -- "$checkpoint_tmp"
+        trap - EXIT
+    else
+        "/tmp/popx_${regression}_regression"
+    fi
 done
