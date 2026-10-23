@@ -16,13 +16,20 @@ struct BrainConnectionActivity {
     float activity_score = 0.0f;
 };
 
+struct BrainLearningStats {
+    uint64_t updates = 0;
+    double abs_weight_change_sum = 0, abs_plasticity_sum = 0;
+    double mean_abs_delta = 0, mean_abs_trace = 0, mean_abs_weight = 0, zero_fraction = 0;
+    double mean_abs_plasticity = 0, mean_abs_decay = 0;
+};
+
 /// @brief Pure interface for a feed-forward neural network brain.
 ///
 /// Architecture (feedforward, H hidden layers):
 ///   h[0]   = sensor values
 ///   h[k]   = σ( Σ_{j<k} M[j,k] · h[j] )   for k = 1..H   (hidden layers)
 ///   h[H+1] = σ( Σ_{j<H+1} M[j,H+1] · h[j] ) (output layer)
-///   action = argmax( h[H+1] )
+///   action = unique argmax( h[H+1] ); neutral/tied outputs produce DO_NOTHING.
 ///
 /// Skip connections (src layer j → any deeper layer k > j) are supported.
 /// Gene type encoding: 0=SENSOR, 1..H=HIDDEN_1..H, 7=OUTPUT (always 7).
@@ -42,6 +49,11 @@ class IBrain {
     virtual int feed_forward(const std::vector<float>& sensor_values) = 0;
 
     virtual void hebbian_update(float reward) = 0;
+    /// @brief Register neural activity only when the selected action is actually executed.
+    virtual void record_action(int) {}
+    virtual BrainLearningStats learning_stats() const {
+        return {};
+    }
 
     /// @brief Returns the genome rebuilt from the current learned weights plus preserved silent genes.
     /// Returns nullptr if hebbian_inheritance is disabled or wire() has not yet been called.

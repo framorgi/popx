@@ -5,11 +5,11 @@
 enum class Sensor {
     // ── 0-7: position / movement ──────────────────────────────────────────
     LOC_X,           // 0  distance from left edge
-    LOC_Y,           // 1  distance from bottom
+    LOC_Y,           // 1  normalized coordinate from the top edge (y increases south)
     BOUNDARY_DIST_X, // 2  X distance to nearest world edge
     BOUNDARY_DIST,   // 3  distance to nearest world edge
     BOUNDARY_DIST_Y, // 4  Y distance to nearest world edge
-    GENETIC_SIM_FWD, // 5  genetic similarity of entity ahead
+    GENETIC_SIM_FWD, // 5: birth-genome similarity of the adjacent living Pop ahead; empty/outside = 0.
     LAST_MOVE_DIR_X, // 6  last X displacement
     LAST_MOVE_DIR_Y, // 7  last Y displacement
 
@@ -34,10 +34,10 @@ enum class Sensor {
     SENSE_SIGNAL_DANGER, // 21  DANGER feromone at current cell
     SENSE_SIGNAL_MATE,   // 22  MATE feromone at current cell
     SENSE_SIGNAL_HOME,   // 23  HOME feromone at current cell
-    SENSE_SIGNAL_DRV_N,  // 24  FOOD feromone gradient N
-    SENSE_SIGNAL_DRV_W,  // 25
-    SENSE_SIGNAL_DRV_E,  // 26
-    SENSE_SIGNAL_DRV_S,  // 27
+    SENSE_SIGNAL_DENSITY_FOOD,   // 24  mean FOOD concentration around the Pop
+    SENSE_SIGNAL_DENSITY_DANGER, // 25  mean DANGER concentration
+    SENSE_SIGNAL_DENSITY_MATE,   // 26  mean MATE concentration
+    SENSE_SIGNAL_DENSITY_HOME,   // 27  mean HOME concentration
 
     // ── 28-31: intrinsic / environmental ──────────────────────────────────
     // Keep historical indices stable when expanding the input domain.
@@ -46,7 +46,7 @@ enum class Sensor {
     TEMP,   // 30  temperature at current cell
     RANDOM, // 31  uniform random
 
-    RESERVED_INPUT = 32, // Historical sentinel slot; always zero.
+    LAST_MOVE_FAILED = 32, // 1 after a failed movement attempt, 0 after a successful one or at birth.
 
     // ── Resource sensors: configured input width must include these slots.
     GLUCOSE_DENSITY_N = 33,
@@ -65,7 +65,15 @@ enum class Sensor {
     SENSE_HOME_DRV_W,
     SENSE_HOME_DRV_E,
     SENSE_HOME_DRV_S,
-    NUM_SENSES, // 49 input slots; historical sensor indices remain stable.
+    MOVE_OPEN_N, // 49: exact destination passability at current movement stride.
+    MOVE_OPEN_NE,
+    MOVE_OPEN_E,
+    MOVE_OPEN_SE,
+    MOVE_OPEN_S,
+    MOVE_OPEN_SW,
+    MOVE_OPEN_W,
+    MOVE_OPEN_NW,
+    SENSOR_COUNT, // 57 input slots; sentinel is not a sensor.
 };
 
 enum class Action {
@@ -96,9 +104,9 @@ enum class Action {
     // ── 18-20: internal modulation ────────────────────────────────────────
     BURN_CALORIES,         // 18  burn energy to produce extra heat
     SET_OSCILLATOR_PERIOD, // 19  scale osc_period_ × 1.1
-    SET_RESPONSIVENESS,    // 20  increase responsiveness_ by 0.1
+    SET_RESPONSIVENESS,    // 20  increase movement responsiveness and effective sensing radius
 
-    RESERVED_ACTION = 21, // Historical sentinel slot; no operation.
-    KILL_FORWARD = 22,    // Lethal: kill entity in the forward cell.
-    NUM_ACTIONS,          // 23 output slots; brain_size_y may limit the enabled prefix.
+    DO_NOTHING = 21,   // Explicit wait and fallback when outputs do not select a unique action.
+    KILL_FORWARD = 22, // Lethal: kill entity in the forward cell.
+    NUM_ACTIONS,       // 23 output slots; brain_size_y may limit the enabled prefix.
 };

@@ -1,5 +1,7 @@
 #include "brain.h"
 
+#include "neuron.h"
+
 #include <Eigen/Dense>
 #include <algorithm>
 #include <chrono>
@@ -26,6 +28,9 @@ Brain::Brain(std::shared_ptr<IConfig> config) : config_(std::move(config)) {
 void Brain::allocate() {
     M_.clear();
     M_.resize(num_layers_ * num_layers_);
+    eligibility_.assign(num_layers_ * num_layers_, {});
+    learning_stats_ = {};
+    activations_.clear();
     for (unsigned src = 0; src < num_layers_; ++src) {
         for (unsigned dst = src + 1; dst < num_layers_; ++dst) {
             M_[src * num_layers_ + dst] =
@@ -124,8 +129,20 @@ void Brain::wire(const Genome& genome) {
             auto& t = triplets[src * nl + dst];
             if (!t.empty())
                 M_[src * nl + dst].setFromTriplets(t.begin(), t.end());
+            eligibility_[src * nl + dst].assign(M_[src * nl + dst].nonZeros(), 0.0f);
         }
     }
+    std::size_t count = 0, zeros = 0;
+    double absolute = 0;
+    for (const auto& matrix : M_)
+        for (Eigen::Index i = 0; i < matrix.nonZeros(); ++i) {
+            const float weight = matrix.valuePtr()[i];
+            absolute += std::abs(weight);
+            zeros += weight == 0;
+            ++count;
+        }
+    learning_stats_.mean_abs_weight = count ? absolute / count : 0;
+    learning_stats_.zero_fraction = count ? double(zeros) / count : 0;
 }
 
 int Brain::feed_forward(const std::vector<float>& sensor_values) {
@@ -151,17 +168,23 @@ int Brain::feed_forward(const std::vector<float>& sensor_values) {
     }
     // Store activations for potential Hebbian updates after action execution
     activations_ = h;
-    // argmax of the output layer
+    // A neutral or tied output is not a request to move forward.
     const auto& out = h[nl - 1];
+    const int idle = static_cast<int>(Action::DO_NOTHING);
+    if (out.size() == 0 || !out.allFinite() || (out.array() == 0.5f).all() || (out.array() == 0.0f).all())
+        return idle;
     int max_index = -1;
     float max_value = 0.0f;
+    bool tied = false;
     for (int i = 0; i < out.size(); ++i) {
-        if (out(i) > max_value) {
+        if (max_index < 0 || out(i) > max_value) {
             max_value = out(i);
             max_index = i;
-        }
+            tied = false;
+        } else if (out(i) == max_value)
+            tied = true;
     }
-    return max_index;
+    return tied ? idle : max_index;
 }
 
 void Brain::resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned num_hidden) {
@@ -356,130 +379,80 @@ float Brain::sigmoid(float x) const {
     return ex / (1.0f + ex);
 }
 
-void Brain::hebbian_update(float reward) {
-    // ---------------------------------------------------------------------
-    // Global  learning rate
-    //
-    // Defines how much the synaptic weights are adjusted in response to the reward signal.
-    // Too large values make the behavior unstable.
-    // It's generally advisable to start with very small numbers.
-    // ---------------------------------------------------------------------
-    constexpr float eta = HebbianLearningRate;
-
-    // ---------------------------------------------------------------------
-    // Decay term.
-    //
-    // Simulates the fact that an unused or less useful synapse
-    // gradually loses effectiveness.
-    //
-    // It also prevents all weights from growing indefinitely.
-    // ---------------------------------------------------------------------
-    constexpr float decay = 0.0001f;
-
-    // ---------------------------------------------------------------------
-    // Absolute weight limits.
-    //
-    // In a biological network, the strength of a synapse is not infinite.
-    // This bounding prevents numerical divergences and extreme saturations.
-    // those boundaries match the ones used in genetic_lottery() to generate new random weights for new genes.
-    // ---------------------------------------------------------------------
-    constexpr float max_weight = 4.0f;
-    constexpr float min_weight = -4.0f;
-
-    const unsigned nl = num_layers_;
-
-    // ---------------------------------------------------------------------
-    // Iterate over all possible layer pairs.
-    //
-    // The network is feed-forward, so connections only exist
-    // from shallower layers to deeper layers.
-    // ---------------------------------------------------------------------
-    for (unsigned src = 0; src < nl; ++src) {
-        for (unsigned dst = src + 1; dst < nl; ++dst) {
-            // saving the connection matrix for the current layer pair
-            auto& W = M_[src * nl + dst];
-
-            // No connections present.
-            if (W.nonZeros() == 0)
-                continue;
-
-            // -----------------------------------------------------------------
-            // Eigen stores sparse matrices by columns.
-            // outerSize() allows iterating only over the elements
-            // that actually exist without visiting empty cells.
-            // -----------------------------------------------------------------
-            for (int k = 0; k < W.outerSize(); ++k) {
-                for (Eigen::SparseMatrix<float>::InnerIterator it(W, k); it; ++it) {
-                    // ---------------------------------------------------------
-                    // pre-synaptic activity mangnitude.
-                    // ---------------------------------------------------------
+void Brain::record_action(int action) {
+    if (activations_.size() != num_layers_)
+        return;
+    // One action every three phases: normalized accumulating trace, bounded for sustained activity.
+    const float decay = static_cast<float>(config_->get_learning_trace_decay());
+    const float injection = 1.0f - decay * decay * decay;
+    for (unsigned src = 0; src < num_layers_; ++src) {
+        for (unsigned dst = src + 1; dst < num_layers_; ++dst) {
+            const auto& matrix = M_[src * num_layers_ + dst];
+            auto& trace = eligibility_[src * num_layers_ + dst];
+            std::size_t index = 0;
+            for (int k = 0; k < matrix.outerSize(); ++k) {
+                for (Eigen::SparseMatrix<float>::InnerIterator it(matrix, k); it; ++it, ++index) {
+                    // Only the chosen actuator receives new output credit. Hidden activity is a local approximation.
+                    if (dst == num_layers_ - 1 && it.row() != action)
+                        continue;
                     const float pre = activations_[src](it.col());
-
-                    // Offset, centering the pre value around 0 to allow for negative and positive Hebbian updates
-                    const float pre_centered = pre - 0.5f;
-
-                    // ---------------------------------------------------------
-                    // Post-synaptic neuron activity.
-                    // ---------------------------------------------------------
-                    // How active was the neuron receiving the signal.
-                    // ---------------------------------------------------------
                     const float post = activations_[dst](it.row());
-                    // Offset, centering the post value around 0 to allow for negative and positive Heb
-                    float post_centered = post - 0.5f;
-
-                    // Current synapse weight.
-                    const float w = it.value();
-
-                    // ---------------------------------------------------------
-                    // Hebbian term.
-                    //
-                    // If reward > 0:
-                    //   connections between co-active neurons are strengthened.
-                    //
-                    // If reward < 0:
-                    //   connections between co-active neurons are weakened.
-                    // ---------------------------------------------------------
-                    const float hebbian_term = eta * reward * pre_centered * post_centered;
-
-                    // ---------------------------------------------------------
-                    // Apply Biological decay term.
-                    // ---------------------------------------------------------
-                    const float decay_term = decay * w;
-
-                    // ---------------------------------------------------------
-                    // Total synaptic change.
-                    //
-                    // The decay is subtracted because it tends to
-                    // slowly bring the weight back towards zero.
-                    // ---------------------------------------------------------
-                    const float dw = hebbian_term - decay_term;
-
-                    // New weight.
-                    float new_weight = w + dw;
-
-                    // ---------------------------------------------------------
-                    // Bounding.
-                    //
-                    // Prevents pathological values.
-                    // A synapse cannot become arbitrarily strong.
-                    // ---------------------------------------------------------
-                    if (new_weight > max_weight)
-                        new_weight = max_weight;
-
-                    if (new_weight < min_weight)
-                        new_weight = min_weight;
-
-                    // Writing the new weight.
-                    it.valueRef() = new_weight;
+                    // Chosen-output local gradient remains responsive around sigmoid 0.5.
+                    // Hidden credit remains a local centered approximation, not backpropagation.
+                    const float activity =
+                        dst == num_layers_ - 1 ? pre * post * (1.0f - post) : (pre - 0.5f) * (post - 0.5f);
+                    trace[index] = std::clamp(trace[index] + injection * activity, -0.25f, 0.25f);
                 }
             }
         }
     }
+}
 
-    // Mark dirty; rebuilding the learned genome is deferred until reproduction requests it.
-    if (config_->get_hebbian_inheritance()) {
-        learned_genome_dirty_ = true;
+void Brain::hebbian_update(float reward) {
+    if (activations_.size() != num_layers_ || !std::isfinite(reward))
+        return;
+    const float eta = static_cast<float>(config_->get_learning_rate());
+    const float trace_decay = static_cast<float>(config_->get_learning_trace_decay());
+    double changes = 0, plasticity = 0, decay_sum = 0, traces = 0, weights = 0;
+    std::size_t count = 0, zeros = 0;
+    for (unsigned src = 0; src < num_layers_; ++src) {
+        for (unsigned dst = src + 1; dst < num_layers_; ++dst) {
+            auto& matrix = M_[src * num_layers_ + dst];
+            auto& trace = eligibility_[src * num_layers_ + dst];
+            std::size_t index = 0;
+            for (int k = 0; k < matrix.outerSize(); ++k) {
+                for (Eigen::SparseMatrix<float>::InnerIterator it(matrix, k); it; ++it, ++index) {
+                    const float weight = it.value();
+                    const float hebbian = eta * reward * trace[index];
+                    const float decay =
+                        std::copysign(static_cast<float>(config_->get_learning_weight_decay()) *
+                                          std::max(0.0f, std::abs(weight) - MinDecayingSynapseMagnitude),
+                                      weight);
+                    const float updated = std::clamp(weight + hebbian - decay, -4.0f, 4.0f);
+                    changes += std::abs(updated - weight);
+                    plasticity += std::abs(hebbian);
+                    decay_sum += std::abs(decay);
+                    traces += std::abs(trace[index]);
+                    weights += std::abs(updated);
+                    zeros += updated == 0;
+                    ++count;
+                    it.valueRef() = updated;
+                    trace[index] *= trace_decay;
+                }
+            }
+        }
     }
+    ++learning_stats_.updates;
+    learning_stats_.abs_weight_change_sum += changes;
+    learning_stats_.abs_plasticity_sum += plasticity;
+    learning_stats_.mean_abs_delta = count ? changes / count : 0;
+    learning_stats_.mean_abs_plasticity = count ? plasticity / count : 0;
+    learning_stats_.mean_abs_decay = count ? decay_sum / count : 0;
+    learning_stats_.mean_abs_trace = count ? traces / count : 0;
+    learning_stats_.mean_abs_weight = count ? weights / count : 0;
+    learning_stats_.zero_fraction = count ? double(zeros) / count : 0;
+    if (config_->get_hebbian_inheritance())
+        learned_genome_dirty_ = true;
 }
 
 std::shared_ptr<const Genome> Brain::get_learned_genome() const {
@@ -492,7 +465,8 @@ std::shared_ptr<const Genome> Brain::get_learned_genome() const {
 
 void Brain::rebuild_genome_from_weights() {
     const unsigned nl = num_layers_;
-    auto genome = std::make_shared<Genome>(0, Genome::encoding_from_config(*config_));
+    std::vector<Gene> genes;
+    genes.reserve(get_total_connections() + silent_genes_.size() + discarded_genes_.size());
 
     // For every active synapse, create one gene encoding the current learned weight.
     for (unsigned src = 0; src < nl; ++src) {
@@ -506,13 +480,15 @@ void Brain::rebuild_genome_from_weights() {
 
             for (int k = 0; k < W.outerSize(); ++k) {
                 for (Eigen::SparseMatrix<float>::InnerIterator it(W, k); it; ++it) {
-                    // Convert learned float weight back to the int16_t representation used by Gene.
-                    // Scale factor 8192.0f matches Gene::get_weight_as_float() which divides by 8192.
+                    // Round to the nearest genetic quantum without erasing a nonzero learned sign.
+                    // Exact zeros remain zero; silent/discarded genes are copied unchanged below.
                     const float clamped = std::clamp(it.value() * 8192.0f, -32768.0f, 32767.0f);
-                    const int16_t w_int = static_cast<int16_t>(clamped);
+                    auto w_int = static_cast<int16_t>(std::round(clamped));
+                    if (w_int == 0 && it.value() != 0.0f)
+                        w_int = it.value() > 0 ? 1 : -1;
 
-                    genome->add_gene(Gene(static_cast<uint16_t>(src), static_cast<uint32_t>(it.col()), sink_type,
-                                          static_cast<uint32_t>(it.row()), w_int));
+                    genes.emplace_back(static_cast<uint16_t>(src), static_cast<uint32_t>(it.col()), sink_type,
+                                       static_cast<uint32_t>(it.row()), w_int);
                 }
             }
         }
@@ -521,13 +497,13 @@ void Brain::rebuild_genome_from_weights() {
     // Append silent genes (index-overflow rejections from wire()).
     // These are carried forward unchanged so mutations can reactivate them if layer sizes grow.
     for (const Gene& g : silent_genes_)
-        genome->add_gene(g);
+        genes.push_back(g);
 
     // Append genes discarded for type/sink/order constraints.
     // Keeping them avoids irreversible genetic collapse when hebbian inheritance is enabled.
     for (const Gene& g : discarded_genes_)
-        genome->add_gene(g);
+        genes.push_back(g);
 
-    learned_genome_ = std::move(genome);
+    learned_genome_ = std::make_shared<Genome>(std::move(genes), Genome::encoding_from_config(*config_));
     learned_genome_dirty_ = false;
 }

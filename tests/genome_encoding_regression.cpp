@@ -52,6 +52,7 @@ class TestConfig : public Config {
     unsigned get_genome_sink_index_count() const override {
         return sink_count;
     }
+    double get_weight_mutation_rate() const override { return 0; }
     bool get_hebbian_inheritance() const override {
         return true;
     }
@@ -240,7 +241,7 @@ int main() {
         logger->set_level(LogLevel::Error);
         SimulationAudit::check_pop(logger, cfg);
         Config active("config/popx.ini");
-        require(active.get_brain_size_s() >= 37 && active.get_brain_size_y() == 21, "Active I/O configuration wrong");
+        require(active.get_brain_size_s() >= 37 && active.get_brain_size_y() == 22, "Active I/O configuration wrong");
         std::cout << "PASS: configurable encoding, mutation, inheritance, high-index export, glucose decisions and "
                      "actuators\n";
     } catch (const std::exception& error) {

@@ -7,6 +7,10 @@
 class RandomUtility : public IRandom {
   public:
     RandomUtility();
+    /// Fixture-only: repeat constructor seeds for a controlled checkpoint fork.
+    /// Production leaves this disabled and continues using random_device.
+    static void set_diagnostic_seed(uint32_t seed);
+    static void clear_diagnostic_seed();
 
     int rnd_int(int min, int max) override;
     double rnd_double(double min, double max) override;
@@ -31,5 +35,6 @@ class RandomUtility : public IRandom {
                           double center_y) override;
 
   private:
+    friend class CheckpointCodec;
     std::mt19937 mt_;
 };

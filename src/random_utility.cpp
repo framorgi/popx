@@ -1,8 +1,34 @@
 #include "random_utility.h"
 
 #include <algorithm>
+#include <atomic>
 
-RandomUtility::RandomUtility() : mt_(std::random_device{}()) {}
+namespace {
+std::atomic<bool> diagnostic_seed_enabled{false};
+std::atomic<uint32_t> diagnostic_seed{0};
+std::atomic<uint64_t> diagnostic_serial{0};
+} // namespace
+
+RandomUtility::RandomUtility() {
+    if (diagnostic_seed_enabled.load(std::memory_order_relaxed)) {
+        const auto serial = diagnostic_serial.fetch_add(1, std::memory_order_relaxed);
+        std::seed_seq sequence{diagnostic_seed.load(std::memory_order_relaxed), static_cast<uint32_t>(serial),
+                               static_cast<uint32_t>(serial >> 32)};
+        mt_.seed(sequence);
+    } else {
+        mt_.seed(std::random_device{}());
+    }
+}
+
+void RandomUtility::set_diagnostic_seed(uint32_t seed) {
+    diagnostic_serial.store(0, std::memory_order_relaxed);
+    diagnostic_seed.store(seed, std::memory_order_relaxed);
+    diagnostic_seed_enabled.store(true, std::memory_order_relaxed);
+}
+
+void RandomUtility::clear_diagnostic_seed() {
+    diagnostic_seed_enabled.store(false, std::memory_order_relaxed);
+}
 
 int RandomUtility::rnd_int(int min, int max) {
     std::uniform_int_distribution<int> dist(min, max);
@@ -121,8 +147,8 @@ RBFSet RandomUtility::rotate_rbf_set(const RBFSet& rbf_set, unsigned int tick, u
         gbf.mean_x = center_x + (rel_x * cos_dt - rel_y * sin_dt);
         gbf.mean_y = center_y + (rel_x * sin_dt + rel_y * cos_dt);
 
-        gbf.stddev_x = gbf.stddev_x + cos_dt * 0.01;
-        gbf.stddev_y = gbf.stddev_y + sin_dt * 0.01;
+        // Only the centers orbit. Widths and peaks are intrinsic to each bell:
+        // changing them here accumulates artificial heating at every refresh.
     }
 
     return moved_set;

@@ -26,7 +26,7 @@ class Brain : public IBrain {
     /// @brief Performs a feed-forward pass through the neural network to produce an action index based
     /// on the given sensor values.
     /// @param sensor_values A vector of float values representing the current sensor inputs to the brain.
-    /// @return An integer representing the index of the action chosen by the brain based on the
+    /// @return Unique winning action, or DO_NOTHING for neutral/tied outputs (also with legacy output sizes).
     int feed_forward(const std::vector<float>& sensor_values) override;
 
     //----------------------------------------------------------------------------
@@ -34,6 +34,10 @@ class Brain : public IBrain {
     /// @param reward A float value representing the reward signal used to adjust the synaptic weights
     //----------------------------------------------------------------------------
     void hebbian_update(float reward) override;
+    void record_action(int action) override;
+    BrainLearningStats learning_stats() const override {
+        return learning_stats_;
+    }
     std::shared_ptr<const Genome> get_learned_genome() const override;
 
     void resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned num_hidden) override;
@@ -50,6 +54,7 @@ class Brain : public IBrain {
     std::vector<bool> get_connected_sensors() const override;
 
   private:
+    friend class CheckpointCodec;
     void allocate();
     /// Rebuilds learned_genome_ from the current weight matrices M_ plus silent_genes_.
     void rebuild_genome_from_weights();
@@ -64,6 +69,9 @@ class Brain : public IBrain {
     /// Only entries with src < dst are populated during wire().
     std::vector<Eigen::SparseMatrix<float>> M_;
     std::vector<Eigen::VectorXf> activations_;
+    // Values aligned with the compressed storage of each M_ matrix; never inherited.
+    std::vector<std::vector<float>> eligibility_;
+    BrainLearningStats learning_stats_;
     /// Genome rebuilt from learned weights after each hebbian_update() (if hebbian_inheritance is enabled).
     std::shared_ptr<Genome> learned_genome_;
     bool learned_genome_dirty_ = false;
