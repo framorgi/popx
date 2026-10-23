@@ -28,7 +28,8 @@ async def run(kind, database, mode, corpus=None):
     transport,_=await asyncio.get_running_loop().create_datagram_endpoint(lambda:receiver,local_addr=('127.0.0.1',0))
     port=transport.get_extra_info('sockname')[1]
     objects=['brain','cell','config','console_logger','gene','genome','grid_world','pop','pops_manager','random_utility','simulator','stats','udp_communicator']
-    source={'audit':'popx_audit','thermal':'popx_thermal_comparison','strategy':'popx_strategy_comparison'}[kind]
+    source={'audit':'popx_audit','thermal':'popx_thermal_comparison','strategy':'popx_strategy_comparison',
+            'movement':'popx_movement_comparison'}[kind]
     try:
         with tempfile.TemporaryDirectory(prefix='popx-diagnostic-') as temp:
             binary=Path(temp)/source
@@ -44,6 +45,8 @@ async def run(kind, database, mode, corpus=None):
             if kind=='strategy':
                 stdin=compact(read_report(corpus,'audit')).encode()
                 args=['-','receiver',mode]
+            elif kind=='movement':
+                args=[str(ROOT/'config/popx.ini'),'receiver',mode,'100000']
             env={**os.environ,'POPX_UDP_PORT':str(port)}
             proc=await asyncio.create_subprocess_exec(str(binary),*args,cwd=ROOT,env=env,stdin=asyncio.subprocess.PIPE if stdin else None,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
             out,err=await proc.communicate(stdin)
@@ -70,7 +73,7 @@ async def run(kind, database, mode, corpus=None):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('kind',choices=['audit','thermal','strategy'])
+    parser.add_argument('kind',choices=['audit','thermal','strategy','movement'])
     parser.add_argument('database')
     parser.add_argument('mode',nargs='?',default='2000')
     parser.add_argument('--corpus')

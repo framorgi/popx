@@ -9,19 +9,21 @@ http_port=8000
 udp_port=8001
 speed=1
 headless=0
+checkpoint=''
 setup=0
 build=0
 while (($#)); do
     case "$1" in
         --help) cat <<'HELP'
 Usage: scripts/run_popx.sh [options]
+  --checkpoint PATH   Restore a checkpoint (starts paused; config becomes locked)
   --headless          Start without a graphical window
   --config PATH       Simulation INI (default: config/popx.ini)
   --binary PATH       PopX executable (default: build-release/src/popx)
   --db PATH           SQLite history (default: data_out/popx.sqlite)
   --http-port PORT    Local dashboard port (default: 8000)
   --udp-port PORT     Local telemetry/control port (default: 8001)
-  --speed 1|2         Initial speed, 100 or 200 ticks/s
+  --speed 0|1|2       0: turbo headless; 1/2: 100/200 ticks/s
   --setup             Install pinned dependencies in .venv and local web assets
   --build             Build the explicit popx Release target
   --help              Show this help
@@ -32,17 +34,17 @@ HELP
         --headless) headless=1; shift ;;
         --setup) setup=1; shift ;;
         --build) build=1; shift ;;
-        --config|--binary|--db|--http-port|--udp-port|--speed)
+        --config|--binary|--db|--http-port|--udp-port|--speed|--checkpoint)
             (($# >= 2)) || { echo "Missing value for $1" >&2; exit 2; }
             case "$1" in
-                --config) config=$2;; --binary) binary=$2;; --db) database=$2;;
+                --checkpoint) checkpoint=$(realpath -m -- "$2");; --config) config=$2;; --binary) binary=$2;; --db) database=$2;;
                 --http-port) http_port=$2;; --udp-port) udp_port=$2;; --speed) speed=$2;;
             esac
             shift 2 ;;
         *) echo "Unknown option: $1 (see --help)" >&2; exit 2 ;;
     esac
 done
-[[ "$speed" == 1 || "$speed" == 2 ]] || { echo 'Speed must be 1 or 2' >&2; exit 2; }
+[[ "$speed" == 0 || "$speed" == 1 || "$speed" == 2 ]] || { echo 'Speed must be 0, 1 or 2' >&2; exit 2; }
 for port in "$http_port" "$udp_port"; do
     [[ "$port" =~ ^[0-9]+$ ]] && ((port > 0 && port < 65536)) || { echo 'Invalid port' >&2; exit 2; }
 done
@@ -83,6 +85,7 @@ PY
 kill -0 "$backend_pid"
 args=(--config "$config" --udp-port "$udp_port" --speed "$speed")
 if ((headless)); then args+=(--headless); fi
+if [[ -n "$checkpoint" ]]; then args+=(--checkpoint "$checkpoint"); fi
 "$binary" "${args[@]}" &
 sim_pid=$!
 printf 'PopX dashboard: http://127.0.0.1:%s\n' "$http_port"

@@ -23,9 +23,9 @@ class Integration(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='popx-integration-') as temp:
             folder=Path(temp)
             config=folder/'popx.ini'
-            raw=(ROOT/'config/popx.ini').read_text().replace('map_size = 120','map_size = 24')
+            raw=(ROOT/'config/popx.ini').read_text().replace('map_size = 180','map_size = 24')
             raw=raw.replace('population           = 80','population           = 20')
-            raw=raw.replace('nnets_dir = ../data_out/nnets/',f'nnets_dir = {folder}/nnets/')
+            raw += f'\nnnets_dir = {folder}/nnets/\nlog_dir = {folder}/logs/\nimage_dir = {folder}/images/\n'
             raw += "\nphy_alpha_min=0\nphy_alpha_max=0\nphy_init_temperature=37\n"
             raw += '# Unicode protocol boundary: '+('è🌿'*600)+'\n'
             config.write_text(raw)
@@ -36,6 +36,16 @@ class Integration(unittest.TestCase):
             with TestClient(app) as client:
                 self.assertEqual(client.get('/').status_code,200)
                 self.assertEqual(client.get('/static/app.js').status_code,200)
+                self.assertEqual(client.get('/static/network.js').status_code,200)
+                dashboard_config = client.get('/api/config').json()
+                configured_cap = dashboard_config['values']['max_population_allowed']
+                self.assertGreaterEqual(configured_cap, dashboard_config['values']['population'])
+                self.assertIn('max_population_allowed', {field['name'] for field in dashboard_config['schema']})
+                metrics = client.get('/api/metrics').json()
+                self.assertEqual(metrics['world_resources.2']['label'], 'Calcio / carbonato nelle celle')
+                self.assertTrue(metrics['totals.movement_blocked_occupied']['label'].startswith(
+                    'Movimenti bloccati da occupazione'))
+                self.assertIn('varianza nulla', metrics['calcium_distance_correlation.pearson']['description'])
                 proc=subprocess.Popen([str(ROOT/'build-release/src/popx'),'--headless','--config',str(config),'--udp-port',str(port)],env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
                 try:
                     def until(predicate,timeout=8):
@@ -48,6 +58,7 @@ class Integration(unittest.TestCase):
                         self.fail('Timed out')
                     status=until(lambda: (s if (s:=client.get('/api/status').json()).get('connected') else None))
                     run=status['run_id']
+                    self.assertEqual(status['metadata']['population_capacity'], configured_cap)
                     def cmd(name,args=None,expected=200,run_id=None):
                         response=client.post('/api/commands',json={'command':name,'arguments':args or {},'run_id':run_id or run})
                         self.assertEqual(response.status_code,expected,response.text)
@@ -60,7 +71,8 @@ class Integration(unittest.TestCase):
                     pop=listing['agents'][0]['pop_id']
                     inspected=cmd('inspect',{'pop_id':pop})['result']
                     self.assertEqual(inspected['tick'],paused)
-                    self.assertEqual(inspected['brain']['sizeS'],49)
+                    self.assertEqual(inspected['brain']['sizeS'],dashboard_config['values']['brain_size_s'])
+                    self.assertEqual(inspected['brain']['sizeY'],22)
                     self.assertIn('connections',inspected['brain'])
                     saved=cmd('snapshot',{'pop_id':pop})['result']
                     self.assertTrue(list((folder/'nnets').rglob('*.json')))
@@ -87,6 +99,17 @@ class Integration(unittest.TestCase):
                     self.assertFalse(client.get('/api/status').json()['gui'])
                     cmd('speed',{'value':2})
                     cmd('speed',{'value':3},expected=409)
+                    self.assertEqual(cmd('speed',{'value':0})['status']['speed'],0)
+                    cmd('show_gui',expected=409)
+                    self.assertEqual(cmd('agents')['status']['speed'],0)
+                    cmd('resume')
+                    time.sleep(.3)
+                    turbo_tick=cmd('pause')['status']['tick']
+                    self.assertGreater(turbo_tick,paused)
+                    inspected=cmd('inspect',{'pop_id':cmd('agents')['result']['agents'][0]['pop_id']})['result']
+                    self.assertIn('learning',inspected)
+                    self.assertGreaterEqual(inspected['totals']['learning_updates'],0)
+                    cmd('speed',{'value':2})
                     cmd('resume')
                     time.sleep(.2)
                     advanced=cmd('pause')['status']['tick']
@@ -135,11 +158,12 @@ class Integration(unittest.TestCase):
     def test_backend_outage(self):
         with tempfile.TemporaryDirectory(prefix='popx-outage-') as temp:
             folder=Path(temp);config=folder/'popx.ini';port=free_port()
-            raw=(ROOT/'config/popx.ini').read_text().replace('map_size = 120','map_size = 24')
+            raw=(ROOT/'config/popx.ini').read_text().replace('map_size = 180','map_size = 24')
             config.write_text(raw+'\nphy_alpha_min=0\nphy_alpha_max=0\nphy_init_temperature=37\n')
             proc=subprocess.Popen([str(ROOT/'build-release/src/popx'),'--headless','--config',str(config),'--udp-port',str(port)],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
             try:
-                time.sleep(7)
+                # Leave the receiver unavailable beyond the UDP retry window.
+                time.sleep(10)
                 self.assertIsNone(proc.poll())
                 with TestClient(create_app(folder/'history.sqlite',config,ROOT/'build-release/src/popx',port)) as client:
                     for _ in range(100):

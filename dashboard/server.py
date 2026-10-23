@@ -16,6 +16,10 @@ import uuid
 
 from fastapi import FastAPI, HTTPException, Request
 from .provenance import collect as provenance
+from .metrics import catalog as metric_catalog
+from .evolution import EvolutionService, install_routes as install_evolution_routes
+from .checkpoints import Checkpoints, install_routes as install_checkpoint_routes
+from .storage import RemovalService, StorageGuard, install_routes as install_storage_routes
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -30,6 +34,7 @@ def compact(value):
 class Store:
     def __init__(self, path, binary=None):
         self.binary = binary
+        self.path = Path(path).resolve()
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
         self.db.execute('PRAGMA journal_mode=WAL')
@@ -45,12 +50,16 @@ class Store:
             CREATE TABLE IF NOT EXISTS diagnostics(id INTEGER PRIMARY KEY, run TEXT, data TEXT);
             CREATE TABLE IF NOT EXISTS snapshots(id TEXT PRIMARY KEY, run TEXT, pop TEXT, tick INTEGER, path TEXT);
             CREATE TABLE IF NOT EXISTS gaps(id INTEGER PRIMARY KEY, run TEXT, tick INTEGER, dropped INTEGER, recorded REAL);
+            CREATE TABLE IF NOT EXISTS removed_runs(run TEXT PRIMARY KEY, requested REAL, state TEXT,
+                rows_deleted INTEGER, files_deleted INTEGER, files_retained INTEGER, error TEXT);
             PRAGMA user_version=1;
         ''')
         self.db.commit()
 
     def ingest(self, process, sequence, msg):
         db = self.db
+        if db.execute('SELECT 1 FROM removed_runs WHERE run=?', (msg['run_id'],)).fetchone():
+            return False
         with db:
             if not db.execute('INSERT OR IGNORE INTO messages VALUES(?,?)', (process, sequence)).rowcount:
                 return False
@@ -96,6 +105,43 @@ class Store:
 
     def close(self):
         self.db.close()
+
+
+class ExtinctionIndex:
+    """Exact recovery ticks, cached by run and advanced from the last event id."""
+
+    def __init__(self, path):
+        self.path = Path(path).resolve()
+        self.cache = {}
+        self.locks = {}
+
+    async def ticks(self, run, start, end):
+        lock = self.locks.setdefault(run, asyncio.Lock())
+        async with lock:
+            previous_id, known = self.cache.get(run, (0, []))
+
+            def read_increment():
+                with sqlite3.connect(f'file:{self.path}?mode=ro', uri=True) as db:
+                    latest = db.execute('SELECT coalesce(max(id),0) FROM events WHERE run=?', (run,)).fetchone()[0]
+                    additions = []
+                    if latest > previous_id:
+                        additions = [row[0] for row in db.execute(
+                            "SELECT DISTINCT tick FROM events WHERE run=? AND id>? AND id<=? AND type='birth' "
+                            "AND json_extract(data,'$.recovery_seed')=1 ORDER BY tick",
+                            (run, previous_id, latest))]
+                    terminal = db.execute('SELECT reason FROM runs WHERE id=?', (run,)).fetchone()
+                    final_tick = None
+                    if terminal and terminal[0] == 'extinction':
+                        row = db.execute('SELECT max(tick) FROM samples WHERE run=?', (run,)).fetchone()
+                        final_tick = row[0]
+                    return latest, additions, final_tick
+
+            latest, additions, final_tick = await asyncio.to_thread(read_increment)
+            ticks = sorted(set(known).union(additions))
+            if final_tick is not None:
+                ticks = sorted(set(ticks).union((final_tick,)))
+            self.cache[run] = (latest, ticks)
+            return [tick for tick in ticks if start <= tick <= end]
 
 
 class Receiver(asyncio.DatagramProtocol):
@@ -207,13 +253,13 @@ class Receiver(asyncio.DatagramProtocol):
         request_id = uuid.uuid4().hex
         packet = compact({'version': 1, 'type': 'command', 'process_id': self.process,
                           'run_id': run or self.run, 'request_id': request_id,
-                          'command': name, 'arguments': arguments, 'expires_ms': int(time.time()*1000)+5000}).encode()
+                          'command': name, 'arguments': arguments, 'expires_ms': int(time.time()*1000)+(60000 if name.startswith('checkpoint_') else 5000)}).encode()
         if len(packet) > 4096:
             raise HTTPException(400, 'Comando troppo grande')
         future = asyncio.get_running_loop().create_future()
         self.pending[request_id] = future
         try:
-            for _ in range(8):
+            for _ in range(100 if name.startswith('checkpoint_') else 8):
                 self.transport.sendto(packet, self.peer)
                 try:
                     reply = await asyncio.wait_for(asyncio.shield(future), .6)
@@ -229,6 +275,7 @@ class Receiver(asyncio.DatagramProtocol):
 
 def create_app(db_path, config_path, binary, udp_port):
     config_path, binary = Path(config_path).resolve(), Path(binary).resolve()
+    evolution = EvolutionService(db_path)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -236,13 +283,29 @@ def create_app(db_path, config_path, binary, udp_port):
         receiver = Receiver(store)
         transport, _ = await asyncio.get_running_loop().create_datagram_endpoint(lambda: receiver, local_addr=('127.0.0.1', udp_port))
         app.state.store, app.state.receiver = store, receiver
+        app.state.extinctions = ExtinctionIndex(store.path)
+        app.state.removals = RemovalService(store, evolution)
+        for (run,) in store.db.execute('SELECT run FROM removed_runs'):
+            evolution.retire(run)
+        app.state.removals.resume()
+        app.state.storage_guard = StorageGuard(store, receiver, config_path)
+        app.state.checkpoints = Checkpoints(app, evolution)
+        app.state.storage_guard.checkpoints = app.state.checkpoints
+        app.state.storage_guard.start()
         try:
             yield
         finally:
+            await app.state.storage_guard.close()
+            app.state.checkpoints.close()
             transport.close()
+            await app.state.removals.close()
             store.close()
+            evolution.close()
 
     app = FastAPI(lifespan=lifespan)
+    install_checkpoint_routes(app)
+    install_evolution_routes(app, evolution)
+    install_storage_routes(app)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=['localhost', '127.0.0.1', 'testserver'])
 
     @app.middleware('http')
@@ -266,10 +329,15 @@ def create_app(db_path, config_path, binary, udp_port):
     async def health():
         return {'ok': True, 'pid': os.getpid()}
 
+    @app.get('/api/metrics')
+    async def metrics():
+        return metric_catalog()
+
     @app.get('/api/status')
     async def status():
         receiver = app.state.receiver
         return {**receiver.status, 'run_id': receiver.run,
+                'storage_guard': app.state.storage_guard.state,
                 'connected': bool(receiver.peer) and time.monotonic()-receiver.last_seen < 5,
                 'receiver_errors': receiver.errors}
 
@@ -277,8 +345,12 @@ def create_app(db_path, config_path, binary, udp_port):
     async def command(request: Request):
         data = await request.json()
         name = data.get('command')
+        if app.state.checkpoints.lock.locked() and name not in ('agents', 'inspect', 'snapshot', 'exit'):
+            raise HTTPException(409, 'Rotazione checkpoint in corso: attendere')
         if name not in ('start', 'restart', 'pause', 'resume', 'stop', 'newgen', 'speed', 'headless', 'show_gui', 'exit', 'agents', 'inspect', 'snapshot'):
             raise HTTPException(400, 'Comando sconosciuto')
+        if name in ('start', 'restart', 'resume'):
+            app.state.storage_guard.ensure_capacity(configured=name in ('start', 'restart'))
         reply = await app.state.receiver.command(name, data.get('arguments', {}), data.get('run_id'))
         if name == 'snapshot':
             result = reply['result']
@@ -300,12 +372,14 @@ def create_app(db_path, config_path, binary, udp_port):
 
     @app.get('/api/runs')
     async def runs(offset: int = 0, limit: int = 50):
-        rows = app.state.store.db.execute('SELECT id,created,metadata,state,reason FROM runs ORDER BY created DESC LIMIT ? OFFSET ?',
+        rows = app.state.store.db.execute('SELECT id,created,metadata,state,reason FROM runs WHERE id NOT IN (SELECT run FROM removed_runs) ORDER BY created DESC LIMIT ? OFFSET ?',
                                          (max(1, min(limit, 100)), max(0, offset))).fetchall()
         return [dict(id=r[0], created=r[1], metadata={k:v for k,v in json.loads(r[2]).items() if k not in ('provenance','ini')}, state=r[3], reason=r[4]) for r in rows]
 
     @app.get('/api/runs/{run}')
     async def run_metadata(run: str):
+        if app.state.store.db.execute('SELECT 1 FROM removed_runs WHERE run=?', (run,)).fetchone():
+            raise HTTPException(410, 'Run rimossa o in rimozione')
         row = app.state.store.db.execute('SELECT metadata,state,reason,summary FROM runs WHERE id=?', (run,)).fetchone()
         if not row:
             raise HTTPException(404, 'Run non disponibile')
@@ -313,6 +387,7 @@ def create_app(db_path, config_path, binary, udp_port):
 
     @app.get('/api/runs/{run}/samples')
     async def samples(run: str, start: int = 0, end: int = 9223372036854775807, limit: int = 1000):
+        ensure_run_available(run)
         limit = max(2, min(limit, 2000))
         db = app.state.store.db
         lo, hi, count = db.execute('SELECT min(tick),max(tick),count(*) FROM samples WHERE run=? AND tick BETWEEN ? AND ?', (run, start, end)).fetchone()
@@ -326,20 +401,36 @@ def create_app(db_path, config_path, binary, udp_port):
 
     @app.get('/api/runs/{run}/events')
     async def events(run: str, after: int = 0, limit: int = 100):
+        ensure_run_available(run)
         rows = app.state.store.db.execute('SELECT id,tick,type,data FROM events WHERE run=? AND id>? ORDER BY id LIMIT ?', (run, after, max(1,min(limit,200)))).fetchall()
         return [dict(id=r[0],tick=r[1],type=r[2],data=json.loads(r[3])) for r in rows]
 
+    @app.get('/api/runs/{run}/extinctions')
+    async def extinctions(run: str, start: int = 0, end: int = 9223372036854775807):
+        ensure_run_available(run)
+        if start < 0 or end < start or end >= 2**63:
+            raise HTTPException(400, 'Intervallo tick non valido')
+        return {'ticks': await app.state.extinctions.ticks(run, start, end)}
+
     @app.get('/api/runs/{run}/diagnostics')
     async def diagnostics(run: str):
+        ensure_run_available(run)
         return [json.loads(r[0]) for r in app.state.store.db.execute('SELECT data FROM diagnostics WHERE run=?', (run,))]
 
     @app.get('/api/snapshots')
     async def snapshots(run: str, offset: int = 0):
+        ensure_run_available(run)
         return [dict(id=r[0],pop_id=r[1],tick=r[2]) for r in app.state.store.db.execute('SELECT id,pop,tick FROM snapshots WHERE run=? ORDER BY tick DESC LIMIT 100 OFFSET ?', (run,max(0,offset)))]
+
+    def ensure_run_available(run):
+        if app.state.store.db.execute('SELECT 1 FROM removed_runs WHERE run=?', (run,)).fetchone():
+            raise HTTPException(410, 'Run rimossa o in rimozione')
 
     @app.get('/api/snapshots/{snapshot}')
     async def snapshot(snapshot: str):
-        row = app.state.store.db.execute('SELECT path FROM snapshots WHERE id=?', (snapshot,)).fetchone()
+        row = app.state.store.db.execute('SELECT path,run FROM snapshots WHERE id=?', (snapshot,)).fetchone()
+        if row:
+            ensure_run_available(row[1])
         if not row or not Path(row[0]).is_file():
             raise HTTPException(404, 'Snapshot non disponibile')
         return json.loads(Path(row[0]).read_text())
@@ -353,11 +444,13 @@ def create_app(db_path, config_path, binary, udp_port):
             if '=' in text:
                 key, value = text.split('=',1)
                 entries[key.strip()] = value.strip()
-        return {'schema': invoke('--config-schema'), 'values': invoke('--validate-config', config_path),
+        return {'locked': app.state.receiver.status.get('config_locked', False), 'schema': invoke('--config-schema'), 'values': invoke('--validate-config', config_path),
                 'entries': entries, 'revision': hashlib.sha256(raw.encode()).hexdigest()}
 
     @app.put('/api/config')
     async def save_configuration(request: Request):
+        if app.state.receiver.status.get('config_locked') or app.state.checkpoints.lock.locked():
+            raise HTTPException(409, 'Configurazione bloccata dal checkpoint')
         data = await request.json()
         raw = config_path.read_text()
         revision = hashlib.sha256(raw.encode()).hexdigest()
@@ -428,7 +521,9 @@ def main():
     parser.add_argument('--udp-port', type=int, default=8001)
     args = parser.parse_args()
     import uvicorn
-    uvicorn.run(create_app(args.db,args.config,args.binary,args.udp_port),host='127.0.0.1',port=args.http_port,log_level='warning')
+    # Open EventSource streams must not hold the UDP port indefinitely after Exit.
+    uvicorn.run(create_app(args.db,args.config,args.binary,args.udp_port),host='127.0.0.1',port=args.http_port,
+                log_level='warning', timeout_graceful_shutdown=3)
 
 if __name__ == '__main__':
     main()
