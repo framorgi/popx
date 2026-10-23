@@ -80,7 +80,7 @@ ACTION_LABELS = {
     16: "GET_CALC",    17: "LEAVE_CALC",
     # 18-20: internal modulation
     18: "BURN_CAL",    19: "SET_OSC",
-    20: "SET_RESP",    21: "RESERVED",
+    20: "SET_RESP",    21: "DO_NOTHING",
     22: "KILL_FWD",
 }
 

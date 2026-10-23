@@ -1,0 +1,12 @@
+nav a { color:var(--text); text-decoration:none; padding:9px 13px; border:1px solid var(--line); border-radius:7px; }
+nav a[aria-current] { border-color:var(--accent); background:#173b40; }
+.ev-kpis { margin-top:24px; }
+#ev-error { color:var(--red); border:1px solid var(--red); padding:12px; border-radius:7px; }
+#ev-tree { height:380px; background:var(--bg); border:1px solid var(--line); border-radius:8px; }
+.ev-chip { display:inline-block; width:13px; height:13px; border-radius:50%; margin-right:8px; border:1px solid #ffffff60; }
+#ev-strain-rows button { padding:5px 8px; }
+.chart-card details { font-size:13px; color:var(--muted); }
+.chart-card details strong { color:var(--text); }
+#ev-detail-summary,#ev-comparison { white-space:pre-line; overflow-wrap:anywhere; }
+#ev-progress { color:var(--muted); }
+#ev-from,#ev-to { width:135px; }

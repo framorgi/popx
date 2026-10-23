@@ -1,10 +1,23 @@
 'use strict';
+// Served as a static page so the current receiver can keep running during UI updates.
+document.addEventListener('DOMContentLoaded', () => {
+    const storageStyle=document.createElement('link');storageStyle.rel='stylesheet';storageStyle.href='/static/storage.css';document.head.append(storageStyle);
+    const storageScript=document.createElement('script');storageScript.src='/static/storage.js';document.head.append(storageScript);
+    const link = document.createElement('a');
+    link.href = '/static/evolution.html';
+    link.textContent = 'Linee evolutive';
+    link.style.cssText = 'display:block;color:inherit;text-decoration:none;padding:9px 13px;border:1px solid #35465b;border-radius:7px';
+    document.querySelector('aside nav').append(link);
+});
 const $ = id => document.getElementById(id);
 const state = {
     status: {},
     run: null,
     runs: [],
     samples: [],
+    extinctions: [],
+    historyRequest: 0,
+    forcedBirthsSeen: 0,
     charts: [],
     agents: [],
     selected: null,
@@ -13,32 +26,52 @@ const state = {
     cy: null,
     eventAfter: 0
 };
-const palette = ['#48d9b8', '#88aaff', '#ffc778', '#fb8b83', '#c5a1f5', '#8dd7ef'];
+state.requests = new Set();
+state.closed = false;
+const palette = ['#48d9b8', '#88aaff', '#ffc778', '#fb8b83', '#c5a1f5', '#8dd7ef', '#e7a5c9'];
+function metricInfo(path) {
+    return state.metrics?.[path] || {label: `Misura: ${path}`, description: 'Definizione non disponibile per questa versione.'};
+}
+function describeMetric(container, info) {
+    container.replaceChildren();
+    for (const [label, key] of [['Calcolo', 'calculation'], ['Cosa rappresenta', 'meaning'], ['Come leggerlo', 'interpretation']]) {
+        const paragraph = el('p');
+        paragraph.append(el('strong', `${label}: `), document.createTextNode(info[key] || info.description));
+        container.append(paragraph);
+    }
+}
 function notice(text, error = false) {
     $('notice').hidden = false;
     $('notice').textContent = text;
     $('notice').style.borderColor = error ? '#fb8b83' : '#48d9b8';
 }
 async function api(url, options = {}) {
-    const response = await fetch(url, {...options, headers: {'Content-Type': 'application/json', ...options.headers}});
-    const data = await response.json();
-    if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
-    return data;
+    if (state.closed) throw new DOMException('Dashboard chiusa', 'AbortError');
+    const controller = new AbortController();state.requests.add(controller);
+    try {
+        const response = await fetch(url, {...options, signal:controller.signal, headers: {'Content-Type': 'application/json', ...options.headers}});
+        const data = await response.json();
+        if (state.closed) throw new DOMException('Dashboard chiusa', 'AbortError');
+        if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
+        return data;
+    } finally {state.requests.delete(controller);}
 }
 function guard(fn) {
     return async (...args) => {
         try {
             await fn(...args);
         } catch (error) {
-            notice(error.message, true);
+            if (!state.closed && error.name !== 'AbortError') notice(error.message, true);
         }
     };
 }
 function fmt(value) {
+    if (typeof value === 'number' && value !== 0 && Math.abs(value) < .01)
+        return value.toExponential(3);
     return typeof value === 'number' ? value.toLocaleString('it-IT', {maximumFractionDigits: 2}) : String(value ?? '—');
 }
 function at(object, path) {
-    return path.split('.').reduce((x, k) => x?.[k], object) ?? 0;
+    return path.split('.').reduce((x, k) => x?.[k], object) ?? null;
 }
 function el(tag, text, className) {
     const n = document.createElement(tag);
@@ -50,18 +83,53 @@ async function command(name, args = {}) {
     const reply = await api(
         '/api/commands',
         {method: 'POST', body: JSON.stringify({command: name, arguments: args, run_id: state.status.run_id})});
+    if (name === 'exit') {clearDashboard();return reply;}
     if (reply.status) updateStatus({...state.status, ...reply.status, connected: true});
     return reply;
 }
+function clearDashboard() {
+    state.closed = true;
+    state.stream?.close();clearInterval(state.pollTimer);
+    for (const request of state.requests) request.abort();
+    state.requests.clear();
+    state.run=null;state.runs=[];state.samples=[];state.extinctions=[];state.historyRequest++;
+    state.agents=[];state.selected=null;state.snapshot=null;
+    state.status={connected:false};state.config=null;state.diagnostics=[];state.diagnosticRows=[];state.eventAfter=0;
+    state.cy?.destroy();state.cy=null;
+    for (const chart of [...state.charts,state.metricChart,state.diagnosticChart]) {
+        if (!chart) continue;
+        for (const dataset of chart.data.datasets) dataset.data=[];
+        chart.update('none');
+    }
+    for (const id of ['runs','agents','agent-detail','agent-avatar','agent-genome','events','snapshots','diagnostics',
+                     'config-form','metric','metric-description','diagnostic-description','diagnostic-metric','network'])
+        $(id).replaceChildren();
+    for (const id of ['alive','elapsed','ticks','cost','births','transport']) $(id).textContent='—';
+    for (const id of ['snapshot-stamp','agent-raw','graph-detail','silent-genes','metric-value','active-config','agents-stamp'])
+        $(id).textContent='';
+    $('agent-name').textContent='Nessun agente selezionato';$('state').textContent='Uscita richiesta';
+    $('reason').textContent='';$('connection').textContent='Dashboard disconnessa';
+    document.querySelectorAll('main button, main input, main select, [data-command]').forEach(e=>e.disabled=true);
+    document.dispatchEvent(new Event('popx:exit'));
+    notice('Uscita richiesta e dashboard azzerata. Lo storico resta salvato. Ricarica la pagina dopo un nuovo avvio.');
+}
 function updateStatus(status) {
+    if (state.closed) return;
     state.status = status;
+    if (status.reason === 'storage_limit' || status.storage_guard?.exceeded)
+        notice('Limite database raggiunto: salvataggio del checkpoint e rinnovo dello storico. Consulta Spazio e storico.', true);
     $('connection').textContent = status.connected === false ? 'Simulatore non connesso' : 'Simulatore connesso';
-    $('speed').textContent = `Velocità ${status.speed || 1}×`;
+    $('speed').textContent = status.speed === 0 ? 'Turbo headless · passa a 1×' : `Velocità ${status.speed || 1}× · ${status.speed === 2 ? 'passa a turbo headless' : 'passa a 2×'}`;
+    $('gui').title = status.speed === 0 ? 'Aprire la GUI riporta la velocità a 2×' : '';
     $('gui').textContent = status.gui ? 'Passa a headless' : 'Mostra GUI';
-    $('active-config').textContent = JSON.stringify(status.metadata?.config || {}, null, 2);
+    $('active-config').textContent = (status.config_locked ? 'Configurazione bloccata dal checkpoint.\n' : '') + JSON.stringify(status.metadata?.config || {}, null, 2);
+    if (status.config_locked) {
+        $('config-save').disabled = true;
+        $('config-form').querySelectorAll('input,select').forEach(input => input.disabled = true);
+    }
     document.querySelectorAll('[data-command]').forEach(b => {
         const c = b.dataset.command;
-        b.disabled = status.connected === false || (c === 'start' && status.state !== 'finished') ||
+        b.disabled = (status.config_locked && (c === 'start' || c === 'restart')) || status.connected === false || (c === 'start' && status.state !== 'finished') ||
             (c === 'resume' && status.state !== 'paused') || (c === 'pause' && status.state !== 'running');
     });
     if (state.run === status.run_id) {
@@ -71,7 +139,7 @@ function updateStatus(status) {
         $('ticks').textContent = `Tick ${fmt(status.tick)}`;
         $('state').textContent =
             ({running: 'In esecuzione', paused: 'In pausa', finished: 'Conclusa'})[status.state] || '—';
-        $('reason').textContent = status.reason || 'Run evolutiva';
+        $('reason').textContent = status.reason === 'storage_limit' ? 'Arresto automatico: limite database raggiunto' : status.reason || 'Run evolutiva';
         const t = status.transport || {};
         $('transport').textContent = `${fmt(t.dropped_messages || 0)} messaggi persi · ${fmt(t.queued || 0)} in coda`;
     }
@@ -100,16 +168,25 @@ const chartSpecs = [
             ['Nascite forzate', 'counts.forced_births'], ['Morti', 'counts.deaths']
         ]
     ],
+    ['Apprendimento: ricompensa e segnale', [['Ricompensa', 'learning.reward'], ['Media recente', 'learning.baseline'], ['Segnale di apprendimento', 'learning.signal']]],
+    ['Apprendimento: intensità e dispersione', [['Modulo medio del segnale', 'learning.mean_abs_signal'], ['Deviazione standard', 'learning.signal_std']]],
+    ['Apprendimento: variazione dei pesi', [['Variazione effettiva', 'learning.mean_abs_delta'], ['Plasticità proposta', 'learning.mean_abs_plasticity'], ['Decadimento proposto', 'learning.mean_abs_decay']]],
+    ['Riproduzione: tentativi e risultati', [['Tentativi', 'reproduction.attempts'], ['Senza spazio', 'reproduction.no_space'], ['Nascite', 'reproduction.births'], ['Oltre la prima corona', 'reproduction.dispersed_births']]],
+    ['Riproduzione: attesa al cap', [['Idoneità (agenti × tick)', 'reproduction.eligible_agent_ticks'], ['Blocco al cap (agenti × tick)', 'reproduction.cap_blocked_agent_ticks']]],
     ['Movimento', [['Tentativi', 'totals.movement_attempts'], ['Riusciti', 'totals.movement_successes']]],
     [
         'Risorse nel mondo',
-        [['Glucosio', 'world_resources.0'], ['Ossigeno', 'world_resources.4'], ['Acqua', 'world_resources.1']]
+        [['Glucosio', 'world_resources.0'], ['Acqua', 'world_resources.1'], ['Calcio / carbonato', 'world_resources.2'],
+         ['CO₂', 'world_resources.3'], ['Ossigeno', 'world_resources.4'], ['Lipidi', 'world_resources.5'],
+         ['Azoto', 'world_nitrogen']]
     ],
+    ['Barriere di calcio', [['Celle sature', 'calcium_saturated_cells']]],
     [
         'Energia cumulativa',
         [
             ['Respirazione', 'totals.respiration_gain'], ['Metabolismo', 'totals.metabolism_cost'],
-            ['Movimento', 'totals.movement_cost'], ['Riproduzione', 'totals.reproduction_cost']
+            ['Movimento', 'totals.movement_cost'], ['Altre azioni', 'totals.other_action_cost'],
+            ['Riproduzione', 'totals.reproduction_cost']
         ]
     ],
     [
@@ -118,12 +195,14 @@ const chartSpecs = [
     ],
     ['Prestazioni e riproduzione', [['Costo tick (µs)', 'avg_tick_us'], ['Backlog', 'backlog']]]
 ];
-function makeChart(canvas, series) {
+const extinctionLines = window.PopXChartMath.extinctionPlugin(() => state.extinctions);
+function makeChart(canvas, series, tickAxis = true) {
     return new Chart(canvas, {
         type: 'line',
+        plugins: tickAxis ? [extinctionLines] : [],
         data: {
             datasets: series.map(([label, path], i) => ({
-                                     label,
+                                     label: metricInfo(path).label,
                                      path,
                                      borderColor: palette[i % palette.length],
                                      borderWidth: 1.5,
@@ -138,7 +217,8 @@ function makeChart(canvas, series) {
             parsing: false,
             normalized: true,
             interaction: {mode: 'nearest', intersect: false},
-            plugins: {legend: {labels: {color: '#92a3b9', boxWidth: 12}}},
+            plugins: {legend: {labels: {color: '#92a3b9', boxWidth: 12}},
+                tooltip: {callbacks: {label: context => `${context.dataset.label}: ${fmt(context.parsed.y)}`}}},
             scales: {
                 x: {
                     type: 'linear',
@@ -146,7 +226,7 @@ function makeChart(canvas, series) {
                     ticks: {color: '#92a3b9', maxTicksLimit: 6},
                     grid: {color: '#273246'}
                 },
-                y: {ticks: {color: '#92a3b9'}, grid: {color: '#273246'}}
+                y: {ticks: {color: '#92a3b9', callback: value => fmt(value)}, grid: {color: '#273246'}}
             }
         }
     });
@@ -154,19 +234,49 @@ function makeChart(canvas, series) {
 function setupCharts() {
     for (const [title, series] of chartSpecs) {
         const card = el('article', undefined, 'chart-card');
-        card.append(el('h2', title));
+        const heading = el('div', undefined, 'chart-heading');
+        heading.append(el('h2', title));
+        const canDerive = series.every(([, path]) => window.PopXChartMath.isDerivable(path));
+        if (canDerive) {
+            const toggle = el('button', 'Mostra derivata /tick', 'derivative-toggle');
+            toggle.type = 'button';
+            toggle.setAttribute('aria-pressed', 'false');
+            heading.append(toggle);
+            toggle.onclick = () => {
+                chart.derivative = !chart.derivative;
+                toggle.textContent = chart.derivative ? 'Mostra valori' : 'Mostra derivata /tick';
+                toggle.setAttribute('aria-pressed', String(chart.derivative));
+                drawCharts();
+            };
+        }
+        card.append(heading);
         const plot = el('div', undefined, 'plot'), canvas = el('canvas');
         plot.append(canvas);
         card.append(plot);
+        const definitions = el('details'), list = el('dl');
+        definitions.append(el('summary', 'Significato delle misure'));
+        for (const [, path] of series) {
+            const info = metricInfo(path);
+            const guide = el('dd', undefined, 'metric-guide');
+            describeMetric(guide, info);
+            list.append(el('dt', info.label), guide);
+        }
+        definitions.append(list);
+        if (canDerive) definitions.append(el('p',
+            'Derivata: si divide la differenza fra due valori per i tick trascorsi. Rappresenta la variazione media per tick ' +
+            'nell’intervallo osservato. Un valore positivo indica crescita, uno negativo diminuzione, zero stabilità; ' +
+            'per i contatori cumulativi indica invece la frequenza media degli eventi. Il primo punto non è definito.'));
+        card.append(definitions);
         $('charts').append(card);
-        state.charts.push(makeChart(canvas, series));
+        const chart = makeChart(canvas, series);
+        state.charts.push(chart);
     }
     state.metricChart = makeChart($('metric-chart'), [['Misura', 'alive']]);
 }
 function flatten(value, prefix = '', result = []) {
     for (const [k, v] of Object.entries(value || {})) {
         const key = prefix ? `${prefix}.${k}` : k;
-        if (typeof v === 'number')
+        if (typeof v === 'number' || (v === null && state.metrics?.[key]))
             result.push(key);
         else if (v && typeof v === 'object')
             flatten(v, key, result);
@@ -174,26 +284,51 @@ function flatten(value, prefix = '', result = []) {
     return result;
 }
 function drawCharts() {
+    const last = state.samples.at(-1);
+    if (last) {
+        const previous = $('metric').value;
+        const keys = flatten(last)
+            .filter(key => state.metrics?.[key] && !key.startsWith('calcium_distance_correlation.'))
+            .sort((a, b) => metricInfo(a).label.localeCompare(metricInfo(b).label, 'it'));
+        const signature = keys.join('|');
+        if (state.metricKeys !== signature) {
+            $('metric').replaceChildren(...keys.map(key => {
+                const info = metricInfo(key), option = el('option', info.label);
+                option.value = key;
+                option.title = info.description;
+                return option;
+            }));
+            $('metric').value = keys.includes(previous) ? previous : 'alive';
+            state.metricKeys = signature;
+        }
+        const path = $('metric').value, info = metricInfo(path);
+        const derivativeToggle = $('metric-derivative');
+        derivativeToggle.disabled = !window.PopXChartMath.isDerivable(path);
+        if (derivativeToggle.disabled) derivativeToggle.checked = false;
+        state.metricChart.derivative = derivativeToggle.checked;
+        state.metricChart.data.datasets[0].path = path;
+        state.metricChart.data.datasets[0].label = info.label + (state.metricChart.derivative ? ' · Δ/tick' : '');
+        describeMetric($('metric-description'), info);
+        if (state.metricChart.derivative) $('metric-description').append(el('p',
+            'Derivata: differenza fra due campioni divisa per i tick trascorsi. Rappresenta la variazione media per tick; ' +
+            'valori positivi indicano crescita, negativi diminuzione e zero stabilità. Per un contatore cumulativo è ' +
+            'la frequenza media degli eventi; il primo punto non è definito.'));
+        const latest = window.PopXChartMath.points(state.samples, path, state.metricChart.derivative).at(-1)?.y;
+        $('metric-value').textContent = `${state.metricChart.derivative ? 'Ultima variazione media per tick' : 'Ultimo valore'}: ${fmt(latest)}${latest === null ? ' (servono due campioni validi)' : ''}`;
+    }
     for (const chart of [...state.charts, state.metricChart]) {
-        for (const dataset of chart.data.datasets)
-            dataset.data = state.samples.map(s => ({x: s.tick, y: at(s, dataset.path)}));
+        for (const dataset of chart.data.datasets) {
+            dataset.label = metricInfo(dataset.path).label + (chart.derivative ? ' · Δ/tick' : '');
+            dataset.data = window.PopXChartMath.points(state.samples, dataset.path, chart.derivative);
+        }
+        chart.options.scales.y.title = {display: Boolean(chart.derivative),
+                                        text: 'Variazione media per tick', color: '#92a3b9'};
         chart.update('none');
     }
-    const last = state.samples.at(-1);
     if (!last) return;
     $('cost').textContent = `${fmt(last.avg_tick_us)} µs`;
     $('births').textContent =
         `${fmt(last.counts?.natural_births)} naturali · ${fmt(last.counts?.forced_births)} forzate`;
-    const previous = $('metric').value;
-    const keys = flatten(last);
-    if ($('metric').options.length !== keys.length) {
-        $('metric').replaceChildren(...keys.map(key => {
-            const option = el('option', key);
-            option.value = key;
-            return option;
-        }));
-        $('metric').value = keys.includes(previous) ? previous : 'alive';
-    }
     if (state.run !== state.status.run_id) {
         $('alive').textContent = fmt(last.alive);
         $('elapsed').textContent = `${fmt(last.simulated_seconds / 60)} min`;
@@ -205,9 +340,23 @@ function drawCharts() {
 }
 async function loadHistory() {
     if (!state.run) return;
+    const request = ++state.historyRequest, run = state.run;
     const start = $('from-tick').value || 0, end = $('to-tick').value || '9223372036854775807';
-    state.samples =
-        await api(`/api/runs/${encodeURIComponent(state.run)}/samples?start=${start}&end=${end}&limit=1000`);
+    const samples = await api(`/api/runs/${encodeURIComponent(run)}/samples?start=${start}&end=${end}&limit=1000`);
+    if (request !== state.historyRequest || run !== state.run) return;
+    state.samples = samples;
+    state.extinctions = [];
+    state.forcedBirthsSeen = samples.at(-1)?.counts?.forced_births ?? 0;
+    drawCharts();
+    guard(() => refreshExtinctions(request, run, start, end))();
+}
+async function refreshExtinctions(request = state.historyRequest, run = state.run,
+                                  start = $('from-tick').value || 0,
+                                  end = $('to-tick').value || '9223372036854775807') {
+    if (!run) return;
+    const result = await api(`/api/runs/${encodeURIComponent(run)}/extinctions?start=${start}&end=${end}`);
+    if (request !== state.historyRequest || run !== state.run) return;
+    state.extinctions = result.ticks;
     drawCharts();
 }
 function drawAgents() {
@@ -238,7 +387,8 @@ function showSnapshot(snapshot) {
         Posizione: snapshot.position.join(', '),
         Genitore: snapshot.parent_id || 'Fondatore',
         Discendenti: snapshot.totals.offspring,
-        ...snapshot.traits
+        ...snapshot.traits,
+        'Raggio sensoriale effettivo': snapshot.sensing_radius
     };
     for (const [key, value] of Object.entries(info)) {
         const field = el('div');
@@ -246,36 +396,33 @@ function showSnapshot(snapshot) {
         $('agent-detail').append(field);
     }
     $('agent-raw').textContent = JSON.stringify({...snapshot, brain: undefined}, null, 2);
+    PopXInspector.renderAvatar($('agent-avatar'), snapshot);
+    PopXInspector.renderGenome($('agent-genome'), snapshot, {
+        sensors: window.sensorLabelsForSnapshot(snapshot), actions: window.ACTION_LABELS
+    });
     drawNetwork();
 }
 function drawNetwork() {
     if (!state.snapshot) return;
-    const brain = state.snapshot.brain, elements = [], threshold = Number($('weight-min').value) || 0;
+    if (!$('weight-min').reportValidity()) return;
+    const brain = state.snapshot.brain, elements = [], threshold = Number($('weight-min').value);
+    const graph = PopXNetwork.prepare(brain, threshold, $('graph-zero').checked, $('graph-path-filter').value || 'all');
+    const hideIsolated = $('graph-isolated').checked;
+    const sensorLabels = window.sensorLabelsForSnapshot(state.snapshot);
     const sizes = [brain.sizeS, ...Array(brain.num_hidden_layers).fill(brain.sizeN), brain.sizeY];
     sizes.forEach((size, layer) => {
         for (let i = 0; i < size; i++) {
-            const label = layer === 0 ? (window.SENSOR_LABELS[i] || `INPUT_${i}`) :
+            if (hideIsolated && !graph.connected.has(`${layer}:${i}`)) continue;
+            const label = layer === 0 ? (sensorLabels[i] || `INPUT_${i}`) :
                 layer === sizes.length - 1 ? (window.ACTION_LABELS[i] || `OUTPUT_${i}`) :
                                              `H${layer}.${i}`;
             elements.push({
-                data: {id: `${layer}:${i}`, label, activation: brain.activations?.[layer]?.[i] ?? 0, layer},
+                data: {id: `${layer}:${i}`, label, activation: brain.activations?.[layer]?.[i] ?? null, layer},
                 position: {x: layer * 260, y: (i - (size - 1) / 2) * 40}
             });
         }
     });
-    for (const connection of brain.connections)
-        for (const entry of connection.entries) {
-            if (Math.abs(entry.value) < threshold) continue;
-            elements.push({
-                data: {
-                    id: `${connection.from_layer}:${entry.col}>${connection.to_layer}:${entry.row}`,
-                    source: `${connection.from_layer}:${entry.col}`,
-                    target: `${connection.to_layer}:${entry.row}`,
-                    weight: entry.value,
-                    color: entry.value >= 0 ? '#48d9b8' : '#fb8b83'
-                }
-            });
-        }
+    elements.push(...graph.edges);
     if (state.cy) state.cy.destroy();
     state.cy = cytoscape({
         container: $('network'),
@@ -297,27 +444,34 @@ function drawNetwork() {
             {
                 selector: 'edge',
                 style: {
-                    width: 1,
+                    width: 'data(width)',
+                    'line-style': 'data(lineStyle)',
                     'line-color': 'data(color)',
                     'target-arrow-color': 'data(color)',
                     'target-arrow-shape': 'triangle',
                     'curve-style': 'bezier',
-                    opacity: .5
+                    opacity: .8
                 }
             },
-            {selector: ':selected', style: {'background-color': '#ffffff', 'line-color': '#ffffff', 'line-opacity': 1}}
+            {selector: ':selected', style: {'background-color': '#ffffff', 'line-color': '#ffffff', 'line-opacity': 1}},
+            {selector: 'edge:selected', style: {label: 'data(weightLabel)', 'font-size': 13, color: '#ffffff'}}
         ],
         minZoom: .05,
         maxZoom: 4
     });
     state.cy.on('tap', 'node, edge', event => {
-        $('graph-detail').textContent = JSON.stringify(event.target.data());
+        const data = event.target.data();
+        $('graph-detail').textContent = event.target.isEdge()
+            ? `${data.source} → ${data.target} · Peso: ${PopXNetwork.formatWeight(data.weight)} (valore completo: ${data.weight})`
+            : `${data.label} · Attivazione: ${data.activation === null ? 'non ancora calcolata' : PopXNetwork.formatWeight(data.activation)}`;
     });
+    $('graph-detail').textContent = `${graph.edges.length} / ${graph.total} connessioni mostrate · ${graph.outputCount} possono influire su un output · ${graph.pathCount} sono su percorsi input → output · ${graph.zeroCount} pesi esattamente zero · |peso| massimo: ${PopXNetwork.formatWeight(graph.maxAbs)}.${graph.edges.length ? '' : ' Nessuna connessione soddisfa il filtro.'}`;
     $('silent-genes').textContent = `${brain.silent_genes?.length || 0} geni silenti fuori dimensione · ${
         brain.discarded_genes?.length || 0} geni esclusi dai vincoli della rete`;
 }
 async function loadConfig() {
     state.config = await api('/api/config');
+    $('config-save').disabled = !!state.config.locked;
     $('config-form').replaceChildren();
     const groups = new Map();
     const fields = [
@@ -342,7 +496,7 @@ async function loadConfig() {
             groups.set(spec.group, grid);
         }
         const label = el('label', undefined, spec.effective ? '' : 'legacy');
-        label.append(el('span', spec.name));
+        label.append(el('span', spec.label || spec.name));
         let input;
         if (spec.type === 'boolean') {
             input = el('select');
@@ -365,6 +519,7 @@ async function loadConfig() {
         input.dataset.key = spec.name;
         input.dataset.original = input.value;
         input.required = true;
+        input.disabled = !!state.config.locked;
         label.append(input, el('small', spec.description));
         groups.get(spec.group).append(label);
     }
@@ -404,25 +559,31 @@ document.querySelectorAll('[data-tab]')
              }));
 document.querySelectorAll('[data-command]').forEach(b => b.onclick = guard(async () => {
                                                         await command(b.dataset.command);
+                                                        if (state.closed) return;
                                                         await loadRuns();
                                                         notice('Comando applicato.');
                                                     }));
-$('speed').onclick = guard(() => command('speed', {value: state.status.speed === 2 ? 1 : 2}));
+$('speed').onclick = guard(() => command('speed', {value: state.status.speed === 1 ? 2 : state.status.speed === 2 ? 0 : 1}));
 $('gui').onclick = guard(() => command(state.status.gui ? 'headless' : 'show_gui'));
 $('runs-more').onclick = guard(() => loadRuns(true));
 $('runs').onchange = guard(async () => {
     state.run = $('runs').value;
     state.agents = [];
     state.selected = null;
+    state.snapshot = null;
+    PopXInspector.renderAvatar($('agent-avatar'), null);
+    PopXInspector.renderGenome($('agent-genome'), null);
+    state.cy?.destroy();
+    state.cy = null;
+    $('agent-name').textContent = 'Seleziona un agente';
+    $('agent-detail').replaceChildren();
+    for (const id of ['snapshot-stamp', 'agent-raw', 'graph-detail', 'silent-genes']) $(id).textContent = '';
     drawAgents();
     await loadHistory();
 });
 $('load-history').onclick = guard(loadHistory);
-$('metric').onchange = () => {
-    state.metricChart.data.datasets[0].path = $('metric').value;
-    state.metricChart.data.datasets[0].label = $('metric').value;
-    drawCharts();
-};
+$('metric').onchange = drawCharts;
+$('metric-derivative').onchange = drawCharts;
 $('agents-refresh').onclick = guard(async () => {
     if (state.run !== state.status.run_id) throw new Error('Seleziona la run attiva per leggere gli agenti vivi');
     const reply = await command('agents');
@@ -441,7 +602,11 @@ $('snapshot-save').onclick = guard(async () => {
     showSnapshot((await command('snapshot', {pop_id: state.selected})).result);
     notice('Snapshot salvato e indicizzato.');
 });
-$('graph-filter').onclick = drawNetwork;
+$('graph-filter').onclick = guard(drawNetwork);
+$('weight-min').onchange = guard(drawNetwork);
+$('graph-path-filter').onchange = guard(drawNetwork);
+$('graph-zero').onchange = guard(drawNetwork);
+$('graph-isolated').onchange = guard(drawNetwork);
 $('graph-fit').onclick = () => state.cy?.fit(undefined, 40);
 async function loadSnapshots(more = false) {
     if (!more) {
@@ -503,10 +668,15 @@ function diagnosticChoices() {
 }
 function drawDiagnostic() {
     if (!state.diagnosticChart) {
-        state.diagnosticChart = makeChart($('diagnostic-chart'), [['Misura', '']]);
+        state.diagnosticChart = makeChart($('diagnostic-chart'), [['Misura', '']], false);
         state.diagnosticChart.options.scales.x.title.text = 'Indice condizione';
     }
     const key = $('diagnostic-metric').value;
+    describeMetric($('diagnostic-description'), {
+        calculation: key ? `Ogni punto riporta il valore del campo «${key}» registrato dalla fixture per una condizione. Il protocollo della prova specifica come viene misurato il campo.` : 'Selezionare una serie e una misura dai risultati caricati.',
+        meaning: 'Il risultato di ciascuna condizione diagnostica, nell’ordine in cui compare nel rapporto della prova.',
+        interpretation: 'L’asse orizzontale identifica la condizione e l’asse verticale il valore misurato. Confrontare punti riferiti a condizioni e unità compatibili, consultando il protocollo qui sotto; una quota più alta significa un valore maggiore del campo selezionato.'
+    });
     state.diagnosticChart.data.datasets[0].label = key;
     state.diagnosticChart.data.datasets[0].data =
         (state.diagnosticRows || []).slice(0, 2000).map((row, i) => ({x: i, y: at(row, key)}));
@@ -515,14 +685,22 @@ function drawDiagnostic() {
 $('diagnostic-series').onchange = diagnosticChoices;
 $('diagnostic-metric').onchange = drawDiagnostic;
 guard(async () => {
+    // Static definitions permit wording hotfixes while the Python receiver keeps the run connected.
+    state.metrics = window.POPX_METRICS || await api('/api/metrics');
     setupCharts();
     updateStatus(await api('/api/status'));
     await loadRuns();
     await loadHistory();
     const stream = new EventSource('/api/stream');
+    state.stream = stream;
     stream.onmessage = guard(async event => {
+        if (state.closed) return;
         const message = JSON.parse(event.data);
         if (message.type === 'status') {
+            if (state.status.run_id && state.status.run_id !== message.run_id && message.data.metadata?.checkpoint) {
+                location.reload();
+                return;
+            }
             updateStatus({...message.data, run_id: message.run_id, connected: true});
             if (!state.runs.some(r => r.id === message.run_id)) await loadRuns();
         }
@@ -537,10 +715,16 @@ guard(async () => {
             if (state.samples.length > 1000)
                 state.samples = state.samples.filter((_, i) => i % 2 === 0 || i === state.samples.length - 1);
             drawCharts();
+            const forced = sample.counts?.forced_births ?? 0;
+            if (forced > state.forcedBirthsSeen) {
+                state.forcedBirthsSeen = forced;
+                guard(refreshExtinctions)();
+            }
         }
     });
     stream.onerror = () => {
+        if (state.closed) return;
         $('connection').textContent = 'Dashboard in riconnessione';
     };
-    setInterval(guard(async () => updateStatus(await api('/api/status'))), 3000);
+    state.pollTimer = setInterval(guard(async () => updateStatus(await api('/api/status'))), 3000);
 })();

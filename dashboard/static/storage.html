@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PopX · Spazio e storico</title><link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/storage.css"><script defer src="/static/storage.js"></script></head>
+<body><aside><a class="brand" href="/">POP<span>X</span><small>SIMULATION LAB</small></a>
+<nav><a href="/">Panoramica</a><a href="/static/evolution.html">Linee evolutive</a></nav></aside>
+<main id="storage-page"><header><h1>Spazio e simulazioni salvate</h1><button id="storage-refresh">Aggiorna</button></header>
+<p id="storage-message" role="status"></p><article class="card"><h2>Spazio sul disco</h2><div id="storage-meter"></div>
+<details><summary>Significato delle misure</summary>
+<p><strong>Calcolo:</strong> si legge la capacità del disco che ospita il database, lo spazio disponibile e la dimensione dei file del database, compresi i file temporanei di scrittura. Nel database si contano le pagine occupate e quelle interamente disponibili per nuovi dati.</p>
+<p><strong>Cosa rappresenta:</strong> la barra indica la quota di disco occupata o riservata, condivisa da PopX e dagli altri programmi. Il dettaglio del database mostra quanto spazio è allocato e quanto può essere riutilizzato.</p>
+<p><strong>Come leggerlo:</strong> una barra vicina al 100% indica poco spazio disponibile. Dopo la rimozione di una run, lo spazio interno riutilizzabile può crescere mentre la dimensione del file resta stabile. Le nuove scritture possono usare quelle pagine; una compattazione separata può restituirle al disco.</p>
+<p><strong>WSL:</strong> il filesystem Linux risiede in un disco virtuale che può crescere sul disco Windows. Lo spazio libero del filesystem virtuale va confrontato separatamente con quello reale di Windows; qui il secondo valore non è disponibile.</p>
+</details></article>
+<article class="card"><h2>Arresto automatico per dimensione del database</h2>
+<p>Il parametro <code>database_limit_gb</code>, disponibile nella <a href="/">Configurazione della dashboard</a> e nell’INI, vale 10 GB decimali per impostazione predefinita. I cambiamenti si applicano al prossimo Start/Restart.</p>
+<p>La dashboard controlla ogni mezzo secondo la somma dei file SQLite, WAL e SHM di tutte le run. Al raggiungimento della soglia salva e verifica un checkpoint, carica una nuova run in pausa, elimina tutti gli storici precedenti recuperando lo spazio del file, quindi riprende. Se il salvataggio o il caricamento falliscono, conserva lo storico e segnala l’errore. Start, Restart e Resume dalla dashboard vengono bloccati se i file sono già oltre il limite.</p>
+<p>La soglia avvia la rotazione: i dati già in coda e il riepilogo finale possono superarla leggermente. Snapshot esterni, altri database e altri file WSL hanno occupazioni separate. Il controllo opera finché il backend della dashboard è attivo; eventuali errori di misura sono mostrati nel misuratore.</p></article>
+<article class="card"><h2>Rimuovi una simulazione precedente</h2>
+<p>Scegli una run conclusa. La rimozione elimina campioni, eventi, genomi registrati, ambiente, risultati diagnostici e snapshot salvati riconosciuti come appartenenti alla run. La run collegata al simulatore è protetta. La conferma riguarda esclusivamente la run selezionata.</p>
+<div class="toolbar"><label>Simulazione <select id="storage-run"></select></label><button id="storage-more">Run precedenti</button>
+<button id="storage-delete" class="danger" disabled>Rimuovi la run selezionata</button></div>
+<p id="storage-selection"></p><div id="storage-jobs" aria-live="polite"></div>
+<p class="muted">La rimozione procede a blocchi. Lo spazio liberato nel database viene riutilizzato dalle nuove scritture. Gli snapshot con percorsi non riconosciuti vengono conservati e segnalati. I registri tecnici di deduplicazione dei messaggi restano disponibili.</p>
+</article></main></body></html>

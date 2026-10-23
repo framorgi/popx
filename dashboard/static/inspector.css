@@ -1,0 +1,27 @@
+.pop-avatar {display:flex; align-items:center; gap:24px; margin:16px 0; padding:16px;
+    background:#101722; border:1px solid var(--line); border-radius:8px}
+.pop-avatar svg {width:220px; min-width:180px; max-width:100%; flex:0 0 220px}
+.avatar-caption {min-width:0}
+.avatar-caption h3,.gene-detail h3 {margin:0 0 8px; font-size:16px}
+.avatar-caption p {margin:6px 0; font-size:13px}
+.genome-layout {display:grid; grid-template-columns:minmax(240px,1fr) minmax(260px,1fr); gap:24px}
+.genome-sort label {display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-width:0}
+.genome-sort select {max-width:100%}
+.genome-bars {max-height:420px; overflow:auto; padding:5px; display:flex; flex-direction:column; gap:4px}
+.gene-bar {display:flex; align-items:center; gap:10px; width:100%; min-height:28px; flex-shrink:0;
+    padding:3px 8px; border-radius:4px; text-align:left; font:12px/1.5 monospace}
+.gene-index {width:4ch; flex-shrink:0; color:var(--muted)}
+.gene-color {height:12px; flex:1; min-width:35px; border-left:8px solid; border-right:8px solid}
+.gene-route {min-width:14ch; text-align:right}
+.gene-silent {border-style:dashed}
+.gene-discarded {border-style:dotted}
+.gene-bar[aria-pressed="true"] {border-color:#ffc778; box-shadow:inset 3px 0 #ffc778}
+.gene-preview {background:#173b40; outline:1px solid var(--accent)}
+.gene-detail {background:#101722; border:1px solid var(--line); border-radius:8px; padding:18px; min-width:0}
+.gene-detail dl {margin:0; font-size:13px}
+.gene-detail dt {color:var(--muted); margin-top:9px}
+.gene-detail dd {margin:0; overflow-wrap:anywhere}
+.gene-detail p {font-size:13px}
+@media(max-width:1200px) {.pop-avatar {flex-direction:column; align-items:flex-start}
+    .pop-avatar svg {flex:auto; align-self:center}}
+@media(max-width:760px) {.genome-layout {grid-template-columns:minmax(0,1fr)} .genome-bars {max-height:260px}}
