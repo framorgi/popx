@@ -815,7 +815,8 @@ Genome Pop::heritable_genome() const {
 
 Genome Pop::make_offspring_genome() const {
     return heritable_genome().mutated(config_->get_point_mutation_rate(), Genome::encoding_from_config(*config_),
-                                      config_->get_weight_mutation_rate(), config_->get_weight_mutation_step());
+                                      config_->get_weight_mutation_rate(), config_->get_weight_mutation_step(),
+                                      config_.get());
 }
 
 PhyT Pop::make_offspring_phy() const {

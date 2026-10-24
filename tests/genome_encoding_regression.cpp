@@ -175,6 +175,35 @@ int main() {
         for (const auto& gene : one.get_genes())
             require(gene.get_source_num() == 0 && gene.get_sink_num() == 0, "Explicit mutation limits ignored");
 
+        cfg->inputs = 57;
+        cfg->hidden = 8;
+        cfg->outputs = 22;
+        encoding = Genome::encoding_from_config(*cfg);
+        Genome connected(0, encoding);
+        connected.add_gene(Gene(0, 56, 7, 7, 8192));
+        connected.add_gene(Gene(1, 7, 7, 0, -8192));
+        for (unsigned iteration = 0; iteration < 200; ++iteration) {
+            const auto changed = connected.mutated(1, encoding, 0, 256, cfg.get());
+            for (const auto& gene : changed.get_genes()) {
+                require(gene.get_weight() != 0, "An active replacement became an exact zero");
+                Genome single(0, encoding);
+                single.add_gene(gene);
+                Brain probe(cfg);
+                probe.wire(single);
+                require(probe.get_total_connections() == 1, "An active replacement became silent or invalid");
+            }
+        }
+        Genome tiny(0, encoding);
+        tiny.add_gene(Gene(0, 0, 7, 0, 1));
+        for (unsigned iteration = 0; iteration < 100; ++iteration)
+            require(tiny.mutated(0, encoding, 1, 1, cfg.get()).get_genes()[0].get_weight() != 0,
+                    "A weight adjustment silenced an active connection");
+
+        cfg->inputs = 70;
+        cfg->hidden = 40;
+        cfg->outputs = 65;
+        encoding = Genome::encoding_from_config(*cfg);
+
         Genome wired(0, encoding);
         wired.add_gene(Gene(0, 64, 7, 60, 8192));
         Brain brain(cfg);

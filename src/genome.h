@@ -55,7 +55,7 @@ class Genome {
     ///----------------------------------------------------------------------------
     [[nodiscard]] Genome mutated(double point_mutation_rate) const;
     [[nodiscard]] Genome mutated(double point_mutation_rate, GeneEncoding encoding, double weight_mutation_rate = 0,
-                                 unsigned weight_mutation_step = 256) const;
+                                 unsigned weight_mutation_step = 256, const IConfig* active_config = nullptr) const;
 
   private:
     ///----------------------------------------------------------------------------

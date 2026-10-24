@@ -10,6 +10,21 @@
 #include <sstream>
 #include <stdexcept>
 
+namespace {
+/// Match Brain::wire's active dimensions; zero weights carry no effective connection.
+bool is_active_connection(const Gene& gene, const IConfig& config) {
+    const unsigned source = gene.get_source_type();
+    const unsigned sink = gene.get_sink_type();
+    const unsigned hidden = config.get_brain_num_hidden_layers();
+    if (gene.get_weight() == 0 || source > hidden ||
+        (sink != 7 && (sink == 0 || sink > hidden || sink <= source)))
+        return false;
+    const unsigned source_width = source == 0 ? config.get_brain_size_s() : config.get_brain_size_n();
+    const unsigned sink_width = sink == 7 ? config.get_brain_size_y() : config.get_brain_size_n();
+    return gene.get_source_num() < source_width && gene.get_sink_num() < sink_width;
+}
+} // namespace
+
 Genome::Genome() : Genome(RandomUtility().rnd_int(0, 50)) {}
 
 Genome::Genome(int size) : Genome(size, GeneEncoding{}) {}
@@ -62,7 +77,7 @@ Genome Genome::mutated(double point_mutation_rate) const {
 }
 
 Genome Genome::mutated(double point_mutation_rate, GeneEncoding encoding, double weight_mutation_rate,
-                       unsigned weight_mutation_step) const {
+                       unsigned weight_mutation_step, const IConfig* active_config) const {
     encoding.validate();
     if (!std::isfinite(point_mutation_rate) || point_mutation_rate < 0 || point_mutation_rate > 1)
         throw std::invalid_argument("Mutation rate must be finite and in [0, 1]");
@@ -74,12 +89,23 @@ Genome Genome::mutated(double point_mutation_rate, GeneEncoding encoding, double
     RandomUtility rand;
     for (auto& gene : offspring.genes_) {
         if (rand.rnd_double(0.0, 1.0) < point_mutation_rate) {
-            gene = Gene(encoding);
+            const bool preserve_wiring = active_config && is_active_connection(gene, *active_config);
+            // A replacement of an effective synapse must itself be an effective synapse.
+            // Dormant genes retain their ordinary random replacement, so they can still reactivate.
+            for (unsigned attempt = 0; attempt < 1000; ++attempt) {
+                Gene replacement(encoding);
+                if (!preserve_wiring || is_active_connection(replacement, *active_config)) {
+                    gene = replacement;
+                    break;
+                }
+            }
         } else if (weight_mutation_rate > 0 && rand.rnd_double(0.0, 1.0) < weight_mutation_rate) {
             int delta = rand.rnd_int(1, static_cast<int>(weight_mutation_step));
             if (rand.rnd_int(0, 1) == 0)
                 delta = -delta;
-            const int weight = std::clamp(static_cast<int>(gene.get_weight()) + delta, -32768, 32767);
+            int weight = std::clamp(static_cast<int>(gene.get_weight()) + delta, -32768, 32767);
+            if (active_config && is_active_connection(gene, *active_config) && weight == 0)
+                weight = gene.get_weight() > 0 ? 1 : -1;
             gene = Gene(gene.get_source_type(), gene.get_source_num(), gene.get_sink_type(), gene.get_sink_num(),
                         static_cast<int16_t>(weight));
         }
