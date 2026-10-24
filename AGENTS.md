@@ -22,7 +22,9 @@ superate dagli interventi autorizzati descritti sotto.
 - `Stats`: raccolta centrale, campioni iniziale/finale e ogni200 tick, eventi individuali,
   bilanci e telemetria UDP loopback. Worker solo su copie, nessun accesso ai Pop vivi.
 - Dashboard Python locale: unico scrittore SQLite, inspector manuale, snapshot neurali JSON
-  solo su richiesta. Nessuna nuova esportazione JSON statistica, neppure diagnostica.
+  solo su richiesta. Gli eventi SQLite nuovi codificano i genomi in forma binaria
+  lossless versionata; API e lettori storici restituiscono gli array originali.
+  Nessuna nuova esportazione JSON statistica, neppure diagnostica.
 - Checkpoint CBOR versionati: cattura sul thread simulatore fra tick, ambiente completo,
   Pop/reti/tracce/scorer/fasi/code e INI; restore su nuova run tick0, età e tempo ambiente conservati.
   Config delle run da checkpoint bloccata UI/API; RNG non globalmente deterministiche.
@@ -39,7 +41,9 @@ superate dagli interventi autorizzati descritti sotto.
   ereditato separatamente dai geni. Direzione iniziale fra8 vicini, mai zero.
 - `gene/genome`: endpoint uint32, mutazione completa1% e ritocco del solo peso5% condizionato
   alla mancata sostituzione, massimo256 quanti per ritocco; copie preservano
-  endpoint e domini. Usare `Genome::encoding_from_config` nei percorsi produttivi.
+  endpoint e domini. La sostituzione di una connessione attiva resta cablabile
+  e non nulla; i geni silenti mutano senza questo vincolo. Usare
+  `Genome::encoding_from_config` nei percorsi produttivi.
   Costruttori standalone senza encoding mantengono legacy32/32.
 - `brain/neuron`: rete feedforward sparsa, hidden1…6, sigmoid, massimo unico;
   uscite neutre o massimi pari producono DO_NOTHING21. Decadimento limitato al modulo

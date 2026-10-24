@@ -7,6 +7,141 @@ limiti originali; non descrivono automaticamente il modello attuale.
 The [README](../README.md) covers the project, features, mathematical model, architecture,
 and setup. Validation status and audit records remain in this document.
 
+## Stato corrente — genomi compatti, mutazione valida e storico azzerato, 24 ottobre 2026
+
+L'utente ha autorizzato la chiusura della run precedente e la cancellazione
+completa dei dati operativi. Prima della pulizia, `data_out` occupava circa
+4,67 GB, il database SQLite conteneva una sola run ed era ancora sotto la
+soglia configurata di 10 GB: la crescita osservata in quel momento non era
+una rotazione fallita. Due checkpoint automatici nel catalogo appartenevano
+a rotazioni di run precedenti. Nel database esaminato la tabella `events`
+occupava circa 3,25 GiB; i geni costituivano circa il 46% di un evento di
+nascita recente. Su 500 eventi reali, la lista dei geni in JSON pesava in
+media 1.728 byte; una codifica binaria lossless con tipi uniti in un byte,
+indici `uint32` a varint, peso `int16` e Base64 ne usava 668. La codifica
+versionata riguarda solo le righe SQLite nuove; protocollo, API e lettura
+degli eventi storici conservano gli array di geni originali. Gli script che
+escludono i geni dalle analisi ignorano anche il campo compatto.
+
+La rotazione tramite checkpoint continua a costruire un database nuovo e a
+sostituire il vecchio. Ora controlla esplicitamente che entrambi i WAL siano
+stati troncati e che dopo la chiusura non rimangano file WAL/SHM trattenuti da
+lettori esterni; in quel caso conserva lo storico, segnala errore e riprova.
+Questa verifica ha intercettato un lettore lasciato aperto nel fixture di
+integrazione: senza il controllo, il vecchio inode poteva restare occupato
+anche dopo la sostituzione del nome del file. Il test corretto chiude il
+lettore e conferma la rimozione del database grande e di tutti i file
+temporanei della rotazione. Un retry nello stesso processo riutilizza la run
+già ripristinata e in pausa, senza caricare ancora il checkpoint. Fixture
+dedicata verifica errore con lettore aperto, conservazione dello storico e
+successo dopo la chiusura del lettore.
+
+`Genome::mutated` ora campiona un sostituto cablabile e di peso non nullo
+quando il gene sostituito era una connessione effettiva per le dimensioni
+della rete attiva. I geni silenti continuano a mutare normalmente e possono
+riattivarsi. La mutazione del solo peso non trasforma un collegamento attivo
+in uno zero esatto. Questo preserva la validità della singola connessione,
+non garantisce un percorso sensore→attuatore né premia il movimento. Fixture
+dedicate verificano mutazioni ripetute e domini degli indici.
+
+Dopo build, 18 regressioni C++, test Python del codec, API/genealogia e
+integrazione della rotazione passati, la run precedente è stata chiusa con
+Esci. È stato eliminato ogni contenuto di `data_out` (database, WAL,
+checkpoint, audit, snapshot, log e file temporanei); l'archivio di codice
+`old/` e il layout utente `imgui.ini` non sono stati modificati. Nuova run
+`1792865911637053038-3461282500` avviata headless turbo con dashboard dopo
+un secondo azzeramento, necessario per attivare nel processo Python la
+correzione finale del retry; al primo controllo tick 2.960, 183 vivi,
+configurazione sbloccata e un solo storico SQLite. Gli 80 fondatori iniziali
+sono codificati nel database e l'API restituisce ancora i genomi completi.
+Il filesystem ext4 ha liberato
+i blocchi Linux; `fstrim` è stato rifiutato dall'ambiente e la dimensione
+fisica del VHDX Windows non è verificabile da questo container. Un VHD
+dinamico può mantenere la dimensione fisica raggiunta dopo la cancellazione;
+il recupero sul lato Windows richiede un'operazione di compattazione a WSL
+fermo e non è stato eseguito, per lasciare attiva la nuova run.
+
+## Stato corrente — degenerazione della mobilità nella run attiva, 24 ottobre 2026
+
+Analisi in sola lettura della run `1792842595866512534-87985946`, lasciata in
+esecuzione. È una ripresa da checkpoint completo della run
+`1792793607130415743-126939361` al tick sorgente 40.610.513: il tick zero
+locale contiene 313 Pop importati, non 80 fondatori casuali. INI della run:
+57 ingressi, 5 strati hidden da 8, 22 uscite, cap 360, raggio di dispersione 2,
+NewGen periodico disabilitato. Le osservazioni qui sotto non sono una prova
+di causalità né un confronto controllato fra configurazioni.
+
+Al tick locale 16.202.000 la popolazione è tornata a 360 vivi dopo **44
+estinzioni complete** e 880 nascite forzate dalla riserva ereditaria. I recuperi
+sono 29 nei primi 8 milioni di tick, 14 nei successivi 8 milioni e uno dopo:
+la frequenza delle estinzioni non sta aumentando. La popolazione media ai
+campioni da 200 tick passa da circa 304 a 328 fra le due metà. Resta però
+instabile: nell'ultimo collasso osservato scende da 360 a 12 vivi fra i tick
+16.000.000 e 16.160.000, mentre lo scarto termico medio dei vivi raggiunge
+21,2 °C. In questa finestra ci sono 6.849 morti, 5.412 attribuite a energia e
+1.437 a temperatura; glucosio e acqua totali del mondo non diminuiscono.
+Questi totali non misurano la disponibilità nelle celle occupate.
+
+La mobilità funzionale peggiora. Negli ultimi 500 nati campionati fra i tick
+16.172.618 e 16.187.921, solo 3 genomi hanno un percorso di geni non nulli,
+valido per le dimensioni attive, da un qualsiasi sensore a un output di
+movimento; nessuno lo ha da temperatura, densità o percorribilità. Nei 500
+nati campionati fra 957.049 e 999.974, 428 avevano un percorso da
+percorribilità a movimento. La quota media di geni cablati nei due campioni
+passa dal 6,7% al 2,3%; la lunghezza mediana del genoma resta 100. I nati
+sono genealogicamente correlati, quindi questi rapporti descrivono quei
+campioni, non individui indipendenti o tutta la popolazione viva. Inoltre
+un percorso strutturale non garantisce che l'azione sia scelta.
+
+L'osservazione delle azioni è coerente con questa perdita: nelle ultime 1.000
+morti ispezionate, `DO_NOTHING` rappresenta il 95,7% delle circa 3,55 milioni
+di azioni registrate; 996 individui non hanno mai tentato un movimento e
+944 non hanno né tentato né percorso distanza. Nelle 34.212 morti esaminate
+dal tick 15 milioni, l'età
+mediana è 710 tick e 24.810 muoiono prima della soglia riproduttiva di 1.000
+tick. Fra 8 e 16 milioni di tick, il 93,8% dei tick-agente idonei alla
+riproduzione è bloccato dal cap, mentre il 93,7% dei tentativi processati non
+trova spazio entro raggio 2. Questo coesiste con estinzioni ricorrenti: il
+cap non indica da solo una popolazione ecologicamente stabile.
+
+Interpretazione provvisoria: la rete sparsa e il genoma di 100 geni consentono
+che linee con pochissimi collegamenti attivi continuino a riprodursi quando
+la cella offre condizioni favorevoli. `DO_NOTHING` è gratuita e la fisiologia
+continua automaticamente. Inserzione e delezione non sono operative nel codice
+corrente e sono fissate a zero nell'INI: il massimo configurato di 900 geni
+non allunga questi discendenti. L'ereditarietà dei morti recuperati conserva
+anche questi genomi. L'argmax neutro o in parità sceglie `DO_NOTHING`, ma la quota
+istantanea di pesi esattamente nulli è zero: il problema osservato è soprattutto
+la **mancanza di percorsi funzionali**, non il decadimento di tutti i pesi a
+zero. Il recupero spiega la continuità genealogica e il ritorno al cap, ma
+non dimostra miglioramento della capacità di seguire un clima mobile.
+
+Prima di cambiare reward o forzare movimento, verificare in fixture se
+sensori di temperatura e percorribilità possono guidare un vantaggio ecologico
+con questa topologia; poi confrontare run con identica ecologia ma diversa
+capacità di produrre e preservare collegamenti neurali validi. Una misura
+prioritaria è la quota di nati e vivi con percorsi sensore→movimento, insieme
+a movimento riuscito, sopravvivenza e figli naturali per linea. La run attuale
+può restare come controllo storico; prolungarla da sola non isola il motivo
+della staticità.
+
+Audit del meccanismo di perdita: ad ogni nascita `Genome::mutated` sostituisce
+l'intero gene con probabilità 1%, riassegnando entrambi gli endpoint e il peso.
+La mutazione del solo peso (5% se non c'è sostituzione) e la plasticità non
+creano nuovi endpoint. `Brain::wire` accetta solo tipi di strato feedforward
+attivi e indici entro le dimensioni 57/8/22; conserva nel genoma i geni
+scartati o silenti, che però non sono sinapsi funzionanti. Nei 500 nati
+campionati fra 15 e 16 milioni di tick, 330 non avevano alcun gene cablato con
+peso non nullo: su 50.000 geni complessivi, 214 erano cablati, 13.032 silenti
+per indici e 36.754 invalidi per tipo/ordine; nessun peso era zero. Negli
+ultimi 500 nati campionati dopo il tick 16 milioni, i geni cablati erano
+1.338 su 50.000 e solo 3 reti avevano un percorso sensore→movimento. La
+sostituzione casuale può anche creare connessioni, ma i colli di bottiglia
+demografici, la riproduzione di linee immobili e il riuso dei donatori possono
+amplificare quelle che non le hanno. Senza un confronto parentela→mutazione→
+discendenza non si può attribuire una quota esatta della perdita alla mutazione
+rispetto alla selezione o alla deriva genetica.
+
 ## Stato corrente — affollamento e possibilità di fuga, 23 ottobre 2026
 
 Analisi non invasiva della run `1792748686533986224-712313108`, lasciata in
