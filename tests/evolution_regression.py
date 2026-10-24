@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from dashboard.evolution import EvolutionService, LineageIndex, install_routes, survival
 from dashboard.genetics import canonical, color, fingerprint, similarity
+from dashboard.genome_codec import pack_event
 
 
 class EvolutionTests(unittest.TestCase):
@@ -143,7 +144,9 @@ class EvolutionTests(unittest.TestCase):
                 db.executescript('CREATE TABLE events(id INTEGER PRIMARY KEY,run TEXT,tick INTEGER,type TEXT,pop TEXT,data TEXT);'
                                  'CREATE TABLE samples(run TEXT,tick INTEGER,data TEXT);'
                                  'CREATE TABLE runs(id TEXT,metadata TEXT);CREATE TABLE gaps(run TEXT,tick INTEGER);')
-                db.executemany('INSERT INTO events VALUES(?,?,?,?,?,?)',[(i,'run',t,k,p,json.dumps(d)) for i,t,k,p,d in self.fixture()])
+                db.executemany('INSERT INTO events VALUES(?,?,?,?,?,?)',
+                               [(i,'run',t,k,p,json.dumps(pack_event(d) if i <= 3 else d))
+                                for i,t,k,p,d in self.fixture()])
                 db.execute('INSERT INTO samples VALUES(?,?,?)',('run',100,json.dumps(dict(tick=100,**self.index().sample))))
                 db.execute('INSERT INTO runs VALUES(?,?)',('run','{}'))
             service=EvolutionService(path);app=FastAPI();install_routes(app,service)

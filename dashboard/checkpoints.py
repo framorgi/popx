@@ -27,6 +27,7 @@ class Checkpoints:
         self.lock = asyncio.Lock()
         self.state = {'stage': 'idle', 'error': ''}
         self.recovery = self.index.execute('SELECT checkpoint FROM operation WHERE id=1 AND stage<>?', ('done',)).fetchone()
+        self.restored_run = None
 
     @property
     def receiver(self):
@@ -105,13 +106,21 @@ class Checkpoints:
                 old_runs = [r[0] for r in store.db.execute('SELECT id FROM runs WHERE id<>?', (keep_run,))]
                 fresh.db.executemany("INSERT INTO removed_runs VALUES(?,?,'done',0,0,0,'')", [(r, time.time()) for r in old_runs])
                 fresh.db.commit()
-                fresh.db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+                if fresh.db.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()[0]:
+                    raise RuntimeError('Checkpoint WAL del nuovo database occupato: storico conservato')
                 fresh.close()
+                if any(Path(str(fresh_path) + suffix).exists() for suffix in ('-wal', '-shm')):
+                    raise RuntimeError('Il nuovo database ha ancora lettori SQLite attivi: storico conservato')
                 with open(fresh_path, 'rb') as saved:
                     os.fsync(saved.fileno())
-                store.db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+                if store.db.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()[0]:
+                    raise RuntimeError('Checkpoint WAL dello storico occupato: storico conservato')
                 store.close()
                 try:
+                    # Replacing the main file while old WAL/SHM readers exist can retain
+                    # gigabytes on an unlinked inode and attach an old journal to the new DB.
+                    if any(Path(str(store.path) + suffix).exists() for suffix in ('-wal', '-shm')):
+                        raise RuntimeError('Lettori SQLite ancora attivi sul vecchio storico: rotazione rinviata')
                     os.replace(fresh_path, store.path)
                     fd = os.open(store.path.parent, os.O_RDONLY | os.O_DIRECTORY)
                     try: os.fsync(fd)
@@ -125,6 +134,8 @@ class Checkpoints:
             finally:
                 try: fresh.close()
                 except sqlite3.Error: pass
+                for suffix in ('', '-wal', '-shm'):
+                    Path(str(fresh_path) + suffix).unlink(missing_ok=True)
         finally:
             # Keep the same service object referenced by the registered routes.
             self.evolution.reopen()
@@ -140,7 +151,12 @@ class Checkpoints:
                     ident = await self.save(automatic=True)
                     self.stage(ident, 'saved')
                 self.stage(ident, 'loading')
-                run = await self.load(ident, resume=False)
+                if (self.restored_run and self.receiver.run == self.restored_run and
+                        self.receiver.status.get('state') == 'paused'):
+                    run = self.restored_run
+                else:
+                    run = await self.load(ident, resume=False)
+                    self.restored_run = run
                 self.stage(ident, 'reclaiming')
                 await self.reset_history(run)
                 self.stage(ident, 'resuming')
@@ -148,6 +164,7 @@ class Checkpoints:
                 await self.receiver.command('resume', {}, run)
                 self.stage(ident, 'done')
                 self.recovery = None
+                self.restored_run = None
                 # Bound automatic checkpoint storage; manual checkpoints are retained.
                 obsolete = self.index.execute('SELECT id,path FROM checkpoints WHERE automatic=1 ORDER BY created DESC LIMIT -1 OFFSET 2').fetchall()
                 for old, path in obsolete:

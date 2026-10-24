@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from .genetics import canonical, color, fingerprint, similarity, MODEL
+from .genome_codec import unpack_event
 
 
 def distribution(values):
@@ -164,7 +165,7 @@ class LineageIndex:
             query = 'SELECT id,tick,type,pop,data FROM events WHERE run=? AND id>? AND id<=? AND tick<=? ORDER BY tick,id'
             for event, tick, kind, pid, data in db.execute(query, (run, self.last_id, high, cutoff)):
                 self.check_cancel()
-                self.ingest(event, tick, kind, pid, json.loads(data))
+                self.ingest(event, tick, kind, pid, unpack_event(json.loads(data)))
                 self.processed += 1
                 if len(self.nodes) > 1_000_000:
                     raise ValueError('Limite di un milione di individui raggiunto per questa vista.')
@@ -310,7 +311,7 @@ class LineageIndex:
                 raise ValueError('Identificativo agente sconosciuto.')
             with closing(self.open_database(path)) as db:
                 row=db.execute('SELECT data FROM events WHERE run=? AND id=?',(run,self.nodes[pid].event)).fetchone()
-            data=json.loads(row[0])
+            data=unpack_event(json.loads(row[0]))
             if not isinstance(data.get('genes'),list):
                 raise ValueError('Genoma alla nascita assente per questo agente storico.')
             return data,canonical(data['genes'])

@@ -20,6 +20,7 @@ from .metrics import catalog as metric_catalog
 from .evolution import EvolutionService, install_routes as install_evolution_routes
 from .checkpoints import Checkpoints, install_routes as install_checkpoint_routes
 from .storage import RemovalService, StorageGuard, install_routes as install_storage_routes
+from .genome_codec import pack_event, unpack_event
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -72,7 +73,8 @@ class Store:
                 db.execute('INSERT OR REPLACE INTO samples VALUES(?,?,?)', (run, tick, compact(data)))
             elif kind == 'event':
                 db.execute('INSERT INTO events(run,tick,type,pop,data) VALUES(?,?,?,?,?)',
-                           (run, tick, data['event_type'], data['agent'].get('pop_id'), compact(data['agent'])))
+                           (run, tick, data['event_type'], data['agent'].get('pop_id'),
+                            compact(pack_event(data['agent']))))
             elif kind == 'environment':
                 if isinstance(data, dict) and 'cells' in data:
                     db.execute('INSERT OR REPLACE INTO environment_parts VALUES(?,?,?,?)', (run, data['offset'], data['total'], compact(data['cells'])))
@@ -403,7 +405,7 @@ def create_app(db_path, config_path, binary, udp_port):
     async def events(run: str, after: int = 0, limit: int = 100):
         ensure_run_available(run)
         rows = app.state.store.db.execute('SELECT id,tick,type,data FROM events WHERE run=? AND id>? ORDER BY id LIMIT ?', (run, after, max(1,min(limit,200)))).fetchall()
-        return [dict(id=r[0],tick=r[1],type=r[2],data=json.loads(r[3])) for r in rows]
+        return [dict(id=r[0],tick=r[1],type=r[2],data=unpack_event(json.loads(r[3]))) for r in rows]
 
     @app.get('/api/runs/{run}/extinctions')
     async def extinctions(run: str, start: int = 0, end: int = 9223372036854775807):

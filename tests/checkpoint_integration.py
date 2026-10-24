@@ -1,5 +1,6 @@
 """Real simulator/backend checkpoint save/load and storage rotation in temporary databases."""
 import json
+from contextlib import closing
 import os
 from pathlib import Path
 import socket
@@ -52,16 +53,19 @@ class CheckpointIntegration(unittest.TestCase):
                     after=command('agents')['result']['agents']
                     self.assertEqual({a['pop_id'] for a in before},{a['pop_id'] for a in after})
                     # Simulate old historical volume above the 10 MB test limit.
-                    with sqlite3.connect(db) as con:
+                    with closing(sqlite3.connect(db)) as con:
                         con.execute('INSERT INTO diagnostics(run,data) VALUES(?,?)',(old,'x'*12_000_000));con.commit()
                     rotated=wait(lambda s:s.get('run_id') not in (old,new['run_id']) and s.get('state')=='running',45)
                     time.sleep(.2)
                     runs=client.get('/api/runs').json();self.assertEqual(len(runs),1,runs)
                     self.assertEqual(runs[0]['id'],rotated['run_id'])
                     self.assertLess(db.stat().st_size,10_000_000)
+                    self.assertFalse(any(root.glob('history.sqlite.rotation-new*')))
+                    self.assertLess(sum(path.stat().st_size for path in root.glob('history.sqlite*')),
+                                    10_000_000)
                     checkpoints=client.get('/api/checkpoints').json();self.assertEqual(checkpoints['operation']['stage'],'done',checkpoints)
                     self.assertEqual(len(checkpoints['checkpoints']),2)
-                    with sqlite3.connect(db) as con:
+                    with closing(sqlite3.connect(db)) as con:
                         sample=json.loads(con.execute('SELECT data FROM samples WHERE run=? ORDER BY tick LIMIT 1',(rotated['run_id'],)).fetchone()[0])
                     self.assertEqual(sample['tick'],0);self.assertEqual(sample['resource_ledger']['residual'],[0]*6)
                     self.assertLess(abs(sample['energy_ledger']['residual']),1e-5)

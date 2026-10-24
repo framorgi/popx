@@ -75,7 +75,7 @@ def main():
     baseline=samples(db,a.baseline,cutoff) if a.baseline else []
     if baseline: compare('BASELINE_INDEPENDENT_RUN',baseline)
     nodes={};living=set();natural_parents=set();causes=collections.Counter()
-    for tick,kind,pid,raw in db.execute("SELECT tick,type,pop,json_remove(data,'$.genes','$.sensors') FROM events WHERE run=? AND tick<=? ORDER BY tick,id",(a.run,cutoff)):
+    for tick,kind,pid,raw in db.execute("SELECT tick,type,pop,json_remove(data,'$.genes','$.genes_packed','$.sensors') FROM events WHERE run=? AND tick<=? ORDER BY tick,id",(a.run,cutoff)):
         d=json.loads(raw)
         if kind in ('birth','founder'):
             parent=d.get('parent_id');pn=nodes.get(parent)

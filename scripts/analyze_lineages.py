@@ -50,7 +50,7 @@ def main():
     longest_unassisted = (0, 0, 0)
     unassisted_start = 0
     # Remove large neural payloads inside SQLite; retain life-history evidence.
-    query = "SELECT tick,type,pop,json_remove(data,'$.genes','$.sensors') FROM events WHERE run=? AND tick<=? ORDER BY tick,id"
+    query = "SELECT tick,type,pop,json_remove(data,'$.genes','$.genes_packed','$.sensors') FROM events WHERE run=? AND tick<=? ORDER BY tick,id"
     for tick, kind, pid, raw in db.execute(query, (run, cutoff)):
         d = json.loads(raw)
         if kind in ('founder', 'birth'):

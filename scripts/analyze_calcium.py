@@ -53,7 +53,7 @@ def main():
     print('INITIAL_BARRIERS', len(saturated))
     roots = {}; depth = {}; living = set(); recoveries = collections.Counter(); first_forced = None
     for tick, kind, pid, raw in db.execute(
-        "select tick,type,pop,json_remove(data,'$.genes','$.sensors') from events where run=? and tick<=? order by tick,id",
+        "select tick,type,pop,json_remove(data,'$.genes','$.genes_packed','$.sensors') from events where run=? and tick<=? order by tick,id",
         (args.run, args.tick)):
         data = json.loads(raw)
         if kind in ('birth', 'founder'):
