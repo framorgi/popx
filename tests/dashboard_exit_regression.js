@@ -7,10 +7,10 @@ class Element {
 }
 const nodes=new Map(),get=id=>{if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);};
 const exit=get('exit');exit.dataset.command='exit';
-const calls=[],cleared=[],events=[];let stream,lateResolve,hold=false,heldSignal;
+const calls=[],cleared=[],events=[];let stream,lateResolve,hold=false,heldSignal,confirmed=false;
 const status={run_id:'r',state:'running',connected:true,speed:0,alive:10,tick:100};
 const context={console,AbortController,DOMException,Event,clearInterval:id=>cleared.push(id),setInterval:()=>7,
-    window:{POPX_METRICS:{}},document:{getElementById:get,createElement:()=>new Element(),createTextNode:text=>({text}),
+    window:{POPX_METRICS:{},confirm:()=>confirmed},document:{getElementById:get,createElement:()=>new Element(),createTextNode:text=>({text}),
         addEventListener(){},dispatchEvent:e=>events.push(e.type),querySelector:()=>new Element(),
         querySelectorAll:selector=>selector.includes('data-command')?[exit]:[]},
     Chart:class{constructor(el,config){Object.assign(this,config);}update(){}},
@@ -31,12 +31,18 @@ vm.runInContext(fs.readFileSync('dashboard/static/app.js','utf8'),context);
     derivativeButton.onclick();
     assert.strictEqual(state.charts[0].data.datasets[0].data[1].y,.01);
     assert.strictEqual(state.charts[0].plugins[0].id,'popxExtinctions');
+    get('extinction-toggle').onclick();
+    assert.strictEqual(state.showExtinctions,false);
+    assert.strictEqual(get('extinction-toggle').textContent,'Mostra linee rosse');
     state.samples=[{tick:100}];state.agents=[{pop_id:'p'}];state.snapshot={pop_id:'p'};
     let destroyed=false;state.cy={destroy(){destroyed=true;}};
     for(const chart of state.charts)chart.data.datasets[0].data=[{x:1,y:2}];
     hold=true;const late=vm.runInContext('loadHistory()',context).catch(e=>e.name);
     await new Promise(r=>setImmediate(r));
     const before=calls.filter(c=>c.startsWith('/api/runs?')).length;
+    await exit.onclick();assert.strictEqual(state.closed,false);
+    assert.strictEqual(calls.filter(c=>c==='/api/commands').length,0);
+    confirmed=true;
     await exit.onclick();
     assert(state.closed&&stream.closed&&destroyed&&heldSignal.aborted);
     assert(cleared.includes(7));assert(events.includes('popx:exit'));

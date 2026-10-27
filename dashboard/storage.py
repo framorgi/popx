@@ -137,10 +137,8 @@ class RemovalService:
             except asyncio.CancelledError:
                 pass
 
-    def start(self, run, current):
+    def start(self, run):
         db = self.store.db
-        if run == current:
-            raise HTTPException(409, 'La run collegata al simulatore è protetta. Seleziona una run precedente.')
         previous = db.execute('SELECT state FROM removed_runs WHERE run=?', (run,)).fetchone()
         if previous:
             if previous[0] == 'error':
@@ -153,8 +151,6 @@ class RemovalService:
         row = db.execute('SELECT state FROM runs WHERE id=?', (run,)).fetchone()
         if row is None:
             raise HTTPException(404, 'Run non disponibile')
-        if row[0] != 'finished':
-            raise HTTPException(409, 'Si possono rimuovere le run concluse. Questa run risulta ancora aperta.')
         if db.execute("SELECT 1 FROM removed_runs WHERE state='deleting'").fetchone():
             raise HTTPException(409, 'Attendi la rimozione già in corso.')
         try:
@@ -231,7 +227,40 @@ def install_routes(app):
         body = await request.json()
         if body.get('confirm_run') != run:
             raise HTTPException(422, 'Conferma l’identificativo della run da rimuovere.')
-        return app.state.removals.start(run, app.state.receiver.run)
+        if run == app.state.receiver.run:
+            receiver = app.state.receiver
+            connected = bool(receiver.peer) and time.monotonic() - receiver.last_seen < 5
+            if receiver.status.get('state') != 'finished':
+                if not connected:
+                    raise HTTPException(409, 'Simulatore non connesso: impossibile fermare la run prima di rimuoverla.')
+                await receiver.command('stop', {}, run)
+                for _ in range(50):
+                    row = app.state.store.db.execute('SELECT state FROM runs WHERE id=?', (run,)).fetchone()
+                    if row and row[0] == 'finished':
+                        break
+                    await asyncio.sleep(.1)
+                else:
+                    raise HTTPException(504, 'Arresto richiesto, ma la conclusione non è stata registrata. Riprova.')
+        return app.state.removals.start(run)
+
+    @app.post('/api/storage/clean')
+    async def clean_history(request: Request):
+        if (await request.json()).get('confirm') != 'clean_history':
+            raise HTTPException(422, 'Conferma la pulizia completa dello storico.')
+        service = app.state.checkpoints
+        if service.lock.locked():
+            raise HTTPException(409, 'Operazione checkpoint già in corso.')
+        if app.state.store.db.execute("SELECT 1 FROM removed_runs WHERE state='deleting'").fetchone():
+            raise HTTPException(409, 'Attendi la rimozione della run già in corso.')
+        receiver = app.state.receiver
+        if receiver.run and receiver.status.get('state') in ('running', 'paused'):
+            if not receiver.peer or time.monotonic() - receiver.last_seen >= 5:
+                raise HTTPException(409, 'Simulatore non connesso: impossibile salvarne lo stato prima della pulizia.')
+            await service.rotate()
+            return {'run_id': receiver.run, 'operation': service.state}
+        async with service.lock:
+            await service.reset_history()
+        return {'run_id': None, 'operation': {'stage': 'done', 'error': ''}}
 
     @app.get('/api/storage/removals/{run}')
     async def removal(run: str):

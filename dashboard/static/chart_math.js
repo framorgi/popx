@@ -22,8 +22,9 @@
                         ? (value - previousValue) / interval : null};
         });
     }
-    function extinctionPlugin(getTicks) {
+    function extinctionPlugin(getTicks, isVisible = () => true) {
         return {id: 'popxExtinctions', afterDatasetsDraw(chart) {
+            if (!isVisible()) return;
             const ticks = getTicks();
             if (!ticks?.length) return;
             const scale = chart.scales.x, area = chart.chartArea, ctx = chart.ctx;

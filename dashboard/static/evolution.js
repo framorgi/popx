@@ -2,8 +2,9 @@
 (() => {
     const $ = id => document.getElementById(id);
     const state = {run:null, threshold:.9, report:null, detail:null, page:0, api:'', token:0, charts:{}, runs:[],
-        extinctions:[], compositionDerivative:false};
-    const extinctionLines = window.PopXChartMath.extinctionPlugin(() => state.extinctions);
+        extinctions:[], showExtinctions:true, compositionDerivative:false};
+    const extinctionLines = window.PopXChartMath.extinctionPlugin(() => state.extinctions,
+        () => state.showExtinctions);
     const fmt = v => v === null || v === undefined ? '—' : Number(v).toLocaleString('it-IT',{maximumFractionDigits:2});
     const pct = v => v === null || v === undefined ? '—' : `${fmt(100*v)}%`;
     const short = id => id.length > 18 ? '…'+id.slice(-16) : id;
@@ -177,6 +178,12 @@ Età media delle morti ordinarie: ${fmt(s.natural_death_age.mean)} tick (${s.nat
     }
     $('ev-load').onclick=guard(()=>load(true));$('ev-run').onchange=guard(()=>load(false));$('ev-more-runs').onclick=guard(()=>runs(true));
     $('ev-window').onclick=renderTimeline;$('ev-group').onchange=renderTimeline;
+    $('ev-extinction-toggle').onclick=()=>{
+        state.showExtinctions=!state.showExtinctions;
+        $('ev-extinction-toggle').textContent=state.showExtinctions?'Nascondi linee rosse':'Mostra linee rosse';
+        $('ev-extinction-toggle').setAttribute('aria-pressed',String(state.showExtinctions));
+        for(const id of ['ev-composition','ev-turnover','ev-cap-chart'])state.charts[id]?.update('none');
+    };
     $('ev-derivative').onclick=()=>{
         state.compositionDerivative=!state.compositionDerivative;
         $('ev-derivative').textContent=state.compositionDerivative?'Mostra valori':'Mostra derivata /tick';

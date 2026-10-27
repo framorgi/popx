@@ -225,7 +225,9 @@ class Receiver(asyncio.DatagramProtocol):
             self.completed[key] = True
             if len(self.completed)>4096: self.completed.popitem(last=False)
             self.transport.sendto(compact({'ack': seq, 'p': p}).encode(), address)
-            if fresh:
+            # A deleted connected run remains addressable for Start/Exit replies.
+            # Its telemetry stays tombstoned, but command acknowledgements must reach callers.
+            if fresh or msg['type'] == 'reply':
                 self.deliver(msg, address, seq)
         except (ValueError, KeyError, TypeError, sqlite3.Error, OSError):
             self.errors += 1

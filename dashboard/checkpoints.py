@@ -84,8 +84,8 @@ class Checkpoints:
             await self.receiver.command('resume', {}, run)
         return run
 
-    async def reset_history(self, keep_run):
-        """Replace history with a small DB containing only the restored run's initial state."""
+    async def reset_history(self, keep_run=None):
+        """Replace history; keep only the restored run when a simulator is active."""
         store = self.app.state.store
         await self.app.state.removals.close()
         await asyncio.to_thread(self.evolution.close)
@@ -103,7 +103,10 @@ class Checkpoints:
                     if rows:
                         fresh.db.executemany(f'INSERT INTO {table} VALUES({",".join("?" for _ in rows[0])})', rows)
                 # Durable tombstones acknowledge late UDP packets without recreating discarded history.
-                old_runs = [r[0] for r in store.db.execute('SELECT id FROM runs WHERE id<>?', (keep_run,))]
+                if keep_run is None:
+                    old_runs = [r[0] for r in store.db.execute('SELECT id FROM runs')]
+                else:
+                    old_runs = [r[0] for r in store.db.execute('SELECT id FROM runs WHERE id<>?', (keep_run,))]
                 fresh.db.executemany("INSERT INTO removed_runs VALUES(?,?,'done',0,0,0,'')", [(r, time.time()) for r in old_runs])
                 fresh.db.commit()
                 if fresh.db.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()[0]:
@@ -131,6 +134,7 @@ class Checkpoints:
                     store.db = replacement.db
                 self.receiver.parts.clear()
                 self.receiver.partial_bytes = 0
+                self.app.state.extinctions.cache.clear()
             finally:
                 try: fresh.close()
                 except sqlite3.Error: pass

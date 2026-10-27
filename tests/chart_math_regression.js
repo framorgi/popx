@@ -29,4 +29,11 @@ math.extinctionPlugin(()=>[100,350,900]).afterDatasetsDraw({
 });
 assert.strictEqual(strokes.length,2);
 assert.deepStrictEqual(positions,[[50,10],[50,90],[175,10],[175,90]]);
+const hidden=[];
+math.extinctionPlugin(()=>[100],()=>false).afterDatasetsDraw({
+    scales:{x:{min:0,max:600,getPixelForValue:tick=>tick/2}},
+    chartArea:{left:0,right:300,top:10,bottom:90},
+    ctx:{save(){hidden.push('drawn');}}
+});
+assert.deepStrictEqual(hidden,[]);
 console.log('PASS: stock/cumulative derivatives, irregular intervals, missing values and eligibility');

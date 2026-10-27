@@ -16,6 +16,7 @@ const state = {
     runs: [],
     samples: [],
     extinctions: [],
+    showExtinctions: true,
     historyRequest: 0,
     forcedBirthsSeen: 0,
     charts: [],
@@ -101,17 +102,17 @@ function clearDashboard() {
         for (const dataset of chart.data.datasets) dataset.data=[];
         chart.update('none');
     }
-    for (const id of ['runs','agents','agent-detail','agent-avatar','agent-genome','events','snapshots','diagnostics',
+    for (const id of ['runs','agents','agent-detail','agent-avatar','agent-genome','events','diagnostics',
                      'config-form','metric','metric-description','diagnostic-description','diagnostic-metric','network'])
         $(id).replaceChildren();
     for (const id of ['alive','elapsed','ticks','cost','births','transport']) $(id).textContent='—';
     for (const id of ['snapshot-stamp','agent-raw','graph-detail','silent-genes','metric-value','active-config','agents-stamp'])
         $(id).textContent='';
-    $('agent-name').textContent='Nessun agente selezionato';$('state').textContent='Uscita richiesta';
+    $('agent-name').textContent='Nessun agente selezionato';$('state').textContent='Simulatore chiuso';
     $('reason').textContent='';$('connection').textContent='Dashboard disconnessa';
     document.querySelectorAll('main button, main input, main select, [data-command]').forEach(e=>e.disabled=true);
     document.dispatchEvent(new Event('popx:exit'));
-    notice('Uscita richiesta e dashboard azzerata. Lo storico resta salvato. Ricarica la pagina dopo un nuovo avvio.');
+    notice('Simulatore chiuso e dashboard azzerata. Lo storico resta salvato. Con il launcher si chiude anche il server; la scheda del browser resta aperta.');
 }
 function updateStatus(status) {
     if (state.closed) return;
@@ -195,7 +196,7 @@ const chartSpecs = [
     ],
     ['Prestazioni e riproduzione', [['Costo tick (µs)', 'avg_tick_us'], ['Backlog', 'backlog']]]
 ];
-const extinctionLines = window.PopXChartMath.extinctionPlugin(() => state.extinctions);
+const extinctionLines = window.PopXChartMath.extinctionPlugin(() => state.extinctions, () => state.showExtinctions);
 function makeChart(canvas, series, tickAxis = true) {
     return new Chart(canvas, {
         type: 'line',
@@ -558,6 +559,8 @@ document.querySelectorAll('[data-tab]')
                  if (state.cy) state.cy.resize();
              }));
 document.querySelectorAll('[data-command]').forEach(b => b.onclick = guard(async () => {
+                                                        if (b.dataset.command === 'exit' && !window.confirm(
+                                                            'Chiudere il simulatore? La run sarà conclusa e salvata, la GUI si chiuderà. Se hai usato il launcher, si chiuderà anche il server della dashboard; la scheda del browser resterà aperta.')) return;
                                                         await command(b.dataset.command);
                                                         if (state.closed) return;
                                                         await loadRuns();
@@ -565,6 +568,12 @@ document.querySelectorAll('[data-command]').forEach(b => b.onclick = guard(async
                                                     }));
 $('speed').onclick = guard(() => command('speed', {value: state.status.speed === 1 ? 2 : state.status.speed === 2 ? 0 : 1}));
 $('gui').onclick = guard(() => command(state.status.gui ? 'headless' : 'show_gui'));
+$('extinction-toggle').onclick = () => {
+    state.showExtinctions = !state.showExtinctions;
+    $('extinction-toggle').textContent = state.showExtinctions ? 'Nascondi linee rosse' : 'Mostra linee rosse';
+    $('extinction-toggle').setAttribute('aria-pressed', String(state.showExtinctions));
+    for (const chart of [...state.charts, state.metricChart, state.diagnosticChart]) chart?.update('none');
+};
 $('runs-more').onclick = guard(() => loadRuns(true));
 $('runs').onchange = guard(async () => {
     state.run = $('runs').value;
@@ -608,25 +617,6 @@ $('graph-path-filter').onchange = guard(drawNetwork);
 $('graph-zero').onchange = guard(drawNetwork);
 $('graph-isolated').onchange = guard(drawNetwork);
 $('graph-fit').onclick = () => state.cy?.fit(undefined, 40);
-async function loadSnapshots(more = false) {
-    if (!more) {
-        $('snapshots').replaceChildren();
-        state.snapshotOffset = 0;
-    }
-    const rows = await api(`/api/snapshots?run=${state.run}&offset=${state.snapshotOffset || 0}`);
-    for (const snapshot of rows) {
-        const button = el('button', `${snapshot.pop_id} · tick ${fmt(snapshot.tick)}`);
-        button.onclick = guard(async () => {
-            state.selected = null;
-            showSnapshot(await api(`/api/snapshots/${snapshot.id}`));
-        });
-        $('snapshots').append(button);
-    }
-    state.snapshotOffset = (state.snapshotOffset || 0) + rows.length;
-    $('snapshots-more').disabled = rows.length < 100;
-}
-$('snapshots-refresh').onclick = guard(() => loadSnapshots());
-$('snapshots-more').onclick = guard(() => loadSnapshots(true));
 $('config-reload').onclick = guard(loadConfig);
 $('config-save').onclick = guard(async () => {
     if (!$('config-form').reportValidity()) return;

@@ -42,6 +42,8 @@ vm.runInContext(fs.readFileSync('dashboard/static/evolution.js','utf8'),context)
     assert.strictEqual(get('ev-error').hidden,true);
     assert.strictEqual(charts.size,6);
     assert.strictEqual(charts.get(get('ev-composition')).plugins[0].id,'popxExtinctions');
+    get('ev-extinction-toggle').onclick();
+    assert.strictEqual(get('ev-extinction-toggle').textContent,'Mostra linee rosse');
     get('ev-derivative').onclick();
     assert.strictEqual(charts.get(get('ev-composition')).data.datasets[0].data[1].y,.01);
     assert.strictEqual(charts.get(get('ev-composition')).data.datasets[0].data[0].y,null);

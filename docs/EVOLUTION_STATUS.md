@@ -7,6 +7,315 @@ limiti originali; non descrivono automaticamente il modello attuale.
 The [README](../README.md) covers the project, features, mathematical model, architecture,
 and setup. Validation status and audit records remain in this document.
 
+## Stato corrente — linee di estinzione e comando di uscita, 27 ottobre 2026
+
+La panoramica e la pagina delle linee evolutive hanno un pulsante
+`Nascondi/Mostra linee rosse`: cambia soltanto la resa delle linee verticali
+ai tick di estinzione; non cancella eventi, campioni o grafici. Il plugin
+Chart.js riceve un predicato di visibilità, così le serie conservano i dati
+e il secondo clic ripristina le linee. Il controllo vale per i grafici
+temporali della pagina corrente.
+
+`Esci` è ora `Chiudi simulatore`, con spiegazione accanto ai comandi e conferma
+prima dell'invio. `Stop` conclude la run e mantiene il processo disponibile
+per una nuova run. `Chiudi simulatore` conclude la run, registra lo stato
+finale, chiude la GUI e termina il processo PopX. Se la dashboard è stata
+avviata con `scripts/run_popx.sh`, il launcher termina anche il backend;
+la scheda del browser resta aperta ma viene azzerata/disconnessa. Se il
+backend è stato avviato separatamente, resta disponibile senza simulatore.
+Verificati `chart_math_regression.js`, `dashboard_exit_regression.js` ed
+`evolution_ui_regression.js` (PASS), oltre a sintassi JS e controllo diff.
+Le modifiche sono statiche e non richiedono il riavvio del backend attivo.
+
+## Stato corrente — gestione unificata di run e snapshot, 27 ottobre 2026
+
+La pagina `Spazio, run e snapshot` centralizza la selezione/rimozione delle
+run, gli snapshot neurali della run scelta e il salvataggio/caricamento dei
+checkpoint completi. Il riquadro checkpoint separato dalla panoramica e la
+lista di snapshot separata nell'inspector non sono più mostrati; il comando
+per salvare lo snapshot di un Pop rimane nell'inspector. Un pulsante esplicito
+richiede la pulizia completa dello storico SQLite. Con una run attiva usa
+la rotazione già verificata: checkpoint completo, verifica, restore su nuova
+run, sostituzione del database e ripresa. Senza run attiva sostituisce il
+database con uno vuoto. I checkpoint esterni restano nel catalogo separato.
+La conferma UI e la verifica del corpo della richiesta impediscono attivazioni
+accidentali. Errori di verifica preservano lo storico.
+
+La rimozione della run collegata ora invia `stop`, attende la conclusione
+registrata e avvia la cancellazione a blocchi. Run storiche marcate ancora
+aperte ma non collegate si possono rimuovere; la tombstone impedisce che
+vecchi messaggi ricreino i dati. Le risposte ai comandi Start/Exit restano
+consegnabili anche dopo la rimozione della run collegata. L'eliminazione
+di una singola run rende le pagine SQLite riutilizzabili, mentre la pulizia
+completa sostituisce il file per recuperare spazio sul filesystem.
+
+Validazione su database temporanei: tre test integrati PASS per pulizia
+manuale con e senza run attiva, rimozione di run collegata e di run storica
+aperta; test del widget Node PASS e regressione del limite database PASS.
+Il 27 ottobre, prima dell'attivazione, nessun processo PopX/dashboard era
+più attivo: lo storico conteneva una run conclusa con motivo `stop` e una
+vecchia marcata `running`, senza simulatore collegato. Avviato solo il backend
+aggiornato sulla porta 8000, senza cancellare dati o iniziare una nuova run.
+Le API `/api/status`, `/api/storage`, `/api/runs` e `/api/checkpoints` hanno
+risposto; lo storico occupava circa 7,41 GB. L'INI locale, modificato
+separatamente, aveva limite 5 GB; non è stato alterato da questo intervento.
+
+## Stato corrente — estinzioni nella run con cap 460, 25 ottobre 2026
+
+Analisi in sola lettura della run `1792923896759690004-1545837357`, lasciata
+attiva, fino a circa 21,7 milioni di tick. I 26.380 nati forzati corrispondono
+a 1.319 recuperi da estinzione con 20 semi ciascuno; 775.221 nascite naturali
+e 801.677 morti sono cumulativi. Dai contatori nei campioni ogni 50.000 tick,
+stime dei recuperi per
+intervallo di 2 milioni di tick 51 (0–2M), 73 (2–4M), 88 (4–6M), 135
+(6–8M), 130 (8–10M), 138 (10–12M), 145 (12–14M), 150 (14–16M), 172
+(16–18M), 151 (18–20M). Gli arrotondamenti per blocco non devono sommarsi
+come eventi esatti. Fra 20 e 21,7M: circa 88 recuperi; intervallo più corto,
+non confrontabile come conteggio grezzo. La frequenza è aumentata a medio
+termine, ma non cresce monotonicamente nell'ultima parte. La popolazione
+media nei blocchi 0–2M, 16–18M e 20–21,7M è circa 175, 90 e 113;
+la mediana rispettiva 76, 30 e 37. Le osservazioni ripetute di una stessa
+popolazione non sono repliche indipendenti.
+
+Negli ultimi 5M tick sono stati ricostruiti 350 cicli di recupero dai
+contatori campionati ogni 200 tick. La prima metà ha durata mediana 5.200
+tick e picco mediano 17 vivi; la seconda 6.000 tick e picco 25. Negli ultimi
+20 cicli: 9.100 tick e picco 51. Questo è un segnale recente di recupero
+parziale, non ancora una linea stabilizzata. Nelle ultime 5.000 morti,
+2.491 sono energetiche, 2.407 termiche per freddo e 102 per caldo;
+campione di eventi, non tassi per età/esposizione. Fra le ultime 2.000 morti,
+l'88,4% non ha avuto figli. Il freddo e la fame agiscono quindi spesso
+prima della riproduzione. Le risorse mondiali restano elevate in aggregato
+(circa 3,4M glucosio, 10,7M acqua e 16,5M ossigeno all'ultimo campione
+letto), ma questo non dimostra accessibilità locale né distribuzione adatta.
+
+Il cap a 460 non ha eliminato il ciclo espansione–collasso: nell'intervallo
+20–21,7M circa 64% delle esposizioni riproduttive ammissibili risultano
+bloccate dal cap, soprattutto nei boom, mentre il picco mediano dei cicli
+recenti resta molto sotto 460. Alzarlo ancora non affronta le estinzioni
+piccole. Le 1.640 nascite forzate nelle ultime 50.000 nascite esaminate
+rimandano a 1.536 ID parentali distinti e 30 combinazioni di tratti PHY;
+non risulta un singolo donatore ripetuto come spiegazione immediata. La
+diversità del genoma completo non è stata quantificata da questo conteggio.
+
+`scripts/analyze_nn_direction.py` su 77 reti vive: riproduzione dell'azione
+77/77; aprire controfattualmente le otto direzioni, una alla volta, produce
+616 prove, sei cambi di azione e zero cambi *causalmente* orientati verso
+la direzione aperta. La numerosità delle connessioni non equivale a una
+politica sensibile alla percorribilità. Il test tiene fissi gli altri
+sensori, ripete otto interventi sulla stessa rete e non misura fitness.
+È coerente con il collo di bottiglia decisionale già rilevato nella run
+precedente, ma non dimostra da solo che esso causi ogni estinzione.
+
+Decisione: non modificare produzione o INI sulla base di questi soli dati;
+lasciare la run attiva. Priorità diagnostica: fixture appaiata con clima e
+risorse mobili, controller sensibile ai varchi/temperatura contro casuale e
+immobile, medesima condizione iniziale, learning acceso/spento. Separare
+movimenti eseguibili, acquisizione, esposizione termica, vite completate e
+figli naturali. Solo se il controller guidato vince e la rete evolutiva
+non lo raggiunge, intervenire su architettura/credito di apprendimento;
+se non vince, intervenire su geografia climatica/risorse e collocazione dei
+figli. Non introdurre un bonus artificiale al movimento.
+
+## Stato corrente — riavvio pulito con cap 460, 25 ottobre 2026
+
+Su richiesta dell'utente, la run precedente è stata terminata (nessun processo
+PopX o dashboard risultava più attivo al controllo), e lo storico principale
+`data_out/popx.sqlite` con i relativi file WAL/SHM è stato eliminato.
+`config/popx.ini` ora imposta `max_population_allowed = 460`; la validazione
+del binario conferma il valore. Avviato `scripts/run_popx.sh --headless --speed 0`
+con dashboard sulla porta 8000 e database ricreato vuoto. Verificata via API
+la configurazione effettiva a 460 e via SQLite la sola nuova run
+`1792923896759690004-1545837357` in stato running (tick 4200 al controllo).
+Il catalogo e il checkpoint separati in `data_out/checkpoints/` non fanno
+parte dello storico SQLite della run e sono stati conservati; la nuova run
+parte dall'INI e non da quel checkpoint.
+
+## Stato corrente — selezione ecologica e credito direzionale, 25 ottobre 2026
+
+La run `1792910096415984252-2713088098` è rimasta attiva. Nelle ultime
+101 osservazioni SQLite (20.000 tick, fino a 11.268.800) la popolazione media
+è 359,98/360. Su 27.451 tentativi di movimento, 714 riescono (2,60%),
+22.864 falliscono per occupazione e 3.871 per pendenza. Le esposizioni
+riproduttive ammissibili bloccate dal cap sono 1.813.431/1.841.667 (98,47%);
+si osservano 200 nascite naturali e 200 morti, tutte energetiche. Questi
+aggregati non distinguono una scelta direzionale buona da una casuale, ma
+documentano quanto raramente la run offre un movimento eseguibile e quanto
+il cap limita la conversione di un eventuale vantaggio in figli.
+
+Rieseguito con gli oggetti C++ correnti il confronto controllato
+`strategy_fixture`, 64 prove appaiate di 3000 tick, risultato in
+`/tmp/popx-directional-selection-20261025.sqlite`. Fixture separata:
+mondo 16×16, temperatura uniforme 37 °C, risorse iniziali appaiate,
+politiche prescritte e learning congelato; non è una prova di adattamento
+al clima o di competizione nella folla della run. Nella distribuzione
+localizzata, senza fotosintesi, il fondatore immobile acquisisce 0 glucosio
+e genera in media 5 figli; il controllo sempre-est acquisisce 561 e genera
+12; la pattuglia est/ovest acquisisce 2829,75 e genera 21,75; il cammino
+cardinale casuale acquisisce 1554,5 e genera 27,25. I quattro seed delle
+strategie deterministiche non sono repliche indipendenti. La stessa
+gerarchia qualitativa di acquisizione/figli compare con fotosintesi attiva
+e nel layout uniforme. Dunque un comportamento che raggiunge celle utili
+può essere premiato da acquisizione e discendenza con la fisiologia corrente;
+la pattuglia batte il movimento sempre-est che resta bloccato al bordo.
+Il cammino casuale fa ancora più figli della pattuglia: non abbiamo
+dimostrato che la selezione favorisca *specificamente* la lettura del
+sensore di percorribilità rispetto a un'esplorazione diffusa.
+
+`Scorer` non contiene bonus di movimento: il segnale deriva da età, energia,
+variazione dell'energia, figli e temperatura corporea. Una scelta utile
+entra nel reward solo dopo che modifica questi stati; una richiesta
+bloccata paga subito 0,01 energia. `Brain::record_action` assegna traccia
+all'uscita scelta, ma le connessioni hidden ricevono solo un'approssimazione
+locale, non un gradiente dell'azione. Con decadimento 0,97/tick, l'emivita
+del credito è 22,76 tick e dopo 100 tick resta il 4,76%; benefici riproduttivi
+molto tardivi non tornano all'azione iniziale. Se l'agente muore, `Pop::update`
+non chiama `Scorer::observe` né `learn`: manca un segnale terminale negativo,
+pur restando la selezione ecologica sulla discendenza. Negli ultimi 101
+campioni il segnale medio è -0,00207, il modulo medio 0,00505, la
+plasticità proposta media per sinapsi 0,00000347 e il decadimento medio
+0,00000753. La media del segnale vicina a zero è coerente con la baseline;
+il modulo e l'entità degli aggiornamenti mostrano che il feedback è debole,
+non che l'apprendimento sia disattivato. Le regressioni di learning verificano
+credito ritardato, uscita scelta e reset; non provano che questa regola
+apprenda una politica direzionale utile nell'ecologia produttiva.
+
+Prossimo controllo causale prioritario: fixture con varchi, temperatura e
+risorse mobili, stessa condizione iniziale per controller direzionale basato
+sui sensori, controller casuale e controller immobile. Misurare scelte
+percorribili, acquisizione, energia, sopravvivenza e figli naturali con
+learning acceso/spento; non introdurre reward diretto sul movimento. Se
+il controller sensibile supera il casuale ma la rete non lo apprende,
+intervenire su rappresentazione/credito temporale. Se non lo supera,
+intervenire prima su ambiente, spazio e cap. I risultati attuali non
+giustificano una modifica della funzione di learning in produzione.
+
+## Stato corrente — fuga dal bordo e risposta direzionale, 25 ottobre 2026
+
+Indagine passiva sulla run `1792910096415984252-2713088098`, lasciata in
+esecuzione; nessuna policy o parametro produttivo modificato. Due esecuzioni
+di `scripts/analyze_nn_direction.py` hanno ispezionato 96 e 171 reti vive.
+La ricostruzione Python dell'azione osservata coincideva con 95/96 e 171/171
+snapshot. Il controfattuale azzera gli otto ingressi `MOVE_OPEN` e ne apre
+uno per volta, mantenendo fissi gli altri sensori e i pesi correnti: 2.136
+aperture hanno prodotto 114 cambi di azione, ma solo **uno** ha cambiato
+verso la direzione appena aperta. I 30 casi in cui la direzione scelta
+coincideva con quella aperta includono 29 coincidenze già presenti con tutti
+gli ingressi chiusi. Ripetere otto prove sulla stessa rete non produce
+2.136 individui indipendenti. È un test della policy e non della
+sopravvivenza: dimostra che i percorsi neurali strutturali abbondanti non
+costituiscono ancora una risposta direzionale utile alla percorribilità.
+
+In sette coppie di roster consecutivi, a popolazione 327–356, sono state
+classificate 2.374 esposizioni agente-intervallo secondo le celle occupate
+dai Pop negli otto vicini: 1.322 completamente circondate, 200 con soli
+vicini diagonali apparentemente liberi e 852 con almeno un vicino cardinale
+apparentemente libero. Gli stessi individui ricorrono in più intervalli.
+Fra le esposizioni con vicino cardinale libero e individuo ancora vivo al
+controllo successivo, 11,36 tentativi di movimento per individuo hanno
+prodotto 0,60 successi (5,3%). Le esposizioni completamente circondate
+avevano zero successi. L'occupazione ricavata dal roster trascura le due
+Source, la pendenza e gli stride maggiori di una cella; quindi una cella
+apparentemente libera non è necessariamente percorribile. In quel breve
+periodo la sopravvivenza fra roster era 91,1% al bordo e 100% fra i Pop
+circondati; i figli nuovi per superstite erano 0,027 e 0,076. Età,
+localizzazione, risorse e ripetizione degli individui confondono questi
+confronti: non provano che stare fermi protegga né che fuggire penalizzi.
+
+Una seconda coorte durante una fase al cap (360 vivi in tutti i 12 roster,
+circa 6.600 tick) ha confrontato Pop maturi con almeno un vicino cardinale
+apparentemente libero. In esposizioni ripetute, chi non si è mosso ha avuto
+sopravvivenza successiva 88,3% (804 esposizioni), chi si è spostato in una
+cella con più vicini liberi 93,2% (59) e gli altri mover 97,5% (79).
+I mover partivano però più giovani e con più energia; i figli successivi
+per superstite erano rispettivamente 0,123, 0,091 e 0,052. Non emerge un
+vantaggio riproduttivo causale della fuga in condizioni reali. Un'ulteriore
+coorte avviata durante un collasso aveva un solo mover e non è informativa.
+
+La fixture `local_mobility_regression` è stata compilata ed eseguita: PASS.
+Una rete diagnosticamente costruita sceglie l'uscita libera e il Pop si
+sposta davvero; verifica la meccanica, non un vantaggio ecologico o una
+policy evoluta. Il problema prioritario è dunque la **selezione
+direzionale dell'azione** in presenza di un varco, non l'assenza di
+connessioni o l'impossibilità fisica universale di muoversi. Il controllo
+causale successivo dovrebbe mettere in competizione, in fixture separata e
+con condizioni iniziali appaiate, un genoma che usa i sensori di
+percorribilità e temperatura per scegliere un'uscita con i genomi reali,
+misurando movimento riuscito, energia, vite completate e figli naturali.
+Se il controller guidato non ottiene più discendenza, correggere prima la
+geografia delle risorse/temperature e il collo di bottiglia spaziale;
+se ottiene vantaggio, rendere più accessibile l'evoluzione di una mappatura
+sensore→direzione, senza bonus artificiale al movimento. NewGen periodico
+con respawn casuale mescolerebbe questi effetti e non è il primo intervento.
+
+## Stato corrente — nuova run, mobilità e spazio, 25 ottobre 2026
+
+Analisi in sola lettura della run `1792910096415984252-2713088098`, lasciata
+attiva. La rotazione automatica ha salvato un checkpoint completo della run
+`1792865911637053038-3461282500` al suo tick 39.178.450, eliminato il suo
+database storico e avviato la run corrente da 162 Pop del checkpoint. I tick
+riportati qui sono locali alla nuova run; la somma dei tick non è un confronto
+controllato fra condizioni ecologiche diverse. La configurazione resta 57/8×5/22,
+cap 360, NewGen disabilitato, limite database 10 GB.
+
+Al campione 9.727.600: 9.620 nascite forzate dalla riserva ereditaria, pari a
+481 recuperi da estinzione con 20 semi ciascuno, 250.670 nascite naturali e
+260.201 morti. Nell'ultimo milione confrontato (8,7–9,7 milioni di tick), su
+101 campioni ogni 10.000 tick la popolazione media è 93,5, mediana 11 e nel
+54,5% dei campioni è sotto 20. Nel primo milione era media 109, mediana 50 e
+39,6% sotto 20. Nell'ultimo milione vi sono 1.220 nascite forzate (61
+recuperi), 19.064 nascite naturali e 20.216 morti; il 66,3% delle morti è
+attribuito all'energia e il 33,6% alla temperatura. La run storica esaminata
+il 24 ottobre contava 44 estinzioni a 16,2 milioni di tick, ma derivava da
+un altro checkpoint: i tassi non provano un effetto causale della correzione
+genetica.
+
+La struttura delle reti è migliorata rispetto alla degenerazione storica:
+negli ultimi 500 nati campionati fra 8,7 e 9,7 milioni di tick, 500 hanno un
+percorso non nullo da qualche sensore al movimento, 466 dalla temperatura e
+500 dai sensori di percorribilità; i geni cablabili sono in media 59 su 60.
+La vecchia run aveva 3/500 percorsi generici e nessuno termico o di
+percorribilità nell'ultimo campione. È un confronto osservazionale fra
+discendenti correlati e run differenti, non la prova che la sola mutazione
+abbia causato il miglioramento. Su 1.000 morti recenti, 447 non hanno mai
+tentato un movimento e 698 non si sono spostati, contro 996 e 944 nel
+campione della vecchia run. La mobilità è quindi meno assente, ma i percorsi
+neurali non garantiscono la scelta dell'azione o il suo successo.
+
+Nell'ultimo milione il movimento costituisce il 15,1% delle azioni e
+`DO_NOTHING` il 49,5%. Dei 4,77 milioni di tentativi di movimento, il 26,3%
+riesce, il 49,1% fallisce per occupazione e il 20,4% per pendenza. Il 97,6%
+dei tentativi riproduttivi processati non trova spazio nel raggio di
+dispersione; il 56,8% dei tick-agente idonei alla riproduzione è bloccato dal
+cap. Il glucosio totale del mondo sale da 2,62 a 3,31 milioni e l'ossigeno
+da 23,19 a 25,20 milioni; l'acqua scende da 10,47 a 10,15 milioni. Questi
+totali non descrivono l'accesso locale alle risorse. Il segnale di
+apprendimento medio sui 101 campioni è −0,00287, il suo modulo medio 0,00584
+e la plasticità assoluta media circa 1×10⁻⁶, inferiore al primo milione
+(circa 1,1×10⁻⁵). Un segnale medio vicino a zero non prova assenza di
+selezione; la frequenza delle estinzioni e il ricambio mostrano il contrario.
+
+Aggiornamento al tick 9.898.600: dividendo l'ultimo milione in due finestre
+non sovrapposte di 500.000 tick, i recuperi da estinzione passano da 9 a 44,
+la mediana dei vivi da 129 a 12,5 e la riuscita dei tentativi di movimento
+dal 30,8% al 20,8%. La quota di `DO_NOTHING` scende dal 44,2% al 25,3%:
+questo nuovo collasso non coincide con una semplice crescita dell'inazione.
+La ricerca della cella per la prole tenta anelli casuali fino al raggio 2;
+`try_spawn` rifiuta celle occupate o sature di calcio, ma i campioni mostrano
+zero celle sature. Il 97,6% di tentativi riproduttivi senza spazio indica
+quindi soprattutto congestione locale. Per una prossima run sperimentale è
+ragionevole confrontare il raggio 2 con 3, mantenendo invariati cap e reward
+e controllando anche sopravvivenza dei figli: più nascite da sole non
+dimostrerebbero maggiore stabilità.
+
+Alla verifica dello spazio la run era connessa e in esecuzione al tick 9.783.552
+con 95 vivi. Il database con WAL/SHM occupava 2.352.003.328 byte (23,5%
+del cap); il checkpoint completo occupava 5.495.780 byte e il catalogo 16 KiB.
+Un solo database SQLite e un solo checkpoint risultavano presenti, senza
+vecchi file di rotazione. Il filesystem WSL aveva 813.385.854.976 byte liberi;
+la dimensione fisica del VHDX sul lato Windows non è visibile qui. La
+rotazione è riportata come `done` senza errore.
+
 ## Stato corrente — genomi compatti, mutazione valida e storico azzerato, 24 ottobre 2026
 
 L'utente ha autorizzato la chiusura della run precedente e la cancellazione

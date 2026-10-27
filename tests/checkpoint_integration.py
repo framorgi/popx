@@ -14,6 +14,45 @@ from dashboard.server import ROOT, create_app
 
 
 class CheckpointIntegration(unittest.TestCase):
+    def test_remove_disconnected_open_run(self):
+        with tempfile.TemporaryDirectory(prefix='popx-remove-') as tmp:
+            root=Path(tmp);ini=root/'config.ini';db=root/'history.sqlite'
+            ini.write_text((ROOT/'config/popx.ini').read_text())
+            with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
+                sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+            with TestClient(create_app(db,ini,ROOT/'build-release/src/popx',port)) as client:
+                with closing(sqlite3.connect(db)) as con:
+                    con.execute("INSERT INTO runs VALUES('orphan',0,'{}','running','',NULL)")
+                    con.execute('INSERT INTO samples VALUES(?,?,?)',('orphan',0,'{}'))
+                    con.commit()
+                response=client.request('DELETE','/api/runs/orphan',json={'confirm_run':'orphan'})
+                self.assertEqual(response.status_code,202,response.text)
+                deadline=time.monotonic()+5
+                while time.monotonic()<deadline:
+                    removal=client.get('/api/storage/removals/orphan').json()
+                    if removal['state']=='deleted':break
+                    time.sleep(.02)
+                self.assertEqual(removal['state'],'deleted',removal)
+                self.assertEqual(client.get('/api/runs').json(),[])
+
+    def test_clean_history_without_connected_run(self):
+        with tempfile.TemporaryDirectory(prefix='popx-clean-') as tmp:
+            root=Path(tmp);ini=root/'config.ini';db=root/'history.sqlite'
+            ini.write_text((ROOT/'config/popx.ini').read_text())
+            with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
+                sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+            with TestClient(create_app(db,ini,ROOT/'build-release/src/popx',port)) as client:
+                with closing(sqlite3.connect(db)) as con:
+                    con.execute("INSERT INTO runs VALUES('old',0,'{}','finished','stop',NULL)")
+                    con.execute('INSERT INTO diagnostics(run,data) VALUES(?,?)',('old','x'*100_000))
+                    con.commit()
+                self.assertEqual(client.post('/api/storage/clean',json={}).status_code,422)
+                response=client.post('/api/storage/clean',json={'confirm':'clean_history'})
+                self.assertEqual(response.status_code,200,response.text)
+                self.assertIsNone(response.json()['run_id'])
+                self.assertEqual(client.get('/api/runs').json(),[])
+                self.assertLess(db.stat().st_size,100_000)
+
     def test_save_load_locked_config_and_rotation(self):
         with tempfile.TemporaryDirectory(prefix='popx-checkpoints-') as tmp:
             root=Path(tmp);ini=root/'config.ini';db=root/'history.sqlite'
@@ -69,6 +108,22 @@ class CheckpointIntegration(unittest.TestCase):
                         sample=json.loads(con.execute('SELECT data FROM samples WHERE run=? ORDER BY tick LIMIT 1',(rotated['run_id'],)).fetchone()[0])
                     self.assertEqual(sample['tick'],0);self.assertEqual(sample['resource_ledger']['residual'],[0]*6)
                     self.assertLess(abs(sample['energy_ledger']['residual']),1e-5)
+                    # Manual full cleanup uses the same verified rotation before the size limit.
+                    response=client.post('/api/storage/clean',json={'confirm':'clean_history'})
+                    self.assertEqual(response.status_code,200,response.text)
+                    cleaned=response.json()['run_id'];self.assertNotEqual(cleaned,rotated['run_id'])
+                    self.assertEqual([r['id'] for r in client.get('/api/runs').json()],[cleaned])
+                    self.assertEqual(client.post('/api/storage/clean',json={}).status_code,422)
+                    # A connected run can be stopped and removed; its command replies must still work.
+                    response=client.request('DELETE',f'/api/runs/{cleaned}',json={'confirm_run':cleaned})
+                    self.assertEqual(response.status_code,202,response.text)
+                    deadline=time.monotonic()+10
+                    while time.monotonic()<deadline:
+                        removal=client.get(f'/api/storage/removals/{cleaned}').json()
+                        if removal['state']=='deleted':break
+                        time.sleep(.05)
+                    self.assertEqual(removal['state'],'deleted',removal)
+                    self.assertEqual(client.get('/api/runs').json(),[])
                     command('exit');proc.wait(timeout=5)
                 finally:
                     if proc.poll() is None:proc.terminate();proc.wait(timeout=5)

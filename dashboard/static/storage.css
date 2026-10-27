@@ -8,4 +8,10 @@
 #storage-run {max-width:100%;min-width:260px}
 #storage-jobs p {overflow-wrap:anywhere}
 #storage-message {white-space:pre-line}
+.storage-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.25rem;margin:1rem 0}
+.storage-grid section {min-width:0;padding:1rem;border:1px solid #273246;border-radius:10px}
+.storage-grid h3 {margin-top:0}
+#storage-snapshots {display:flex;flex-wrap:wrap;gap:.5rem;max-height:240px;overflow:auto}
+#storage-snapshot-detail {max-height:360px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+#storage-checkpoint {min-width:240px;max-width:100%}
 aside nav a {display:block;padding:.6rem;color:#92a3b9;text-decoration:none}
