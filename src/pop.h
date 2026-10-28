@@ -113,6 +113,8 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @return True if the spawn was successful, false otherwise.
     ///---------------------------------------------------------------------------
     bool try_spawn(PositionT p) override;
+    /// @brief Reset decisions and temporal credit after NewGen changes the occupied cell.
+    void reset_after_newgen_relocation();
     ///---------------------------------------------------------------------------
     /// @brief Updates the state of the Pop (called each simulation tick).
     ///---------------------------------------------------------------------------

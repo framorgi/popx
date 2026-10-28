@@ -606,12 +606,15 @@ each can change by $\pm1$ within its limits, with the configured mutation probab
 |---|---|---|
 | Natural birth | Meets physiological thresholds, pays the cost, and receives parental resources. | Offspring produced under the run's conditions. |
 | Extinction recovery | Endless mode only: introduces up to 20 forced descendants from an archive of recent, distinct dead agents; uses random founders only if the archive is empty. The world and tick counter continue. | Archived donors retain genealogical continuity across extinction; recovery events remain distinguishable from natural births. |
-| NewGen | Periodic or manual selection; keeps the highest scores $S=n_{\mathrm{offspring}}+0.01E$. | Model-imposed culling, distinct from environmental mortality. |
+| NewGen | Periodic or manual selection; keeps the highest scores $S=n_{\mathrm{offspring}}+0.01E$ and redistributes survivors across random free cells. | Model-imposed culling and relocation, distinct from environmental mortality or natural movement. |
 
 In the distributed INI, periodic NewGen is disabled. When enabled, its interval is **50,000 ticks**;
 it keeps approximately **90%** of living agents and at least 8 survivors when available.
-Survivors retain their identity, position, occupancy, order, and cycle phase. The NewGen
-counter does not measure genealogical depth.
+Survivors retain identity, traits, resources, learned weights and bucket membership.
+Their new cells are sampled without replacement across the map, preferring at least
+two cells of clearance when possible. Pending decisions and eligibility traces are
+cleared after relocation; teleportation does not count as movement or birth. The
+NewGen counter does not measure genealogical depth.
 
 <a id="statistics"></a>
 ## Statistics and interpretation

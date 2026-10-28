@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -55,8 +56,8 @@ bool same_position(PositionT a, PositionT b) {
     return a.x == b.x && a.y == b.y;
 }
 
-std::shared_ptr<GridWorld> make_world(const std::shared_ptr<ILogger>& logger) {
-    auto world = std::make_shared<GridWorld>(9, 9, logger);
+std::shared_ptr<GridWorld> make_world(const std::shared_ptr<ILogger>& logger, int side = 9) {
+    auto world = std::make_shared<GridWorld>(side, side, logger);
     for (const auto& cell : world->get_cells()) {
         cell->set_elevation(0.0);
         cell->set_temperature(37.0);
@@ -166,21 +167,58 @@ void check_bucket_rotation(const std::shared_ptr<ILogger>& logger, const std::sh
     for (const auto tick : first_act)
         require(tick != 0, "agent never completed its first cycle");
 
-    std::vector<PositionT> before_positions;
-    for (const auto& pop : pops)
-        before_positions.push_back(pop->get_position());
     manager.trigger_new_generation();
     for (std::size_t i = 0; i < pops.size(); ++i) {
         if (pops[i]->is_alive()) {
-            require(same_position(pops[i]->get_position(), before_positions[i]), "NewGen moved a survivor");
-            require(world->get_cell(before_positions[i])->get_occupant().lock().get() == pops[i].get(),
-                    "NewGen lost survivor occupancy");
+            const auto position = pops[i]->get_position();
+            require(world->get_cell(position)->get_occupant().lock().get() == pops[i].get(),
+                    "NewGen lost survivor occupancy after respawn");
         }
     }
     require(manager.get_alive_count() >= 8, "NewGen fixture lost too many survivors");
     for (int tick = 0; tick < 8; ++tick)
         manager.update_cycle();
     require(manager.get_alive_count() >= 8, "survivors failed after bucket reassignment");
+}
+
+void check_newgen_spread(const std::shared_ptr<ILogger>& logger, const std::shared_ptr<IConfig>& config) {
+    auto world = make_world(logger, 30);
+    PopsManager manager(world, logger, config);
+    require(manager.spawn_population(), "spread fixture spawn failed");
+    for (int tick = 0; tick < 8; ++tick)
+        manager.update_cycle();
+    struct Before {
+        uint32_t age;
+        float energy;
+        unsigned glucose;
+        double distance;
+    };
+    std::map<std::string, Before> before;
+    for (const auto& cell : world->get_cells())
+        if (auto pop = std::dynamic_pointer_cast<Pop>(cell->get_occupant().lock()))
+            before.emplace(pop->get_pop_id(), Before{pop->get_age(), pop->get_energy(), pop->get_glucose(),
+                                                     pop->telemetry(false)["totals"]["distance"].get<double>()});
+    const auto births = manager.get_total_births();
+    manager.trigger_new_generation();
+    require(manager.get_total_births() == births, "NewGen counted relocations as births");
+    std::vector<PositionT> positions;
+    for (const auto& cell : world->get_cells()) {
+        auto pop = std::dynamic_pointer_cast<Pop>(cell->get_occupant().lock());
+        if (!pop)
+            continue;
+        const auto position = pop->get_position();
+        require(world->get_cell(position).get() == cell.get(), "NewGen position differs from occupancy");
+        const auto old = before.at(pop->get_pop_id());
+        require(pop->get_age() == old.age && pop->get_energy() == old.energy && pop->get_glucose() == old.glucose &&
+                    pop->telemetry(false)["totals"]["distance"].get<double>() == old.distance,
+                "NewGen respawn changed survivor physiology or counted teleport as movement");
+        for (const auto other : positions)
+            require(std::max(std::abs(position.x - other.x), std::abs(position.y - other.y)) >= 3,
+                    "NewGen did not spread survivors when space was available");
+        positions.push_back(position);
+    }
+    require(positions.size() == static_cast<std::size_t>(manager.get_alive_count()),
+            "NewGen survivor and occupant counts differ");
 }
 } // namespace
 
@@ -192,6 +230,7 @@ int main() {
         check_phase_guards(logger, config);
         check_random_direction(logger, config);
         check_bucket_rotation(logger, config);
+        check_newgen_spread(logger, config);
         std::cout << "PASS: phase guards, bucket rotation, initial relative movement\n";
         return 0;
     } catch (const std::exception& error) {

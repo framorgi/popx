@@ -51,6 +51,8 @@ class IBrain {
     virtual void hebbian_update(float reward) = 0;
     /// @brief Register neural activity only when the selected action is actually executed.
     virtual void record_action(int) {}
+    /// @brief Drop temporal action credit after an external relocation, preserving weights.
+    virtual void clear_eligibility_traces() = 0;
     virtual BrainLearningStats learning_stats() const {
         return {};
     }

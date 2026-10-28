@@ -408,6 +408,11 @@ void Brain::record_action(int action) {
     }
 }
 
+void Brain::clear_eligibility_traces() {
+    for (auto& matrix_trace : eligibility_)
+        std::fill(matrix_trace.begin(), matrix_trace.end(), 0.0f);
+}
+
 void Brain::hebbian_update(float reward) {
     if (activations_.size() != num_layers_ || !std::isfinite(reward))
         return;

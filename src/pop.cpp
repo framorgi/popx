@@ -201,6 +201,17 @@ bool Pop::try_spawn(PositionT p) {
     return false;
 }
 
+void Pop::reset_after_newgen_relocation() {
+    current_state_ = State::SENSE;
+    next_phase_ = State::SENSE;
+    first_run_ = true;
+    last_action_ = -1;
+    last_move_failed_ = false;
+    last_reward_ = 0.0f;
+    scorer_.reset();
+    brain_->clear_eligibility_traces();
+}
+
 float Pop::calculate_reward() const {
     return Scorer::reward({age_, offspring_count_, phy_.mitochondrions, energy_, previous_energy_, temperature_},
                           *config_);

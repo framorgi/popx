@@ -89,10 +89,9 @@ class SimulationAudit {
             throw std::runtime_error("serial limit violated");
         const auto original = manager.pops_;
         std::vector<PositionT> positions;
-        std::vector<int> phases, buckets;
+        std::vector<int> buckets;
         for (const auto& p : original) {
             positions.push_back(p->pos_);
-            phases.push_back(static_cast<int>(p->next_phase_));
             int bucket = 0;
             for (const auto* group : {&manager.sense_bucket_, &manager.think_bucket_, &manager.act_bucket_}) {
                 if (std::find(group->begin(), group->end(), p) != group->end())
@@ -113,9 +112,9 @@ class SimulationAudit {
                     throw std::runtime_error("culled occupant retained");
                 continue;
             }
-            if (p->pos_.x != positions[i].x || p->pos_.y != positions[i].y || occupant.get() != p.get() ||
-                static_cast<int>(p->next_phase_) != phases[i])
-                throw std::runtime_error("NewGen changed survivor state");
+            auto placed = world->get_cell(p->pos_)->get_occupant().lock();
+            if (placed.get() != p.get() || p->next_phase_ != State::SENSE)
+                throw std::runtime_error("NewGen respawn lost occupancy or retained a stale phase");
             const auto& group = buckets[i] == 0   ? manager.sense_bucket_
                                 : buckets[i] == 1 ? manager.think_bucket_
                                                   : manager.act_bucket_;
@@ -124,7 +123,7 @@ class SimulationAudit {
         }
         std::vector<double> result;
         for (const auto& p : manager.pops_) {
-            result.insert(result.end(), {double(p->pos_.x), double(p->pos_.y), p->energy_, p->temperature_,
+            result.insert(result.end(), {p->energy_, p->temperature_,
                                          double(p->glucose_), double(p->o2_), double(p->age_), double(p->last_action_),
                                          double(static_cast<int>(p->next_phase_))});
         }

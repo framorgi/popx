@@ -7,6 +7,43 @@ limiti originali; non descrivono automaticamente il modello attuale.
 The [README](../README.md) covers the project, features, mathematical model, architecture,
 and setup. Validation status and audit records remain in this document.
 
+## Stato corrente — NewGen con respawn sparso, 28 ottobre 2026
+
+La run `1793173346510806977-3356239896` è stata salvata in un checkpoint
+manuale completo e verificato (`97ef00dac5b14b39b3c02a5ea0db4445`, tick
+4.645.362, 460 Pop), poi conclusa con `stop`. Il vecchio processo è stato
+chiuso prima della build. Il checkpoint resta nel catalogo esterno; lo
+storico SQLite precedente non è stato cancellato.
+
+`PopsManager::trigger_new_generation` conserva la selezione per figli+energia
+e l'abbattimento dei non selezionati. Dopo la selezione dispone i superstiti
+in celle ammissibili campionate casualmente senza sostituzione in tutta la
+mappa. Una prima passata preferisce almeno due celle libere fra destinazioni
+(distanza di Chebyshev >=3); se lo spazio non basta, riempie con le altre
+celle libere. Source e barriere di carbonato restano indisponibili. Se non
+esistono abbastanza celle ammissibili, NewGen conserva le posizioni e registra
+un avviso, senza bloccare la simulazione.
+
+Il trasferimento è un intervento esterno: non è una nascita o un movimento
+naturale e non aggiunge distanza, costi o dotazioni. I superstiti mantengono
+ID, età, tratti, risorse, energia, genoma/pesi appresi e appartenenza ai
+bucket. La decisione pendente, la fase permessa, la baseline dello scorer e
+le tracce di eleggibilità vengono azzerate per evitare che la nuova posizione
+premi o punisca l'azione scelta nella vecchia cella. Il prossimo ciclo riparte
+dal sensing; l'appartenenza ai bucket può ritardarlo al massimo due tick.
+Questa modifica vale anche per NewGen periodico se abilitato, ma l'INI
+distribuito lo lascia disattivato; il pulsante applica NewGen manualmente.
+
+Build `popx` PASS. `scripts/run_regressions.sh` PASS; dopo l'ultimo fallback
+sono state rieseguite e superate le regressioni mirate `pop_cycle`,
+`parallel_phase` e `learning_evolution`. Il test di dispersione verifica
+occupazioni coerenti, distanza fra superstiti in una mappa ampia e assenza di
+nuove nascite o distanza artificiale. Il nuovo binario è stato avviato da quel
+checkpoint in headless 2×: nuova run `1793188072303733755-2377286159`,
+tick 0, 460 Pop, config bloccata come previsto. Dopo `resume` lo stato era
+running e il tick era avanzato a circa 2.000 con campioni SQLite presenti.
+Non è stato invocato NewGen nella run ripresa durante questa verifica.
+
 ## Stato corrente — linee di estinzione e comando di uscita, 27 ottobre 2026
 
 La panoramica e la pagina delle linee evolutive hanno un pulsante

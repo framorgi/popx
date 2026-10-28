@@ -104,6 +104,25 @@ void neutral_output_credit(const std::shared_ptr<LearningConfig>& config) {
     require(std::abs(Scorer::components(cold, *config).temperature - Scorer::temperature_weight) < 1e-6,
             "thermal optimum changed");
 }
+void relocation_clears_credit() {
+    auto config = std::make_shared<LearningConfig>();
+    config->decay = 0;
+    Genome genome(0); genome.add_gene(Gene(0, 0, 7, 4, 8192));
+    Brain relocated(config), control(config);
+    for (auto* brain : {&relocated, &control}) {
+        brain->wire(genome);
+        brain->feed_forward({1});
+        brain->record_action(4);
+    }
+    const float before = weight(relocated, 4);
+    relocated.clear_eligibility_traces();
+    require(weight(relocated, 4) == before, "relocation erased learned weights");
+    relocated.hebbian_update(1);
+    control.hebbian_update(1);
+    require(relocated.learning_stats().mean_abs_plasticity == 0 && weight(relocated, 4) == before,
+            "old location retained action credit");
+    require(weight(control, 4) > before, "credit control did not update");
+}
 void parameter_comparison() {
     Genome genome(0); genome.add_gene(Gene(0, 0, 7, 4, 8192));
     for (double decay : {1e-4, 3e-5, 1e-5}) {
@@ -226,7 +245,7 @@ class SimulationAudit {
 int main() {
     try {
         auto config = std::make_shared<LearningConfig>();
-        learning(config); neutral_output_credit(config); parameter_comparison(); mutation(); SimulationAudit::admission(config); SimulationAudit::reproduction(config);
+        learning(config); neutral_output_credit(config); relocation_clears_credit(); parameter_comparison(); mutation(); SimulationAudit::admission(config); SimulationAudit::reproduction(config);
         std::cout << "PASS: baseline, delayed action credit, unchosen outputs, reset/inheritance, local mutation, cap/space/birth accounting\n";
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <random>
 #include <stdexcept>
 #include <utility>
 
@@ -437,8 +438,7 @@ void PopsManager::trigger_new_generation() {
     int survivors_n = static_cast<int>(std::round(static_cast<double>(alive.size()) * ratio));
     survivors_n = std::clamp(survivors_n, min_survivors, static_cast<int>(alive.size()));
 
-    // Cull only rejected agents. Survivors keep their cells and phase buckets,
-    // preserving local resource access, signals and pending sense/think decisions.
+    // Cull only rejected agents. Surviving identities, traits, resources and learned weights remain unchanged.
     for (std::size_t i = static_cast<std::size_t>(survivors_n); i < alive.size(); ++i) {
         alive[i]->die();
         if (stats_)
@@ -455,6 +455,71 @@ void PopsManager::trigger_new_generation() {
     std::erase_if(think_bucket_, is_dead);
     std::erase_if(act_bucket_, is_dead);
     clear_reproduction_backlog();
+
+    // Choose distinct cells across the whole map. Prefer a two-cell clearance so the
+    // intervention breaks clusters when space permits; fall back to any free cell.
+    const int width = world_->get_width(), height = world_->get_height();
+    std::unordered_set<const IEntity*> survivors;
+    for (const auto& pop : pops_)
+        survivors.insert(pop.get());
+    std::vector<PositionT> candidates;
+    candidates.reserve(static_cast<std::size_t>(width) * height);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const PositionT position{x, y};
+            const auto cell = world_->get_cell(position);
+            const auto occupant = cell->get_occupant().lock();
+            if (cell->get_calcium() != MaxCaco3 && (!occupant || survivors.contains(occupant.get())))
+                candidates.push_back(position);
+        }
+    }
+    if (candidates.size() < pops_.size()) {
+        logger_->warning("NewGen skipped relocation: too few free cells for surviving Pop");
+        ++generation_count_;
+        return;
+    }
+    std::mt19937 rng(std::random_device{}());
+    std::shuffle(candidates.begin(), candidates.end(), rng);
+    const auto index = [width](PositionT p) { return static_cast<std::size_t>(p.y) * width + p.x; };
+    std::vector<unsigned char> excluded(static_cast<std::size_t>(width) * height, 0);
+    std::vector<unsigned char> selected(excluded.size(), 0);
+    std::vector<PositionT> destinations;
+    destinations.reserve(pops_.size());
+    for (const auto position : candidates) {
+        if (destinations.size() == pops_.size())
+            break;
+        if (excluded[index(position)])
+            continue;
+        destinations.push_back(position);
+        selected[index(position)] = 1;
+        for (int dy = -2; dy <= 2; ++dy)
+            for (int dx = -2; dx <= 2; ++dx) {
+                const PositionT nearby{position.x + dx, position.y + dy};
+                if (nearby.x >= 0 && nearby.y >= 0 && nearby.x < width && nearby.y < height)
+                    excluded[index(nearby)] = 1;
+            }
+    }
+    for (const auto position : candidates) {
+        if (destinations.size() == pops_.size())
+            break;
+        if (!selected[index(position)]) {
+            destinations.push_back(position);
+            selected[index(position)] = 1;
+        }
+    }
+    // No simulation phase runs concurrently with NewGen. Vacate before placing so
+    // two survivors can exchange cells without creating a false occupancy failure.
+    for (const auto& pop : pops_)
+        if (world_->get_cell(pop->get_position())->get_occupant().lock().get() != pop.get())
+            throw std::runtime_error("NewGen found a survivor without its occupied cell");
+    for (const auto& pop : pops_)
+        if (!world_->remove_entity(pop))
+            throw std::runtime_error("NewGen lost a survivor occupancy before respawn");
+    for (std::size_t i = 0; i < pops_.size(); ++i) {
+        if (!pops_[i]->try_spawn(destinations[i]))
+            throw std::runtime_error("NewGen could not respawn a survivor in a selected free cell");
+        pops_[i]->reset_after_newgen_relocation();
+    }
 
     ++generation_count_;
 

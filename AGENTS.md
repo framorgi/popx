@@ -68,8 +68,10 @@ superate dagli interventi autorizzati descritti sotto.
 - Riproduzione: cella nella prima corona; se piena cerca fino al raggio configurato
   (2 nell'INI distribuito). Costo energetico dissipato, poi trasferimento1/8 di risorse/energia;
   nessuna dotazione gratuita ai figli. Distinguere nascite naturali e forzate.
-- NewGen seleziona/abbatte ma NON riposiziona né riassegna i bucket dei superstiti;
-  conserva identità, occupazioni, fasi e ordine. Non è profondità genealogica.
+- NewGen seleziona/abbatte e redistribuisce i superstiti in celle libere casuali,
+  preferendo due celle di separazione. Conserva identità, tratti, riserve, pesi
+  appresi e appartenenza ai bucket; azzera fase/decisione e credito temporale
+  dopo il trasferimento. Non è una nascita né profondità genealogica.
 - Sense/think: `tbb::parallel_for` in task_arena limitata da num_threads (1 seriale).
   Le fasi terminano prima delle scritture. Azioni/fisiologia/mondo sequenziali.
   Non introdurre scritture condivise nelle fasi parallele; snapshot non autorizzano

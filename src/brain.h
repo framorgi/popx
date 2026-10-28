@@ -35,6 +35,8 @@ class Brain : public IBrain {
     //----------------------------------------------------------------------------
     void hebbian_update(float reward) override;
     void record_action(int action) override;
+    /// @brief Discard action credit after an external teleport without changing learned weights.
+    void clear_eligibility_traces() override;
     BrainLearningStats learning_stats() const override {
         return learning_stats_;
     }
