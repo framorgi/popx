@@ -18,7 +18,7 @@ void require(bool condition, const char* message) {
 class LearningConfig : public Config {
   public:
     LearningConfig() : Config("/dev/null") {}
-    double decay = 0.00003, trace = 0.97;
+    double decay = 0.00003, trace = 0.99;
     unsigned cap = 240;
     unsigned get_max_population_allowed() const override { return cap; }
     double get_learning_weight_decay() const override { return decay; }
@@ -134,7 +134,7 @@ void parameter_comparison() {
         require(std::abs(weight(brain, 4) - expected) < 2e-5, "configured decay differs from recurrence");
         std::cout << "decay=" << decay << " weight_after_20000=" << weight(brain, 4) << '\n';
     }
-    for (double trace : {0.9, 0.97}) {
+    for (double trace : {0.9, 0.97, 0.99}) {
         auto config = std::make_shared<LearningConfig>(); config->trace = trace; config->decay = 0;
         Brain brain(config); brain.wire(genome); brain.feed_forward({1}); brain.record_action(4);
         brain.hebbian_update(0); const double initial = brain.learning_stats().mean_abs_trace;

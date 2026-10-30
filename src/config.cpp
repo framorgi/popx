@@ -306,6 +306,28 @@ nlohmann::json Config::schema() {
          {"effective", true},
          {"min", 0},
          {"max", 32}},
+        {{"name", "reaper_count"}, {"type", "integer"}, {"default", 1}, {"group", "simulation"},
+         {"description", "Numero di predatori fisici nella mappa; applicato al prossimo avvio"},
+         {"effective", true}, {"min", 0}, {"max", 4}},
+        {{"name", "reaper_move_interval_ticks"}, {"type", "integer"}, {"default", 100}, {"group", "simulation"},
+         {"description", "Tick tra i tentativi di movimento del Reaper"}, {"effective", true},
+         {"min", 1}, {"max", 100000}},
+        {{"name", "reaper_kill_interval_ticks"}, {"type", "integer"}, {"default", 240}, {"group", "simulation"},
+         {"description", "Intervallo minimo tra due uccisioni dello stesso Reaper"}, {"effective", true},
+         {"min", 1}, {"max", 100000}},
+        {{"name", "reaper_announce_interval_ticks"}, {"type", "integer"}, {"default", 20},
+         {"group", "simulation"}, {"description", "Tick tra i segnali DANGER anticipatori del Reaper"},
+         {"effective", true}, {"min", 1}, {"max", 100000}},
+        {{"name", "reaper_warning_radius"}, {"type", "integer"}, {"default", 6}, {"group", "simulation"},
+         {"description", "Distanza in celle raggiunta dal segnale DANGER davanti al Reaper"},
+         {"effective", true}, {"min", 1}, {"max", 16}},
+        {{"name", "reaper_newborn_protection_ticks"}, {"type", "integer"}, {"default", 250},
+         {"group", "simulation"}, {"description", "Eta minima del Pop per essere ucciso dal Reaper"},
+         {"effective", true}, {"min", 0}, {"max", 100000}},
+        {{"name", "climate_rotation_speed"},
+         {"type", "number"}, {"default", 1.0}, {"group", "simulation"},
+         {"description", "Moltiplicatore della rotazione climatica; 0 ferma il moto, 1 mantiene la velocita originale"},
+         {"effective", true}, {"min", 0.0}, {"max", 20.0}},
         {{"name", "source_move_interval_ticks"},
          {"type", "integer"},
          {"default", 40},
@@ -453,6 +475,11 @@ nlohmann::json Config::schema() {
          {"effective", true},
          {"min", 1},
          {"max", 32767}},
+        {{"name", "reward_age_weight"}, {"type", "number"}, {"default", 0.1}, {"group", "learning"}, {"description", "Età: peso relativo normalizzato nel mixer"}, {"effective", true}, {"min", 0}, {"max", 1}},
+        {{"name", "reward_energy_weight"}, {"type", "number"}, {"default", 0.3}, {"group", "learning"}, {"description", "Riserva energetica: peso relativo normalizzato nel mixer"}, {"effective", true}, {"min", 0}, {"max", 1}},
+        {{"name", "reward_delta_weight"}, {"type", "number"}, {"default", 0.35}, {"group", "learning"}, {"description", "Variazione energia: peso relativo normalizzato nel mixer"}, {"effective", true}, {"min", 0}, {"max", 1}},
+        {{"name", "reward_offspring_weight"}, {"type", "number"}, {"default", 0.05}, {"group", "learning"}, {"description", "Discendenza: peso relativo normalizzato nel mixer"}, {"effective", true}, {"min", 0}, {"max", 1}},
+        {{"name", "reward_temperature_weight"}, {"type", "number"}, {"default", 0.2}, {"group", "learning"}, {"description", "Idoneità termica: peso relativo normalizzato nel mixer"}, {"effective", true}, {"min", 0}, {"max", 1}},
         {{"name", "learning_rate"},
          {"type", "number"},
          {"default", 0.06},
@@ -463,7 +490,7 @@ nlohmann::json Config::schema() {
          {"max", 1}},
         {{"name", "learning_trace_decay"},
          {"type", "number"},
-         {"default", 0.97},
+         {"default", 0.99},
          {"group", "learning"},
          {"description", "Persistenza per tick delle tracce delle azioni eseguite; 0 = solo tick corrente"},
          {"effective", true},
@@ -751,6 +778,13 @@ nlohmann::json Config::values() const {
         {"brain_num_hidden_layers", params_.brain_num_hidden_layers},
         {"map_size", params_.map_size},
         {"source_count", params_.source_count},
+        {"reaper_count", params_.reaper_count},
+        {"reaper_move_interval_ticks", params_.reaper_move_interval_ticks},
+        {"reaper_kill_interval_ticks", params_.reaper_kill_interval_ticks},
+        {"reaper_announce_interval_ticks", params_.reaper_announce_interval_ticks},
+        {"reaper_warning_radius", params_.reaper_warning_radius},
+        {"reaper_newborn_protection_ticks", params_.reaper_newborn_protection_ticks},
+        {"climate_rotation_speed", params_.climate_rotation_speed},
         {"source_move_interval_ticks", params_.source_move_interval_ticks},
         {"source_glucose_interval_ticks", params_.source_glucose_interval_ticks},
         {"source_glucose_per_neighbor", params_.source_glucose_per_neighbor},
@@ -770,6 +804,11 @@ nlohmann::json Config::values() const {
         {"point_mutation_rate", params_.point_mutation_rate},
         {"weight_mutation_rate", params_.weight_mutation_rate},
         {"weight_mutation_step", params_.weight_mutation_step},
+        {"reward_age_weight", params_.reward_weights[0]},
+        {"reward_energy_weight", params_.reward_weights[1]},
+        {"reward_delta_weight", params_.reward_weights[2]},
+        {"reward_offspring_weight", params_.reward_weights[3]},
+        {"reward_temperature_weight", params_.reward_weights[4]},
         {"learning_rate", params_.learning_rate},
         {"learning_trace_decay", params_.learning_trace_decay},
         {"learning_weight_decay", params_.learning_weight_decay},
@@ -817,8 +856,9 @@ void Config::validate() const {
         throw std::invalid_argument("genome_min_length must not exceed genome_max_length");
     if (params_.phy_alpha_min > params_.phy_alpha_max)
         throw std::invalid_argument("phy_alpha_min must not exceed phy_alpha_max");
-    if (params_.population + params_.source_count > uint64_t(params_.map_size) * params_.map_size)
-        throw std::invalid_argument("population plus sources exceeds world capacity");
+    if (uint64_t(params_.population) + params_.source_count + params_.reaper_count >
+        uint64_t(params_.map_size) * params_.map_size)
+        throw std::invalid_argument("population plus sources and reapers exceeds world capacity");
     if (params_.population > uint64_t(params_.map_size) * params_.map_size)
         throw std::invalid_argument("population exceeds world capacity");
 }
@@ -866,6 +906,13 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
             return;
         }
         if (name == "source_count") { params_.source_count = to_uint(value); return; }
+        if (name == "reaper_count") { params_.reaper_count = to_uint(value); return; }
+        if (name == "reaper_move_interval_ticks") { params_.reaper_move_interval_ticks = to_uint(value); return; }
+        if (name == "reaper_kill_interval_ticks") { params_.reaper_kill_interval_ticks = to_uint(value); return; }
+        if (name == "reaper_announce_interval_ticks") { params_.reaper_announce_interval_ticks = to_uint(value); return; }
+        if (name == "reaper_warning_radius") { params_.reaper_warning_radius = to_uint(value); return; }
+        if (name == "reaper_newborn_protection_ticks") { params_.reaper_newborn_protection_ticks = to_uint(value); return; }
+        if (name == "climate_rotation_speed") { params_.climate_rotation_speed = to_double(value); return; }
         if (name == "source_move_interval_ticks") { params_.source_move_interval_ticks = to_uint(value); return; }
         if (name == "source_glucose_interval_ticks") { params_.source_glucose_interval_ticks = to_uint(value); return; }
         if (name == "source_glucose_per_neighbor") { params_.source_glucose_per_neighbor = to_uint(value); return; }
@@ -929,6 +976,11 @@ void Config::ingest_parameter(const std::string& raw_name, const std::string& ra
             params_.weight_mutation_step = to_uint(value);
             return;
         }
+        if (name == "reward_age_weight") { params_.reward_weights[0] = to_double(value); return; }
+        if (name == "reward_energy_weight") { params_.reward_weights[1] = to_double(value); return; }
+        if (name == "reward_delta_weight") { params_.reward_weights[2] = to_double(value); return; }
+        if (name == "reward_offspring_weight") { params_.reward_weights[3] = to_double(value); return; }
+        if (name == "reward_temperature_weight") { params_.reward_weights[4] = to_double(value); return; }
         if (name == "learning_rate") {
             params_.learning_rate = to_double(value);
             return;
@@ -1147,4 +1199,34 @@ void Config::update_from_file(unsigned generation) {
 
         ingest_parameter(name_part, value_part);
     }
+}
+
+// Runtime edits are transactional and restricted to parameters read dynamically.
+nlohmann::json Config::runtime_schema() {
+    auto result = nlohmann::json::array();
+    for (auto spec : schema()) {
+        const auto key = spec.at("name").get<std::string>();
+        if (key.starts_with("reward_") || key.starts_with("learning_") ||
+            key == "point_mutation_rate" || key == "weight_mutation_rate" ||
+            key == "max_population_allowed" || key == "offspring_dispersal_radius" ||
+            key == "phy_respiration_energy_target" || key == "phy_opt_temperature" || key == "gui_fps" ||
+            key == "climate_rotation_speed")
+            result.push_back(std::move(spec));
+    }
+    return result;
+}
+void Config::apply_runtime(const nlohmann::json& patch) {
+    if (!patch.is_object() || patch.empty()) throw std::invalid_argument("Expected a nonempty parameter object");
+    Config candidate = *this;
+    candidate.strict_ = true;
+    const auto specs = runtime_schema();
+    for (const auto& [key, value] : patch.items()) {
+        auto spec = std::find_if(specs.begin(), specs.end(), [&](const auto& x) { return x.at("name") == key; });
+        if (spec == specs.end() || !value.is_number() ||
+            (spec->at("type") == "integer" && !value.is_number_integer()))
+            throw std::invalid_argument("Parameter unavailable or invalid at runtime: " + key);
+        candidate.ingest_parameter(key, value.dump());
+    }
+    candidate.validate();
+    params_ = candidate.params_;
 }

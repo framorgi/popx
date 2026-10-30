@@ -1,11 +1,13 @@
 #pragma once
 #include <string>
+#include <array>
 
 /// @brief Interface for the application configuration system.
 /// Provides read access to simulation parameters loaded from an INI file.
 /// Call update_from_file() once per generation to pick up live edits.
 class IConfig {
   public:
+    virtual std::array<double, 5> get_reward_weights() const { return {.10, .30, .35, .05, .20}; }
     virtual ~IConfig() = default;
     virtual unsigned get_map_size() const {
         return 120;
@@ -23,6 +25,13 @@ class IConfig {
     virtual unsigned get_source_move_interval_ticks() const { return 40; }
     virtual unsigned get_source_glucose_interval_ticks() const { return 40; }
     virtual unsigned get_source_glucose_per_neighbor() const { return 8; }
+    virtual unsigned get_reaper_count() const { return 1; }
+    virtual unsigned get_reaper_move_interval_ticks() const { return 100; }
+    virtual unsigned get_reaper_kill_interval_ticks() const { return 240; }
+    virtual unsigned get_reaper_announce_interval_ticks() const { return 20; }
+    virtual unsigned get_reaper_warning_radius() const { return 6; }
+    virtual unsigned get_reaper_newborn_protection_ticks() const { return 250; }
+    virtual double get_climate_rotation_speed() const { return 1.0; }
 
     // --- Brain (neural network) layer sizes ----------------------------------
     virtual unsigned get_brain_size_s() const = 0;            ///< Sensor (input) layer
@@ -56,7 +65,7 @@ class IConfig {
         return 0.06;
     }
     virtual double get_learning_trace_decay() const {
-        return 0.97;
+        return 0.99;
     }
     virtual double get_learning_weight_decay() const {
         return 0.00003;

@@ -33,6 +33,8 @@ class RandomUtility : public IRandom {
 
     RBFSet rotate_rbf_set(const RBFSet& rbf_set, unsigned int tick, unsigned int radius, double center_x,
                           double center_y) override;
+    RBFSet rotate_rbf_set_scaled(const RBFSet& rbf_set, unsigned int tick, unsigned int radius,
+                                 double center_x, double center_y, double speed);
 
   private:
     friend class CheckpointCodec;

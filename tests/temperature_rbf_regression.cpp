@@ -63,6 +63,12 @@ int main() {
         const auto first = random.rotate_rbf_set(original, 1, 20, 60, 60);
         close(first.data[0].mean_x, 60 + 38 * std::cos(0.009), 1e-12, "wrong angular step");
         close(first.data[0].mean_y, 60 + 38 * std::sin(0.009), 1e-12, "wrong angular step");
+        const auto frozen = random.rotate_rbf_set_scaled(original, 1, 20, 60, 60, 0);
+        close(frozen.data[0].mean_x, 98, 0, "zero climate speed must freeze centers");
+        close(frozen.data[0].mean_y, 60, 0, "zero climate speed must freeze centers");
+        const auto faster = random.rotate_rbf_set_scaled(original, 1, 20, 60, 60, 2);
+        close(faster.data[0].mean_x, 60 + 38 * std::cos(.018), 1e-12, "climate speed did not scale angle");
+        close(faster.data[0].mean_y, 60 + 38 * std::sin(.018), 1e-12, "climate speed did not scale angle");
         const auto disabled = random.rotate_rbf_set(original, 1, 0, 60, 60);
         close(disabled.data[0].mean_x, 98, 0, "zero radius must disable motion");
         require(random.rotate_rbf_set(RBFSet{0, 0, {}}, 1, 20, 60, 60).data.empty(), "empty set changed");

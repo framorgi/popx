@@ -18,6 +18,13 @@ struct ConfigParams {
     unsigned source_move_interval_ticks = 40;
     unsigned source_glucose_interval_ticks = 40;
     unsigned source_glucose_per_neighbor = 8;
+    unsigned reaper_count = 1;
+    unsigned reaper_move_interval_ticks = 100;
+    unsigned reaper_kill_interval_ticks = 240;
+    unsigned reaper_announce_interval_ticks = 20;
+    unsigned reaper_warning_radius = 6;
+    unsigned reaper_newborn_protection_ticks = 250;
+    double climate_rotation_speed = 1.0;
     double max_duration_minutes = 0.0;
     double database_limit_gb = 10.0;
     unsigned gui_fps = 30;
@@ -38,8 +45,9 @@ struct ConfigParams {
     double point_mutation_rate = 0.001;
     double weight_mutation_rate = 0.05;
     unsigned weight_mutation_step = 256;
+    std::array<double, 5> reward_weights = {.10, .30, .35, .05, .20};
     double learning_rate = 0.06;
-    double learning_trace_decay = 0.97;
+    double learning_trace_decay = 0.99;
     double learning_weight_decay = 0.00003;
     double learning_baseline_rate = 0.01;
 
@@ -96,6 +104,9 @@ class Config : public IConfig {
   public:
     explicit Config(const std::string& filepath, bool strict = false);
     static nlohmann::json schema();
+    static nlohmann::json runtime_schema();
+    void apply_runtime(const nlohmann::json& patch);
+    std::array<double, 5> get_reward_weights() const override { return params_.reward_weights; }
     nlohmann::json values() const;
     unsigned get_source_count() const override { return params_.source_count; }
     unsigned get_max_population_allowed() const override { return params_.max_population_allowed; }
@@ -103,6 +114,13 @@ class Config : public IConfig {
     unsigned get_source_move_interval_ticks() const override { return params_.source_move_interval_ticks; }
     unsigned get_source_glucose_interval_ticks() const override { return params_.source_glucose_interval_ticks; }
     unsigned get_source_glucose_per_neighbor() const override { return params_.source_glucose_per_neighbor; }
+    unsigned get_reaper_count() const override { return params_.reaper_count; }
+    unsigned get_reaper_move_interval_ticks() const override { return params_.reaper_move_interval_ticks; }
+    unsigned get_reaper_kill_interval_ticks() const override { return params_.reaper_kill_interval_ticks; }
+    unsigned get_reaper_announce_interval_ticks() const override { return params_.reaper_announce_interval_ticks; }
+    unsigned get_reaper_warning_radius() const override { return params_.reaper_warning_radius; }
+    unsigned get_reaper_newborn_protection_ticks() const override { return params_.reaper_newborn_protection_ticks; }
+    double get_climate_rotation_speed() const override { return params_.climate_rotation_speed; }
     unsigned get_map_size() const override {
         return params_.map_size;
     }

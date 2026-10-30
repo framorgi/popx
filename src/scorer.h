@@ -17,23 +17,32 @@ struct ScoreObservation {
 /// @brief Per-agent reward, recent baseline and selection policy; no world writes or inherited history.
 class Scorer {
   public:
-    static constexpr float age_weight = 0.10f, energy_weight = 0.30f, delta_weight = 0.35f,
-                           offspring_weight = 0.05f, temperature_weight = 0.20f;
+    static constexpr float age_weight = 0.10f, energy_weight = 0.30f, delta_weight = 0.35f, offspring_weight = 0.05f,
+                           temperature_weight = 0.20f;
     struct Components {
         float age = 0, energy = 0, delta = 0, offspring = 0, temperature = 0;
     };
     /// @brief Preserve the existing ecological weights, explicitly in one place.
     static Components components(const ScoreObservation& o, const IConfig& config) {
-        const float capacity = std::max(1e-6f, std::max(1u, o.mitochondria) *
-                                                 static_cast<float>(config.get_phy_energy_per_respiration()));
+        const float capacity =
+            std::max(1e-6f, std::max(1u, o.mitochondria) * static_cast<float>(config.get_phy_energy_per_respiration()));
         const float thermal_range = static_cast<float>(config.get_phy_efficiency_half_range_c());
-        return {age_weight * std::clamp(float(o.age) / MaxAge, 0.0f, 1.0f),
-                energy_weight * std::clamp((o.energy / MaxEnergy - 0.25f) / 0.75f, -1.0f, 1.0f),
-                delta_weight * std::clamp((o.energy - o.previous_energy) / capacity, -1.0f, 1.0f),
-                offspring_weight * std::clamp(float(o.offspring) / 25.0f, 0.0f, 1.0f),
-                temperature_weight * (2.0f * std::exp(-std::log(2.0f) * std::pow(
-                    (static_cast<float>(o.temperature) - static_cast<float>(config.get_phy_opt_temperature()))
-                    / thermal_range, 2.0f)) - 1.0f)};
+        auto w = config.get_reward_weights();
+        double sum = 0;
+        for (auto v : w)
+            sum += v;
+        for (auto& v : w)
+            v = sum > 0 ? v / sum : 0;
+        return {static_cast<float>(w[0]) * std::clamp(float(o.age) / MaxAge, 0.0f, 1.0f),
+                static_cast<float>(w[1]) * std::clamp((o.energy / MaxEnergy - 0.25f) / 0.75f, -1.0f, 1.0f),
+                static_cast<float>(w[2]) * std::clamp((o.energy - o.previous_energy) / capacity, -1.0f, 1.0f),
+                static_cast<float>(w[3]) * std::clamp(float(o.offspring) / 25.0f, 0.0f, 1.0f),
+                static_cast<float>(w[4]) *
+                    (2.0f * std::exp(-std::log(2.0f) * std::pow((static_cast<float>(o.temperature) -
+                                                                 static_cast<float>(config.get_phy_opt_temperature())) /
+                                                                    thermal_range,
+                                                                2.0f)) -
+                     1.0f)};
     }
     static float reward(const ScoreObservation& o, const IConfig& config) {
         const auto c = components(o, config);
@@ -54,11 +63,21 @@ class Scorer {
     static double selection(unsigned offspring, float energy) {
         return double(offspring) + 0.01 * energy;
     }
-    void reset() { *this = Scorer{}; }
-    float raw_reward() const { return reward_; }
-    float baseline() const { return baseline_; }
-    float signal() const { return signal_; }
-    const Components& last_components() const { return components_; }
+    void reset() {
+        *this = Scorer{};
+    }
+    float raw_reward() const {
+        return reward_;
+    }
+    float baseline() const {
+        return baseline_;
+    }
+    float signal() const {
+        return signal_;
+    }
+    const Components& last_components() const {
+        return components_;
+    }
 
   private:
     friend class CheckpointCodec;
