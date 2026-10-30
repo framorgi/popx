@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 cmake --build build-release --target popx -j 2
-for regression in respiration pop_cycle parallel_phase genome_encoding pheromone stats_runtime recovery calcium neural_policy temperature_rbf learning_evolution genetic_similarity checkpoint source movement_failure local_mobility action_cost extinction_recovery; do
+for regression in respiration pop_cycle parallel_phase genome_encoding pheromone stats_runtime recovery calcium neural_policy temperature_rbf learning_evolution credit_gradient genetic_similarity checkpoint source reaper movement_failure local_mobility action_cost extinction_recovery sandbox; do
     clang++ -std=c++23 -O2 -Isrc \
         -Ibuild-release/_deps/eigen3-src -Ibuild-release/_deps/nlohmann_json-src/include \
         "tests/${regression}_regression.cpp" \
