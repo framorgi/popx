@@ -1,6 +1,7 @@
 #pragma once
 #include "i_graphic_engine.h"
 #include "i_logger.h"
+#include "sim_control.h"
 
 #include <SFML/Graphics.hpp>
 
@@ -12,6 +13,16 @@ class SfmlGraphicEngine : public IGraphicEngine {
     // --------------------------
     // Gestione finestra / frame
     // --------------------------
+    void bind_controls(SimControl& controls) {
+        controls_ = &controls;
+    }
+    void reset_camera();
+    void focus(float x, float y);
+    float zoom() const {
+        return zoom_;
+    }
+    float sidebar_width() const;
+    void capture(const std::string& path);
     void clear(const Color& color = Color(0, 0, 0)) override;
     void create_window(std::string title, int width, int height) override;
     void display() override;
@@ -56,4 +67,12 @@ class SfmlGraphicEngine : public IGraphicEngine {
     bool event_pending_ = true;
     bool imgui_initialized_ = false;
     sf::View world_view_;
+    SimControl* controls_ = nullptr;
+    sf::Vector2f world_size_, fit_size_;
+    float zoom_ = 1;
+    bool dragging_ = false;
+    int paint_button_ = -1;
+    sf::Vector2i last_paint_cell_{-1, -1};
+    sf::Vector2i drag_pixel_;
+    void constrain_camera();
 };
