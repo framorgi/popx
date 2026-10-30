@@ -23,6 +23,7 @@ class PopsManager : public IAgentsManager {
 
     /// @brief Remove an agent
     void update_cycle() override;
+    void cleanup_external_deaths() override;
 
     [[nodiscard]] int get_alive_count() const override;
     [[nodiscard]] uint64_t get_dead_count() const override {
@@ -76,6 +77,11 @@ class PopsManager : public IAgentsManager {
         stats_ = std::move(stats);
     }
     nlohmann::json telemetry(bool detailed) const;
+    void reset_learning_credit();
+    nlohmann::json sandbox_spawn(PositionT position);
+    bool sandbox_remove(PositionT position);
+    void sandbox_weight(const nlohmann::json& args);
+    std::string pop_at(PositionT position) const;
     nlohmann::json inspect(const std::string& id) const;
 
   private:

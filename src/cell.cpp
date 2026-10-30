@@ -154,6 +154,16 @@ unsigned int Cell::give_lipids(unsigned int amount) {
     organics_.lipids += given;
     return given;
 }
+unsigned int Cell::take_n2(unsigned int amount) {
+    const unsigned taken = std::min(amount, organics_.n2);
+    organics_.n2 -= taken;
+    return taken;
+}
+unsigned int Cell::give_n2(unsigned int amount) {
+    const unsigned accepted = std::min(amount, MaxN2 - organics_.n2);
+    organics_.n2 += accepted;
+    return accepted;
+}
 
 unsigned int Cell::take_lipids(unsigned int amount) {
     const unsigned int taken = std::min(amount, organics_.lipids);

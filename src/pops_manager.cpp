@@ -190,7 +190,25 @@ void PopsManager::update_cycle() {
         }
     }
 
-    // Despawn dead agents: remove reference from world, then erase from all containers
+    cleanup_external_deaths();
+
+    forced_respawn_active_ = false; // Only extinction recovery sets this flag; low counts do not force births.
+
+    collect_reproducer_candidates();
+    process_reproduction_backlog();
+
+    rotate_buckets();
+
+    if (config_->get_newgen_enabled()) {
+        const unsigned interval = std::max<unsigned>(1, config_->get_newgen_interval_ticks());
+        if (cycle_counter_ % interval == 0) {
+            trigger_new_generation();
+        }
+    }
+}
+
+void PopsManager::cleanup_external_deaths() {
+    // Also runs after the world update so checkpoint capture never sees a dead Pop.
     auto is_dead = [](const std::shared_ptr<Pop>& p) { return !p->is_alive(); };
 
     for (auto& pop : pops_) {
@@ -213,19 +231,6 @@ void PopsManager::update_cycle() {
     erase_dead(act_bucket_);
     erase_dead(pops_);
 
-    forced_respawn_active_ = false; // Only extinction recovery sets this flag; low counts do not force births.
-
-    collect_reproducer_candidates();
-    process_reproduction_backlog();
-
-    rotate_buckets();
-
-    if (config_->get_newgen_enabled()) {
-        const unsigned interval = std::max<unsigned>(1, config_->get_newgen_interval_ticks());
-        if (cycle_counter_ % interval == 0) {
-            trigger_new_generation();
-        }
-    }
 }
 
 void PopsManager::collect_reproducer_candidates() {
@@ -608,4 +613,58 @@ nlohmann::json PopsManager::inspect(const std::string& id) const {
             return result;
         }
     throw std::runtime_error("Agent is no longer alive");
+}
+
+void PopsManager::reset_learning_credit() {
+    for (auto& p : pops_) p->reset_learning_credit();
+}
+
+std::string PopsManager::pop_at(PositionT position) const {
+    for (const auto& p : pops_) if (p->is_alive() && p->get_position().x == position.x && p->get_position().y == position.y) return p->get_pop_id();
+    return {};
+}
+nlohmann::json PopsManager::sandbox_spawn(PositionT position) {
+    if (pops_.size() >= config_->get_max_population_allowed()) throw std::runtime_error("Population cap reached");
+    if (!world_->is_free(position)) throw std::runtime_error("Cell unavailable");
+    auto p = std::make_shared<Pop>(world_, logger_, config_);
+    p->set_birth_provenance("", true);
+    if (!p->try_spawn(position)) throw std::runtime_error("Cell unavailable");
+    pops_.push_back(p);
+    sense_bucket_.push_back(p);
+    ++total_births_;
+    auto event = p->telemetry(true);
+    event["sandbox_spawn"] = true;
+    if (stats_) stats_->record_event({LifeEvent::Birth, event});
+    return event;
+}
+bool PopsManager::sandbox_remove(PositionT position) {
+    auto it = std::find_if(pops_.begin(), pops_.end(), [&](const auto& p) {
+        const auto q = p->get_position();
+        return p->is_alive() && q.x == position.x && q.y == position.y;
+    });
+    if (it == pops_.end()) return false;
+    auto p = *it;
+    p->die();
+    remember_for_recovery(*p);
+    if (stats_) {
+        auto event = p->telemetry(false);
+        event["sandbox_remove"] = true;
+        stats_->record_event({LifeEvent::Death, std::move(event)});
+    }
+    world_->remove_entity(p);
+    ++dead_count_;
+    ++total_deaths_;
+    auto same = [&](const auto& q) { return q == p; };
+    std::erase_if(sense_bucket_, same);
+    std::erase_if(think_bucket_, same);
+    std::erase_if(act_bucket_, same);
+    pops_.erase(it);
+    return true;
+}
+void PopsManager::sandbox_weight(const nlohmann::json& args) {
+    for (auto& p : pops_) if (p->is_alive() && p->get_pop_id() == args.at("pop_id").get<std::string>()) {
+        p->edit_weight(args.at("from_layer"), args.at("to_layer"), args.at("col"), args.at("row"), args.at("value"));
+        return;
+    }
+    throw std::runtime_error("Agent no longer alive");
 }

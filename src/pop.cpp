@@ -62,6 +62,8 @@ void Pop::init() {
     next_phase_ = State::SENSE;
     first_run_ = true;
     last_action_ = -1;
+    last_executed_action_ = -1;
+    reaper_exposure_ticks_ = reaper_escape_attempts_ = reaper_escape_successes_ = 0;
     // Uniform choice among the eight neighbouring directions; never start with (0, 0).
     constexpr PositionT initial_directions[] = {{0, -1}, {1, -1}, {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}};
     last_direction_ = initial_directions[random_util_->rnd_int(0, 7)];
@@ -231,6 +233,10 @@ void Pop::learn(float reward) {
 
 void Pop::update() {
     age_++;
+    if (auto world = world_.lock()) {
+        const int distance = world->nearest_reaper_distance(pos_);
+        if (distance >= 0 && distance <= int(config_->get_reaper_warning_radius())) ++reaper_exposure_ticks_;
+    }
     update_physiology();
     if (energy_ <= 0 || age_ > MaxAge || temperature_ <= 10.0 || temperature_ >= 75.0) {
         if (energy_ <= 0) {
@@ -500,8 +506,10 @@ void Pop::sense() {
                 val = std::sin(static_cast<float>(age_) * 2.0f * 3.14159265f / osc_period_) * 0.5f + 0.5f;
                 break;
             case Sensor::AGE: {
-                const float spg = static_cast<float>(config_->get_steps_per_generation());
-                val = (spg > 0) ? std::clamp(static_cast<float>(age_) / spg, 0.0f, 1.0f) : 0.0f;
+                // A linear scale based on steps_per_generation saturated after only 300 ticks in the
+                // distributed INI, while a Pop can live for MaxAge ticks. Keep young ages visible
+                // and reserve range for older agents without changing the [0,1] neural contract.
+                val = std::log1p(static_cast<float>(age_)) / std::log1p(static_cast<float>(MaxAge));
                 break;
             }
             case Sensor::TEMP: {
@@ -571,6 +579,7 @@ void Pop::act() {
     if (last_action_ < 0 || last_action_ > static_cast<int>(Action::KILL_FORWARD)) {
         return;
     }
+    last_executed_action_ = last_action_;
 
     brain_->record_action(last_action_);
     first_run_ = false;
@@ -740,6 +749,11 @@ bool Pop::try_move(PositionT p) {
         logger_->error("Failed to move: World no longer exists.");
         return false; // World no longer exists
     }
+    const int reaper_before = world->nearest_reaper_distance(pos_);
+    const int reaper_after = world->nearest_reaper_distance(p);
+    const bool escape_attempt = reaper_before >= 0 && reaper_before <= int(config_->get_reaper_warning_radius()) &&
+                                reaper_after > reaper_before;
+    if (escape_attempt) ++reaper_escape_attempts_;
     if (p.x == pos_.x && p.y == pos_.y) {
         ++movement_failures_[4];
         return false;
@@ -760,6 +774,7 @@ bool Pop::try_move(PositionT p) {
             lifetime_distance_ += std::sqrt(dx * dx + dy * dy);
             update_last_direction(pos_, old_pos);
             ++movement_successes_;
+            if (escape_attempt) ++reaper_escape_successes_;
             last_move_failed_ = false;
             return true;
         }
@@ -1095,7 +1110,7 @@ void Pop::change_energy(float delta) {
 }
 
 nlohmann::json Pop::telemetry(bool detailed) const {
-    static const char* causes[] = {"external", "energy", "age", "temperature"};
+    static const char* causes[] = {"external", "energy", "age", "temperature", "reaper"};
     nlohmann::json result = {{"pop_id", pop_id_},
                              {"parent_id", parent_id_},
                              {"forced", birth_was_forced_},
@@ -1124,6 +1139,9 @@ nlohmann::json Pop::telemetry(bool detailed) const {
                                {"repro_wait_max", repro_wait_max_},
                                {"movement_attempts", movement_attempts_},
                                {"movement_successes", movement_successes_},
+                               {"reaper_exposure_ticks", reaper_exposure_ticks_},
+                               {"reaper_escape_attempts", reaper_escape_attempts_},
+                               {"reaper_escape_successes", reaper_escape_successes_},
                                {"movement_blocked_occupied", movement_failures_[0]},
                                {"movement_blocked_calcium", movement_failures_[1]},
                                {"movement_blocked_slope", movement_failures_[2]},
@@ -1177,6 +1195,8 @@ nlohmann::json Pop::telemetry(bool detailed) const {
             result["genes"].push_back({gene.get_source_type(), gene.get_source_num(), gene.get_sink_type(),
                                        gene.get_sink_num(), gene.get_weight()});
         result["last_action"] = last_action_;
+        result["last_executed_action"] = last_executed_action_;
+        result["reaper_distance"] = world_.lock() ? world_.lock()->nearest_reaper_distance(pos_) : -1;
         result["sensors"] = sensor_values_;
         result["reward"] = last_reward_;
         result["direction"] = {last_direction_.x, last_direction_.y};

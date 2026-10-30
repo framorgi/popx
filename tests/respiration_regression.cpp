@@ -14,6 +14,7 @@ class RespirationConfig : public Config {
     RespirationConfig() : Config("config/popx.ini") {}
     // Keep the controlled physiology fixture at its declared 37 C optimum.
     double get_phy_opt_temperature() const override { return 37.0; }
+    double get_phy_init_temperature() const override { return 25.0; }
     double get_point_mutation_rate() const override {
         return 0.0;
     }

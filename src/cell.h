@@ -53,6 +53,8 @@ class Cell : public ICell {
     unsigned int give_co2(unsigned int amount) override;
     unsigned int take_lipids(unsigned int amount) override;
     unsigned int give_lipids(unsigned int amount) override;
+    unsigned int take_n2(unsigned int amount);
+    unsigned int give_n2(unsigned int amount);
     [[nodiscard]] OrganicsT get_organics() const override {
         return organics_;
     }

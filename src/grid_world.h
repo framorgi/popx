@@ -5,6 +5,7 @@
 #include "i_random.h"
 #include "i_world.h"
 #include "source.h"
+#include "reaper.h"
 
 #include <cstdint>
 #include <memory>
@@ -23,7 +24,13 @@ class GridWorld : public IWorld {
     /// @param    logger Shared pointer to the Logger instance
     ///----------------------------------------------------------------------
     GridWorld(int w, int h, std::shared_ptr<ILogger> logger = nullptr,
-              SourceSettings source_settings = {0, 40, 40, 8});
+              SourceSettings source_settings = {0, 40, 40, 8}, double climate_speed = 1.0,
+              ReaperSettings reaper_settings = {});
+    int nearest_reaper_distance(PositionT position) const override;
+    uint64_t reaper_kills() const override { return reaper_kills_; }
+    void set_climate_rotation_speed(double value) { climate_rotation_speed_ = value; }
+    bool sandbox_spawn_source(PositionT position);
+    bool sandbox_remove_source(PositionT position);
 
     ///----------------------------------------------------------------------
     /// @brief    Initialization of  the grid world
@@ -156,15 +163,22 @@ class GridWorld : public IWorld {
         return {glucose_regenerated_, oxygen_regenerated_};
     }
     std::vector<std::shared_ptr<IEntity>> get_environment_agents() const override {
-        return std::vector<std::shared_ptr<IEntity>>(sources_.begin(), sources_.end());
+        std::vector<std::shared_ptr<IEntity>> result(sources_.begin(), sources_.end());
+        result.insert(result.end(), reapers_.begin(), reapers_.end());
+        return result;
     }
 
   private:
     friend class CheckpointCodec;
     void reset_sources(bool spawn = true);
+    void reset_reapers(bool spawn = true);
     uint64_t glucose_regenerated_ = 0, oxygen_regenerated_ = 0;
+    uint64_t reaper_kills_ = 0;
     std::vector<std::shared_ptr<Source>> sources_;
+    std::vector<std::shared_ptr<Reaper>> reapers_;
     SourceSettings source_settings_;
+    ReaperSettings reaper_settings_;
+    double climate_rotation_speed_ = 1.0;
     ///----------------------------------------------------------------------
     /// @brief    Check if coordinates are within the bounds of the grid
     /// @param    x The x-coordinate

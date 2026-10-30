@@ -11,6 +11,8 @@ class IEntity;
 
 class IWorld {
   public:
+    virtual int nearest_reaper_distance(PositionT) const { return -1; }
+    virtual uint64_t reaper_kills() const { return 0; }
     virtual ~IWorld() = default;
     virtual std::pair<uint64_t, uint64_t> get_regeneration_totals() const {
         return {0, 0};

@@ -72,6 +72,7 @@ void Stats::record_session(SessionRecord session) {
     current_distances_.clear();
     calcium_window_ticks_ = 0;
     recovery_resources_.fill(0);
+    sandbox_resource_inputs_.fill(0);
     recovery_energy_ = 0;
     started_ = std::chrono::steady_clock::now();
     cpu_started_ = std::clock();
@@ -244,7 +245,7 @@ void Stats::sample(uint64_t tick, const PopsManager& agents, const IWorld& world
     Json residual = Json::array();
     for (std::size_t i = 0; i < 6; ++i)
         residual.push_back(total_resources[i].get<int64_t>() - initial_["resources"][i].get<int64_t>() - changes[i] +
-                           closed_["resources"][i].get<int64_t>() - recovery_resources_[i]);
+                           closed_["resources"][i].get<int64_t>() - recovery_resources_[i] - sandbox_resource_inputs_[i]);
     double expected = all["respiration_gain"].get<double>() - all["metabolism_cost"].get<double>() -
                       all["movement_cost"].get<double>() - all["other_action_cost"].get<double>() -
                       all["reproduction_cost"].get<double>() -
@@ -273,6 +274,10 @@ void Stats::sample(uint64_t tick, const PopsManager& agents, const IWorld& world
                {"generation", agents.get_generation_count()},
                {"counts", counts_},
                {"learning", learning},
+               {"reaper", {{"kills", world.reaper_kills()},
+                            {"exposure_ticks_alive", active.value("reaper_exposure_ticks", 0.)},
+                            {"escape_attempts_alive", active.value("reaper_escape_attempts", 0.)},
+                            {"escape_successes_alive", active.value("reaper_escape_successes", 0.)}}},
                {"reproduction", agents.reproduction_stats()},
                {"active", active},
                {"averages", averages},
@@ -367,6 +372,11 @@ nlohmann::json Stats::performance() const {
             {"fps", frame_interval_us_ ? frames_ * 1e6 / frame_interval_us_ : 0}};
 }
 
+void Stats::record_sandbox_resource_delta(unsigned ledger_index, int64_t delta) {
+    if (ledger_index >= sandbox_resource_inputs_.size()) throw std::out_of_range("sandbox resource ledger index");
+    sandbox_resource_inputs_[ledger_index] += delta;
+}
+
 void Stats::record_environment(const IWorld& world) {
     Json cells = Json::array();
     std::size_t offset = 0;
@@ -401,6 +411,7 @@ void Stats::record_sample(SampleRecord sample) {
                                   {"regenerated_glucose", b.regenerated_glucose},
                                   {"regenerated_o2", b.regenerated_o2}};
     latest_["resource_ledger"]["recovery_input"] = recovery_resources_;
+    latest_["resource_ledger"]["sandbox_input"] = sandbox_resource_inputs_;
     latest_["energy_ledger"] = {{"initial", b.initial_energy},
                                 {"final_alive", b.final_energy},
                                 {"dead_sink", b.dead_energy_sink},

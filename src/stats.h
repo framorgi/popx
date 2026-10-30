@@ -28,6 +28,7 @@ class Stats final : public IStats {
     void publish(const std::string& type, nlohmann::json data);
     void record_diagnostic(DiagnosticResult result) override;
     void record_environment(const IWorld& world);
+    void record_sandbox_resource_delta(unsigned ledger_index, int64_t delta);
     std::vector<nlohmann::json> commands();
     nlohmann::json transport_status() const;
     nlohmann::json performance() const;
@@ -54,6 +55,7 @@ class Stats final : public IStats {
     std::unordered_map<std::string, double> previous_distances_, current_distances_;
     uint64_t calcium_window_ticks_ = 0;
     std::array<int64_t, 6> recovery_resources_{};
+    std::array<int64_t, 6> sandbox_resource_inputs_{};
     double recovery_energy_ = 0;
     std::chrono::steady_clock::time_point started_;
     std::clock_t cpu_started_ = 0;

@@ -31,7 +31,7 @@ enum class State {
 ///----------------------------------------------------------------------------
 /// @brief The cause of death for this Pop (used for logging and analysis).
 ///----------------------------------------------------------------------------
-enum class DeathCause { None, EnergyDepletion, OldAge, TemperatureOutOfRange };
+enum class DeathCause { None, EnergyDepletion, OldAge, TemperatureOutOfRange, Reaper };
 /// @brief Physical traits of a Pop entity (set at birth, inherited/mutated).
 struct PhyT {
     unsigned mitochondrions;    ///< aerobic respiration capacity (energy from glucose+O2)
@@ -78,6 +78,7 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Handles the death of the Pop entity (cleanup, final actions, mark as dead).
     ///---------------------------------------------------------------------------
     void die() override;
+    void die_by_reaper() { death_cause_ = DeathCause::Reaper; die(); }
     ///---------------------------------------------------------------------------
     /// @brief Senses the environment (perceive nearby entities, environment, etc.).
     ///---------------------------------------------------------------------------
@@ -115,6 +116,11 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     bool try_spawn(PositionT p) override;
     /// @brief Reset decisions and temporal credit after NewGen changes the occupied cell.
     void reset_after_newgen_relocation();
+    void edit_weight(unsigned src, unsigned dst, unsigned col, unsigned row, float value) {
+        brain_->edit_weight(src, dst, col, row, value);
+        reset_after_newgen_relocation();
+    }
+    void reset_learning_credit() { scorer_.reset(); brain_->clear_eligibility_traces(); }
     ///---------------------------------------------------------------------------
     /// @brief Updates the state of the Pop (called each simulation tick).
     ///---------------------------------------------------------------------------
@@ -363,6 +369,8 @@ class Pop : public IAgent, public std::enable_shared_from_this<Pop> {
     /// @brief Last action index produced by the brain (-1 = no action).
     /// ---------------------------------------------------------------------------
     int last_action_ = -1;
+    int last_executed_action_ = -1;
+    uint64_t reaper_exposure_ticks_ = 0, reaper_escape_attempts_ = 0, reaper_escape_successes_ = 0;
     /// ---------------------------------------------------------------------------
     /// @brief Sensor values computed by sense(), consumed by think().
     /// ---------------------------------------------------------------------------

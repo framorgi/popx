@@ -56,7 +56,14 @@ void decisions(const std::shared_ptr<NeuralConfig>& config) {
     brain.wire(weights({{4, 0}, {5, 0}}));
     require(brain.feed_forward({1, 0.5f}) == idle, "zero network moved");
     brain.wire(weights({{4, 8192}, {5, 8192}}));
-    require(brain.feed_forward({1, 0.5f}) == idle, "tied maximum favoured an index");
+    const int first_tie = brain.feed_forward({1, 0.5f});
+    const int second_tie = brain.feed_forward({1, 0.5f});
+    require((first_tie == 4 || first_tie == 5) && (second_tie == 4 || second_tie == 5) &&
+                first_tie != second_tie, "active tie did not rotate fairly");
+    brain.wire(weights({{4, 8192}, {21, 8192}}));
+    require(brain.feed_forward({1, 0.5f}) == 4, "tied idle suppressed an equally ranked action");
+    brain.wire(weights({{4, -8192}, {5, -8192}}));
+    require(brain.feed_forward({1, 0.5f}) == idle, "neutral top of inhibited network chose an arbitrary action");
     brain.wire(weights({{4, 8192}, {5, 8192}, {7, 16384}}));
     require(brain.feed_forward({1, 0.5f}) == 7, "lower tie masked a unique winner");
     brain.wire(weights({{4, 1}}));
@@ -138,6 +145,28 @@ void decay_and_inheritance(const std::shared_ptr<NeuralConfig>& config) {
 
 class SimulationAudit {
   public:
+    static void age_sensor() {
+        class AgeConfig : public NeuralConfig {
+          public:
+            unsigned get_brain_size_s() const override { return 57; }
+        };
+        auto config = std::make_shared<AgeConfig>();
+        auto logger = std::make_shared<ConsoleLogger>();
+        logger->set_level(LogLevel::Error);
+        auto world = std::make_shared<GridWorld>(3, 3, logger);
+        Genome genome(0);
+        genome.add_gene(Gene(0, static_cast<unsigned>(Sensor::AGE), 7, 21, 8192));
+        for (const auto [index, age] : {std::pair{0, 300u}, {1, 3000u}, {2, MaxAge}}) {
+            auto pop = std::make_shared<Pop>(world, logger, config, genome, PhyT{1, 0, 1, 80});
+            require(pop->try_spawn({index, 1}), "age sensor fixture spawn failed");
+            pop->age_ = age;
+            pop->sense();
+            const auto value = pop->sensor_values_[static_cast<unsigned>(Sensor::AGE)];
+            const auto expected = std::log1p(float(age)) / std::log1p(float(MaxAge));
+            require(std::abs(value - expected) < 1e-6f, "age sensor normalization incorrect");
+            if (age == 300) require(value < .5f, "age sensor saturated at one generation");
+        }
+    }
     static void idle_pop(const std::shared_ptr<NeuralConfig>& config, bool explicit_idle) {
         auto logger = std::make_shared<ConsoleLogger>();
         logger->set_level(LogLevel::Error);
@@ -177,9 +206,10 @@ int main() {
         auto config = std::make_shared<NeuralConfig>();
         decisions(config);
         decay_and_inheritance(config);
+        SimulationAudit::age_sensor();
         SimulationAudit::idle_pop(config, false);
         SimulationAudit::idle_pop(config, true);
-        std::cout << "PASS: neutral/tied fallback, explicit idle, signed decay floor, precise inheritance, idle physiology\n";
+        std::cout << "PASS: neutral fallback, active tie rotation, explicit idle, age range, signed decay floor, inheritance, physiology\n";
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';
         return 1;

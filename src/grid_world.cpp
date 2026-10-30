@@ -4,8 +4,10 @@
 #include "common.h"
 #include "random_utility.h"
 
-GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger, SourceSettings settings)
-    : width_(w), height_(h), logger_(logger), source_settings_(settings) {
+GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger, SourceSettings settings, double climate_speed,
+                     ReaperSettings reaper_settings)
+    : width_(w), height_(h), logger_(logger), source_settings_(settings), reaper_settings_(reaper_settings),
+      climate_rotation_speed_(climate_speed) {
     cells_.resize(width_ * height_);
     for (auto& cell : cells_) {
         cell = std::make_shared<Cell>();
@@ -14,9 +16,10 @@ GridWorld::GridWorld(int w, int h, std::shared_ptr<ILogger> logger, SourceSettin
 }
 
 void GridWorld::init() {
-    glucose_regenerated_ = oxygen_regenerated_ = 0;
+    glucose_regenerated_ = oxygen_regenerated_ = reaper_kills_ = 0;
     environment_tick_counter_ = rotation_tick_counter_ = 0;
     sources_.clear();
+    reapers_.clear();
     RandomUtility random_util;
 
     /// Generate a random RBF set for temperature
@@ -56,7 +59,42 @@ void GridWorld::init() {
         }
     }
     reset_sources();
+    reset_reapers();
     logger_->info("Grid world initialized.");
+}
+
+void GridWorld::reset_reapers(bool spawn) {
+    for (auto& reaper : reapers_) reaper->despawn();
+    reapers_.clear();
+    std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<int> x_dist(0, width_ - 1), y_dist(0, height_ - 1);
+    for (unsigned n = 0; n < reaper_settings_.count; ++n) {
+        auto reaper = std::make_shared<Reaper>(*this, reaper_settings_, rng());
+        if (!spawn) { reapers_.push_back(std::move(reaper)); continue; }
+        bool placed = false;
+        for (int trial = 0; trial < 1000 && !placed; ++trial)
+            placed = reaper->try_spawn({x_dist(rng), y_dist(rng)});
+        if (!placed) {
+            const int start = std::uniform_int_distribution<int>(0, width_ * height_ - 1)(rng);
+            for (int offset = 0; offset < width_ * height_ && !placed; ++offset) {
+                const int position = (start + offset) % (width_ * height_);
+                placed = reaper->try_spawn({position % width_, position / width_});
+            }
+        }
+        if (!placed) throw std::runtime_error("No free cell available for Reaper");
+        reapers_.push_back(std::move(reaper));
+    }
+}
+
+int GridWorld::nearest_reaper_distance(PositionT position) const {
+    int result = -1;
+    for (const auto& reaper : reapers_) {
+        if (!reaper->is_alive()) continue;
+        const auto p = reaper->get_position();
+        const int distance = std::max(std::abs(p.x - position.x), std::abs(p.y - position.y));
+        if (result < 0 || distance < result) result = distance;
+    }
+    return result;
 }
 
 void GridWorld::reset_sources(bool spawn) {
@@ -80,6 +118,28 @@ void GridWorld::reset_sources(bool spawn) {
         if (!placed) throw std::runtime_error("No free cell available for Source");
         sources_.push_back(std::move(source));
     }
+}
+
+bool GridWorld::sandbox_spawn_source(PositionT position) {
+    if (sources_.size() >= 32 || !is_free(position)) return false;
+    auto source = std::make_shared<Source>(*this, source_settings_);
+    if (!source->try_spawn(position)) return false;
+    sources_.push_back(std::move(source));
+    source_settings_.count = sources_.size();
+    return true;
+}
+
+bool GridWorld::sandbox_remove_source(PositionT position) {
+    for (auto it = sources_.begin(); it != sources_.end(); ++it) {
+        const auto p = (*it)->get_position();
+        if (p.x == position.x && p.y == position.y) {
+            (*it)->despawn();
+            sources_.erase(it);
+            source_settings_.count = sources_.size();
+            return true;
+        }
+    }
+    return false;
 }
 
 bool GridWorld::is_free(PositionT p) const {
@@ -182,12 +242,17 @@ bool GridWorld::update_cycle() {
         source->update();
         glucose_regenerated_ += source->last_deposit();
     }
+    for (const auto& reaper : reapers_) {
+        reaper->update();
+        reaper_kills_ += reaper->last_kills();
+    }
     if (environment_tick_counter_ % TemperatureRefreshInterval == 0) {
         RandomUtility random_util;
         const double center_x = static_cast<double>(width_) * 0.5;
         const double center_y = static_cast<double>(height_) * 0.5;
         temp_rbf_set_ =
-            random_util.rotate_rbf_set(temp_rbf_set_, rotation_tick_counter_, height_ / 6, center_x, center_y);
+            random_util.rotate_rbf_set_scaled(temp_rbf_set_, rotation_tick_counter_, height_ / 6, center_x, center_y,
+                                              climate_rotation_speed_);
         for (int y = 0; y < height_; ++y) {
             for (int x = 0; x < width_; ++x) {
                 double temp_value =

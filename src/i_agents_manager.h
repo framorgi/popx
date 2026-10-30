@@ -18,6 +18,8 @@ class IAgentsManager {
 
     /// @brief Advance one simulation cycle
     virtual void update_cycle() = 0;
+    /// @brief Remove agents killed by the environment after its update in the same tick.
+    virtual void cleanup_external_deaths() {}
 
     /// @brief Return the number of currently alive agents.
     [[nodiscard]] virtual int get_alive_count() const = 0;

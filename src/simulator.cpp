@@ -26,6 +26,7 @@ void Simulator::update() {
 
     agents_manager_->update_cycle();
     { world_->update_cycle(); }
+    agents_manager_->cleanup_external_deaths();
 
     // simulator tick finished
     tick_count_++;

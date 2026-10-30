@@ -93,6 +93,7 @@ class CheckpointCodec {
             b.eligibility_=std::move(traces);
         }
         b.silent_genes_=genes(j.at("silent_genes"));b.discarded_genes_=genes(j.at("discarded_genes"));
+        b.tie_cursor_=j.value("tie_cursor",b.tie_cursor_)%std::max(1u,b.size_y_);
         b.learned_genome_.reset();b.learned_genome_dirty_=true;
     }
     static Json pop(const Pop& p) {
@@ -116,6 +117,10 @@ class CheckpointCodec {
         SAVE(parent_id);
         SAVE(birth_was_forced);
         SAVE(last_action);
+        SAVE(last_executed_action);
+        SAVE(reaper_exposure_ticks);
+        SAVE(reaper_escape_attempts);
+        SAVE(reaper_escape_successes);
         SAVE(sensor_values);
         SAVE(probe_dist);
         SAVE(osc_period);
@@ -185,6 +190,10 @@ class CheckpointCodec {
         LOAD(parent_id);
         LOAD(birth_was_forced);
         LOAD(last_action);
+        p.last_executed_action_ = j.value("last_executed_action", -1);
+        p.reaper_exposure_ticks_ = j.value("reaper_exposure_ticks", uint64_t(0));
+        p.reaper_escape_attempts_ = j.value("reaper_escape_attempts", uint64_t(0));
+        p.reaper_escape_successes_ = j.value("reaper_escape_successes", uint64_t(0));
         LOAD(sensor_values);
         LOAD(probe_dist);
         LOAD(osc_period);
@@ -277,10 +286,13 @@ class CheckpointCodec {
         }
         j["world"]={{"environment_tick",w.environment_tick_counter_},{"rotation_tick",w.rotation_tick_counter_},
                     {"temperature",rbf(w.temp_rbf_set_)},{"elevation",rbf(w.elevation_rbf_set_)},
-                    {"regenerated_glucose",w.glucose_regenerated_},{"regenerated_o2",w.oxygen_regenerated_},{"sources",Json::array()},
+                    {"regenerated_glucose",w.glucose_regenerated_},{"regenerated_o2",w.oxygen_regenerated_},
+                    {"reaper_kills",w.reaper_kills_},{"sources",Json::array()},{"reapers",Json::array()},
                     {"glucose",rbf(w.glucose_rbf_set_)},{"water",rbf(w.water_rbf_set_)}};
         for (const auto& source : w.sources_)
             j["world"]["sources"].push_back(source->snapshot());
+        for (const auto& reaper : w.reapers_)
+            j["world"]["reapers"].push_back(reaper->snapshot());
         for(const auto& item:w.cells_) {
             const auto& c=dynamic_cast<const Cell&>(*item);const auto& o=c.organics_;
             j["cells"].push_back({{"temperature",c.temperature_},{"elevation",c.elevation_},
@@ -312,11 +324,16 @@ class CheckpointCodec {
             w.init();
             for (auto& source : w.sources_) source->despawn();
             w.sources_.clear();
+            for (auto& reaper : w.reapers_) reaper->despawn();
+            w.reapers_.clear();
         }
         else {
             require(j.at("cells").size()==w.cells_.size(),"cell count");
             const auto& env=j.at("world");w.environment_tick_counter_=env.at("environment_tick");
             w.glucose_regenerated_=env.at("regenerated_glucose");w.oxygen_regenerated_=env.at("regenerated_o2");
+            w.reaper_kills_=env.value("reaper_kills",uint64_t(0));
+            w.source_settings_.count = env.at("sources").size();
+            require(w.source_settings_.count <= 32, "source count");
             w.reset_sources(false);
             require(env.at("sources").size()==w.sources_.size(),"source count");
             w.rotation_tick_counter_=env.at("rotation_tick");w.temp_rbf_set_=rbf(env.at("temperature"));
@@ -355,6 +372,17 @@ class CheckpointCodec {
             auto& c=dynamic_cast<Cell&>(*w.get_cell(p->pos_));require(c.occupant_.expired(),"overlapping occupants");
             c.occupant_=p; // A living occupant can legitimately share its cell with deposited carbonate.
             m.pops_.push_back(p);
+        }
+        if (!partial && j.at("world").contains("reapers")) {
+            const auto& saved = j.at("world").at("reapers");
+            require(saved.is_array() && saved.size() <= 4,"reaper count");
+            w.reaper_settings_.count = saved.size();
+            w.reset_reapers(false);
+            for (std::size_t i=0;i<w.reapers_.size();++i)
+                require(w.reapers_[i]->restore(saved[i]),"reaper state/occupancy");
+        } else {
+            // Older checkpoints predate Reaper. Introduce it only after all saved Pops are placed.
+            w.reset_reapers();
         }
         if(partial) {
             for(const auto& p:m.pops_) {
