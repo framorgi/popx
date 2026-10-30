@@ -10,7 +10,7 @@ const exit=get('exit');exit.dataset.command='exit';
 const calls=[],cleared=[],events=[];let stream,lateResolve,hold=false,heldSignal,confirmed=false;
 const status={run_id:'r',state:'running',connected:true,speed:0,alive:10,tick:100};
 const context={console,AbortController,DOMException,Event,clearInterval:id=>cleared.push(id),setInterval:()=>7,
-    window:{POPX_METRICS:{},confirm:()=>confirmed},document:{getElementById:get,createElement:()=>new Element(),createTextNode:text=>({text}),
+    window:{POPX_DESIGN:JSON.parse(fs.readFileSync("dashboard/static/design.json","utf8")),POPX_METRICS:{},confirm:()=>confirmed},document:{getElementById:get,createElement:()=>new Element(),createTextNode:text=>({text}),
         addEventListener(){},dispatchEvent:e=>events.push(e.type),querySelector:()=>new Element(),
         querySelectorAll:selector=>selector.includes('data-command')?[exit]:[]},
     Chart:class{constructor(el,config){Object.assign(this,config);}update(){}},

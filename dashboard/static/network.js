@@ -1,6 +1,7 @@
 'use strict';
 // Pure graph preparation, shared by the browser and standalone regression checks.
 const PopXNetwork = (() => {
+    const design = typeof window === 'undefined' ? require('./design.json') : window.POPX_DESIGN;
     function formatWeight(value) {
         if (value === 0) return '0 (esatto)';
         return Math.abs(value) < 0.001 ? value.toExponential(6) : Number(value.toPrecision(7)).toString();
@@ -57,7 +58,7 @@ const PopXNetwork = (() => {
                 ...e, weightLabel: formatWeight(e.weight),
                 // Scale uses the full snapshot, so filtering cannot inflate the remaining weights.
                 width: maxAbs ? Math.max(0.4, 6 * Math.abs(e.weight) / maxAbs) : 0.4,
-                color: e.weight === 0 ? '#8792a2' : e.weight > 0 ? '#48d9b8' : '#fb8b83',
+                color: e.weight === 0 ? design.signals.zero : e.weight > 0 ? design.signals.positive : design.signals.negative,
                 lineStyle: e.weight === 0 ? 'dashed' : 'solid'
             }}));
         return {edges, total: entries.length, zeroCount, maxAbs,

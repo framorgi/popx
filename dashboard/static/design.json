@@ -1,0 +1,183 @@
+{
+  "version": 1,
+  "themes": {
+    "lagoon": {
+      "bg": "#0e131c",
+      "panel": "#161f2d",
+      "line": "#293549",
+      "text": "#e7eef7",
+      "muted": "#92a3b9",
+      "accent": "#48d9b8",
+      "red": "#fb8b83",
+      "cold": "#365b8c",
+      "warm": "#e9b76d",
+      "hot": "#c45d5d"
+    },
+    "slate": {
+      "bg": "#15151f",
+      "panel": "#222333",
+      "line": "#3c4057",
+      "text": "#f0effa",
+      "muted": "#a7acc5",
+      "accent": "#a8a2ff",
+      "red": "#ff9b8e",
+      "cold": "#4b608c",
+      "warm": "#d4ba82",
+      "hot": "#c36d84"
+    }
+  },
+  "resources": {
+    "glucose": "#e9b76d",
+    "water": "#6aabed",
+    "oxygen": "#8dd7ef",
+    "co2": "#b99bca",
+    "lipids": "#e7ce80",
+    "nitrogen": "#8dc497",
+    "calcium": "#c7ced7"
+  },
+  "learning": [
+    {
+      "key": "age",
+      "label": "Età",
+      "color": "#88aaff"
+    },
+    {
+      "key": "energy",
+      "label": "Riserva energetica",
+      "color": "#48d9b8"
+    },
+    {
+      "key": "delta",
+      "label": "Variazione energia",
+      "color": "#ffc778"
+    },
+    {
+      "key": "offspring",
+      "label": "Discendenza",
+      "color": "#c5a1f5"
+    },
+    {
+      "key": "temperature",
+      "label": "Idoneità termica",
+      "color": "#fb8b83"
+    }
+  ],
+  "chart": [
+    "#48d9b8",
+    "#88aaff",
+    "#ffc778",
+    "#fb8b83",
+    "#c5a1f5",
+    "#8dd7ef",
+    "#e7a5c9"
+  ],
+  "spacing": 12,
+  "radius": 7,
+  "sidebar": 390,
+  "defaults": {
+    "theme": "lagoon",
+    "agent_scale": 0.85,
+    "grid": false,
+    "labels": true,
+    "ui_scale": 1.0
+  },
+  "sensors": {
+    "0": "Posizione X",
+    "1": "Posizione Y",
+    "2": "Bordo X",
+    "3": "Bordo vicino",
+    "4": "Bordo Y",
+    "5": "Somiglianza davanti",
+    "6": "Direzione X",
+    "7": "Direzione Y",
+    "8": "Pop N",
+    "9": "Pop O",
+    "10": "Pop E",
+    "11": "Pop S",
+    "12": "Temperatura N",
+    "13": "Temperatura O",
+    "14": "Temperatura E",
+    "15": "Temperatura S",
+    "16": "Grad. termico N",
+    "17": "Grad. termico O",
+    "18": "Grad. termico E",
+    "19": "Grad. termico S",
+    "20": "FOOD qui",
+    "21": "DANGER qui",
+    "22": "MATE qui",
+    "23": "HOME qui",
+    "24": "FOOD intorno",
+    "25": "DANGER intorno",
+    "26": "MATE intorno",
+    "27": "HOME intorno",
+    "28": "Oscillatore",
+    "29": "Età (log)",
+    "30": "Temperatura qui",
+    "31": "Casuale",
+    "32": "Passo fallito",
+    "33": "Glucosio N",
+    "34": "Glucosio O",
+    "35": "Glucosio E",
+    "36": "Glucosio S",
+    "37": "Grad. DANGER N",
+    "38": "Grad. DANGER O",
+    "39": "Grad. DANGER E",
+    "40": "Grad. DANGER S",
+    "41": "Grad. MATE N",
+    "42": "Grad. MATE O",
+    "43": "Grad. MATE E",
+    "44": "Grad. MATE S",
+    "45": "Grad. HOME N",
+    "46": "Grad. HOME O",
+    "47": "Grad. HOME E",
+    "48": "Grad. HOME S",
+    "49": "Passaggio N",
+    "50": "Passaggio NE",
+    "51": "Passaggio E",
+    "52": "Passaggio SE",
+    "53": "Passaggio S",
+    "54": "Passaggio SO",
+    "55": "Passaggio O",
+    "56": "Passaggio NO"
+  },
+  "actions": {
+    "0": "Avanza",
+    "1": "Sposta a sinistra",
+    "2": "Sposta a destra",
+    "3": "Sposta a caso",
+    "4": "Sposta a est",
+    "5": "Sposta a ovest",
+    "6": "Sposta a nord",
+    "7": "Sposta a sud",
+    "8": "Emetti FOOD",
+    "9": "Emetti DANGER",
+    "10": "Emetti MATE",
+    "11": "Emetti HOME",
+    "12": "Prendi glucosio",
+    "13": "Lascia glucosio",
+    "14": "Prendi acqua",
+    "15": "Lascia acqua",
+    "16": "Prendi calcio",
+    "17": "Lascia calcio",
+    "18": "Consuma energia",
+    "19": "Regola oscillatore",
+    "20": "Aumenta sensibilità",
+    "21": "Resta fermo",
+    "22": "Uccidi davanti"
+  },
+  "signals": {
+    "positive": "#48d9b8",
+    "negative": "#fb8b83",
+    "zero": "#92a3b9"
+  },
+  "layers": [
+    "#8dd7ef",
+    "#88aaff",
+    "#a29cf5",
+    "#c5a1f5",
+    "#e7a5c9",
+    "#ffc778",
+    "#e4da83",
+    "#48d9b8"
+  ]
+}

@@ -333,6 +333,12 @@ def create_app(db_path, config_path, binary, udp_port):
     async def health():
         return {'ok': True, 'pid': os.getpid()}
 
+    @app.get('/api/design.js')
+    async def design_script():
+        from fastapi.responses import Response
+        tokens = json.loads((ROOT/'dashboard/static/design.json').read_text())
+        return Response('window.POPX_DESIGN=' + compact(tokens) + ';', media_type='application/javascript')
+
     @app.get('/api/metrics')
     async def metrics():
         return metric_catalog()
@@ -351,9 +357,9 @@ def create_app(db_path, config_path, binary, udp_port):
         name = data.get('command')
         if app.state.checkpoints.lock.locked() and name not in ('agents', 'inspect', 'snapshot', 'exit'):
             raise HTTPException(409, 'Rotazione checkpoint in corso: attendere')
-        if name not in ('start', 'restart', 'pause', 'resume', 'stop', 'newgen', 'speed', 'headless', 'show_gui', 'exit', 'agents', 'inspect', 'snapshot'):
+        if name not in ('start', 'restart', 'pause', 'resume', 'stop', 'newgen', 'speed', 'headless', 'show_gui', 'exit', 'agents', 'inspect', 'snapshot', 'step', 'runtime_schema', 'runtime_apply', 'sandbox_spawn', 'sandbox_remove', 'sandbox_cell', 'sandbox_weight', 'appearance'):
             raise HTTPException(400, 'Comando sconosciuto')
-        if name in ('start', 'restart', 'resume'):
+        if name in ('start', 'restart', 'resume', 'step'):
             app.state.storage_guard.ensure_capacity(configured=name in ('start', 'restart'))
         reply = await app.state.receiver.command(name, data.get('arguments', {}), data.get('run_id'))
         if name == 'snapshot':

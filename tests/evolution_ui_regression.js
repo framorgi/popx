@@ -27,7 +27,7 @@ const detail={strain:'pop_1',summary:overview,survival:report.survival,age_histo
 const charts=new Map(),requests=[];
 const trees=[];let hold=false,release;
 const context={document:{getElementById:get,createElement:()=>new Element()},location:{hostname:'127.0.0.1'},setTimeout,
-    window:{},Chart:class {constructor(el,config){this.data=config.data;charts.set(el,config);}destroy(){}update(){}},
+    window:{POPX_DESIGN:JSON.parse(fs.readFileSync("dashboard/static/design.json","utf8"))},Chart:class {constructor(el,config){this.data=config.data;charts.set(el,config);}destroy(){}update(){}},
     cytoscape:config=>{const tree=realCytoscape({headless:true,elements:JSON.parse(JSON.stringify(config.elements)),layout:config.layout});trees.push(tree);return tree;},
     fetch:async url=>{requests.push(url);const data=url.includes('/extinctions')?{ticks:[100]}:
         url.startsWith('/api/runs')?[{id:'r',created:0,state:'running'}]:

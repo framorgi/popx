@@ -1,5 +1,6 @@
 'use strict';
 (() => {
+    const designTokens = window.POPX_DESIGN;
     const $ = id => document.getElementById(id);
     const state = {run:null, threshold:.9, report:null, detail:null, page:0, api:'', token:0, charts:{}, runs:[],
         extinctions:[], showExtinctions:true, compositionDerivative:false};
@@ -79,8 +80,8 @@
         const y=options.y||{beginAtZero:true};
         const tickAxis=['ev-composition','ev-turnover','ev-cap-chart'].includes(id);
         state.charts[id]=new Chart($(id),{type,data:{datasets},plugins:tickAxis?[extinctionLines]:[],options:{responsive:true,maintainAspectRatio:false,animation:false,
-            parsing:false,interaction:{mode:'nearest',intersect:false},plugins:{legend:{labels:{color:'#92a3b9',boxWidth:10}},...(options.plugins||{})},
-            scales:{x:{...x,ticks:{color:'#92a3b9'},grid:{color:'#273246'}},y:{...y,ticks:{color:'#92a3b9'},grid:{color:'#273246'}},...(options.extraScales||{})},
+            parsing:false,interaction:{mode:'nearest',intersect:false},plugins:{legend:{labels:{color:designTokens.themes.lagoon.muted,boxWidth:10}},...(options.plugins||{})},
+            scales:{x:{...x,ticks:{color:designTokens.themes.lagoon.muted},grid:{color:designTokens.themes.lagoon.line}},y:{...y,ticks:{color:designTokens.themes.lagoon.muted},grid:{color:designTokens.themes.lagoon.line}},...(options.extraScales||{})},
             onClick:options.onClick||(()=>{})}});
         return state.charts[id];
     }
@@ -108,10 +109,10 @@
         }});
         const time=windowed(r.timeline);
         chart('ev-turnover','line',[
-            series('Ceppi effettivi',time.map(p=>({x:p.tick,y:p.effective_strains})),'#88aaff'),
+            series('Ceppi effettivi',time.map(p=>({x:p.tick,y:p.effective_strains})),designTokens.chart[1]),
             series('Ricambio delle quote',time.map(p=>({x:p.tick,y:p.turnover})),'#ffc778',{yAxisID:'turnover'})
         ],{y:{beginAtZero:true,title:{display:true,text:'Numero equivalente'}},extraScales:{turnover:{position:'right',min:0,max:1,title:{display:true,text:'Ricambio 0…1'},grid:{drawOnChartArea:false}}}});
-        chart('ev-cap-chart','line',[series('Idoneità bloccata (%)',windowed(r.cap_timeline).map(p=>({x:p.tick,y:p.blocked_fraction===null?null:100*p.blocked_fraction})),'#fb8b83')],{y:{min:0,max:100}});
+        chart('ev-cap-chart','line',[series('Idoneità bloccata (%)',windowed(r.cap_timeline).map(p=>({x:p.tick,y:p.blocked_fraction===null?null:100*p.blocked_fraction})),designTokens.signals.negative)],{y:{min:0,max:100}});
     }
     function renderOutcomes() {
         const r=state.report,d=state.detail;
@@ -121,14 +122,14 @@
             x:{type:'linear',title:{display:true,text:'Età media alla morte (tick)'}},y:{beginAtZero:true,title:{display:true,text:'Figli naturali per vita conclusa'}},
             plugins:{tooltip:{callbacks:{label:c=>`${short(c.raw.strain)} · ${fmt(c.raw.n)} vite · figli ${fmt(c.raw.y)} ± ${fmt(c.raw.std)}`}}},
             onClick:(e,items,c)=>{if(items.length)guard(select)(c.data.datasets[0].data[items[0].index].strain);}});
-        const survival=[series('Tutta la popolazione',r.survival.map(p=>({x:p.age,y:p.survival,...p})),'#88aaff',{stepped:'after'})];
-        if(d)survival.push(series(`Ceppo ${short(d.strain)}`,d.survival.map(p=>({x:p.age,y:p.survival,...p})),'#48d9b8',{stepped:'after'}));
+        const survival=[series('Tutta la popolazione',r.survival.map(p=>({x:p.age,y:p.survival,...p})),designTokens.chart[1],{stepped:'after'})];
+        if(d)survival.push(series(`Ceppo ${short(d.strain)}`,d.survival.map(p=>({x:p.age,y:p.survival,...p})),designTokens.chart[0],{stepped:'after'}));
         chart('ev-survival','line',survival,{x:{type:'linear',title:{display:true,text:'Età (tick)'}},y:{min:0,max:1,title:{display:true,text:'Sopravvivenza stimata'}},plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${pct(c.raw.y)} · a rischio ${c.raw.risk} · morti ${c.raw.deaths} · vivi censurati ${c.raw.censored}`}}}});
         const bins=(d||r).age_histogram;
         chart('ev-ages','bar',[
-            series('Morti per cause ordinarie',bins.map(p=>({x:p.start,y:p.deaths,end:p.end})),'#88aaff'),
-            series('Abbattimenti NewGen',bins.map(p=>({x:p.start,y:p.culls,end:p.end})),'#fb8b83'),
-            series('Vivi: età raggiunta',bins.map(p=>({x:p.start,y:p.censored,end:p.end})),'#48d9b8')
+            series('Morti per cause ordinarie',bins.map(p=>({x:p.start,y:p.deaths,end:p.end})),designTokens.chart[1]),
+            series('Abbattimenti NewGen',bins.map(p=>({x:p.start,y:p.culls,end:p.end})),designTokens.signals.negative),
+            series('Vivi: età raggiunta',bins.map(p=>({x:p.start,y:p.censored,end:p.end})),designTokens.chart[0])
         ],{x:{type:'linear',title:{display:true,text:'Inizio intervallo di età (tick)'}},y:{beginAtZero:true,title:{display:true,text:'Individui'}},plugins:{tooltip:{callbacks:{title:items=>items.length?`${fmt(items[0].raw.x)} ≤ età < ${fmt(items[0].raw.end)}`:''}}}});
     }
     function renderTable() {

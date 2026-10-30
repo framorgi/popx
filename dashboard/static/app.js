@@ -29,7 +29,7 @@ const state = {
 };
 state.requests = new Set();
 state.closed = false;
-const palette = ['#48d9b8', '#88aaff', '#ffc778', '#fb8b83', '#c5a1f5', '#8dd7ef', '#e7a5c9'];
+const palette = window.POPX_DESIGN.chart;
 function metricInfo(path) {
     return state.metrics?.[path] || {label: `Misura: ${path}`, description: 'Definizione non disponibile per questa versione.'};
 }
@@ -44,7 +44,7 @@ function describeMetric(container, info) {
 function notice(text, error = false) {
     $('notice').hidden = false;
     $('notice').textContent = text;
-    $('notice').style.borderColor = error ? '#fb8b83' : '#48d9b8';
+    $('notice').style.borderColor = error ? window.POPX_DESIGN.signals.negative : window.POPX_DESIGN.signals.positive;
 }
 async function api(url, options = {}) {
     if (state.closed) throw new DOMException('Dashboard chiusa', 'AbortError');
@@ -123,7 +123,7 @@ function updateStatus(status) {
     $('speed').textContent = status.speed === 0 ? 'Turbo headless · passa a 1×' : `Velocità ${status.speed || 1}× · ${status.speed === 2 ? 'passa a turbo headless' : 'passa a 2×'}`;
     $('gui').title = status.speed === 0 ? 'Aprire la GUI riporta la velocità a 2×' : '';
     $('gui').textContent = status.gui ? 'Passa a headless' : 'Mostra GUI';
-    $('active-config').textContent = (status.config_locked ? 'Configurazione bloccata dal checkpoint.\n' : '') + JSON.stringify(status.metadata?.config || {}, null, 2);
+    $('active-config').textContent = (status.config_locked ? 'Configurazione bloccata dal checkpoint.\n' : '') + JSON.stringify(status.runtime || status.metadata?.config || {}, null, 2);
     if (status.config_locked) {
         $('config-save').disabled = true;
         $('config-form').querySelectorAll('input,select').forEach(input => input.disabled = true);
@@ -218,16 +218,16 @@ function makeChart(canvas, series, tickAxis = true) {
             parsing: false,
             normalized: true,
             interaction: {mode: 'nearest', intersect: false},
-            plugins: {legend: {labels: {color: '#92a3b9', boxWidth: 12}},
+            plugins: {legend: {labels: {color: window.POPX_DESIGN.themes.lagoon.muted, boxWidth: 12}},
                 tooltip: {callbacks: {label: context => `${context.dataset.label}: ${fmt(context.parsed.y)}`}}},
             scales: {
                 x: {
                     type: 'linear',
-                    title: {display: true, text: 'Tick', color: '#92a3b9'},
-                    ticks: {color: '#92a3b9', maxTicksLimit: 6},
-                    grid: {color: '#273246'}
+                    title: {display: true, text: 'Tick', color: window.POPX_DESIGN.themes.lagoon.muted},
+                    ticks: {color: window.POPX_DESIGN.themes.lagoon.muted, maxTicksLimit: 6},
+                    grid: {color: window.POPX_DESIGN.themes.lagoon.line}
                 },
-                y: {ticks: {color: '#92a3b9', callback: value => fmt(value)}, grid: {color: '#273246'}}
+                y: {ticks: {color: window.POPX_DESIGN.themes.lagoon.muted, callback: value => fmt(value)}, grid: {color: window.POPX_DESIGN.themes.lagoon.line}}
             }
         }
     });
@@ -323,7 +323,7 @@ function drawCharts() {
             dataset.data = window.PopXChartMath.points(state.samples, dataset.path, chart.derivative);
         }
         chart.options.scales.y.title = {display: Boolean(chart.derivative),
-                                        text: 'Variazione media per tick', color: '#92a3b9'};
+                                        text: 'Variazione media per tick', color: window.POPX_DESIGN.themes.lagoon.muted};
         chart.update('none');
     }
     if (!last) return;
@@ -414,9 +414,9 @@ function drawNetwork() {
     sizes.forEach((size, layer) => {
         for (let i = 0; i < size; i++) {
             if (hideIsolated && !graph.connected.has(`${layer}:${i}`)) continue;
-            const label = layer === 0 ? (sensorLabels[i] || `INPUT_${i}`) :
-                layer === sizes.length - 1 ? (window.ACTION_LABELS[i] || `OUTPUT_${i}`) :
-                                             `H${layer}.${i}`;
+            const label = layer === 0 ? (sensorLabels[i] || `Ingresso ${i}`) :
+                layer === sizes.length - 1 ? (window.ACTION_LABELS[i] || `Uscita ${i}`) :
+                                             `Interno ${layer}:${i}`;
             elements.push({
                 data: {id: `${layer}:${i}`, label, activation: brain.activations?.[layer]?.[i] ?? null, layer},
                 position: {x: layer * 260, y: (i - (size - 1) / 2) * 40}

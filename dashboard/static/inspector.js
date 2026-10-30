@@ -2,7 +2,8 @@
 // Read-only views of a manual snapshot. Keep these rules aligned with Genome::compute_genetic_color_value,
 // Pop::get_render_state, Renderer::update_entity and Brain::wire; never infer genotype from learned edges.
 const PopXInspector = (() => {
-    const layerColors = ['#8dd7ef', '#88aaff', '#a29cf5', '#c5a1f5', '#e7a5c9', '#ffc778', '#e4da83', '#48d9b8'];
+    const design = typeof window === 'undefined' ? require('./design.json') : window.POPX_DESIGN;
+    const layerColors = design.layers;
     let sortField = 'index', sortDirection = 'asc';
     function sortGenes(entries, field = 'index', direction = 'asc') {
         const states = {wired: 0, silent: 1, discarded: 2, unknown: 3};
@@ -214,7 +215,7 @@ const PopXInspector = (() => {
             button.setAttribute('aria-label', title);
             button.append(node('span', String(entry.index + 1), 'gene-index'));
             const color = node('span', undefined, 'gene-color');
-            color.style.background = entry.weight === 0 ? '#8792a2' : entry.weight > 0 ? '#48d9b8' : '#fb8b83';
+            color.style.background = entry.weight === 0 ? design.signals.zero : entry.weight > 0 ? design.signals.positive : design.signals.negative;
             color.style.borderLeftColor = layerColors[entry.gene[0]];
             color.style.borderRightColor = layerColors[entry.gene[2]];
             button.append(color, node('span', `${entry.gene[0]}:${entry.gene[1]} → ${entry.gene[2]}:${entry.gene[3]}`, 'gene-route'));
