@@ -20,13 +20,14 @@ class Brain : public IBrain {
     /// genes).
     /// @param genome The Genome containing the genes that define the connections and weights of the brain.
     //----------------------------------------------------------------------------
+    void edit_weight(unsigned src, unsigned dst, unsigned col, unsigned row, float value) override;
     void wire(const Genome& genome) override;
 
     //----------------------------------------------------------------------------
     /// @brief Performs a feed-forward pass through the neural network to produce an action index based
     /// on the given sensor values.
     /// @param sensor_values A vector of float values representing the current sensor inputs to the brain.
-    /// @return Unique winning action, or DO_NOTHING for neutral/tied outputs (also with legacy output sizes).
+    /// @return Winning action; active ties rotate fairly, fully neutral outputs wait.
     int feed_forward(const std::vector<float>& sensor_values) override;
 
     //----------------------------------------------------------------------------
@@ -73,6 +74,8 @@ class Brain : public IBrain {
     std::vector<Eigen::VectorXf> activations_;
     // Values aligned with the compressed storage of each M_ matrix; never inherited.
     std::vector<std::vector<float>> eligibility_;
+    /// @brief Next output considered when several active outputs share the maximum.
+    unsigned tie_cursor_ = 0;
     BrainLearningStats learning_stats_;
     /// Genome rebuilt from learned weights after each hebbian_update() (if hebbian_inheritance is enabled).
     std::shared_ptr<Genome> learned_genome_;

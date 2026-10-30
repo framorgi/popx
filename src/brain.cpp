@@ -4,6 +4,7 @@
 
 #include <Eigen/Dense>
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -11,6 +12,10 @@
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <vector>
+
+namespace {
+std::atomic<unsigned> next_tie_seed{0};
+}
 
 // ---------------------------------------------------------------------------
 // Construction / allocation
@@ -20,6 +25,7 @@ Brain::Brain(std::shared_ptr<IConfig> config) : config_(std::move(config)) {
     size_s_ = config_->get_brain_size_s();
     size_n_ = config_->get_brain_size_n();
     size_y_ = config_->get_brain_size_y();
+    tie_cursor_ = next_tie_seed.fetch_add(1, std::memory_order_relaxed) % std::max(1u, size_y_);
     num_hidden_ = config_->get_brain_num_hidden_layers();
     num_layers_ = num_hidden_ + 2;
     allocate();
@@ -168,29 +174,43 @@ int Brain::feed_forward(const std::vector<float>& sensor_values) {
     }
     // Store activations for potential Hebbian updates after action execution
     activations_ = h;
-    // A neutral or tied output is not a request to move forward.
+    // A fully neutral network has no actionable preference.
     const auto& out = h[nl - 1];
     const int idle = static_cast<int>(Action::DO_NOTHING);
     if (out.size() == 0 || !out.allFinite() || (out.array() == 0.5f).all() || (out.array() == 0.0f).all())
         return idle;
     int max_index = -1;
     float max_value = 0.0f;
-    bool tied = false;
+    unsigned tied = 0;
     for (int i = 0; i < out.size(); ++i) {
         if (max_index < 0 || out(i) > max_value) {
             max_value = out(i);
             max_index = i;
-            tied = false;
+            tied = 1;
         } else if (out(i) == max_value)
-            tied = true;
+            ++tied;
     }
-    return tied ? idle : max_index;
+    if (tied == 1) return max_index;
+    // A shared neutral/inhibited maximum carries no positive preference.
+    // Picking an arbitrary actuator here caused harmful random activity.
+    if (max_value <= 0.5f) return idle;
+    // Rotate among equally active outputs. A tied DO_NOTHING does not suppress
+    // another equally ranked action; it remains available as a unique winner.
+    for (int offset = 0; offset < out.size(); ++offset) {
+        const int index = static_cast<int>((tie_cursor_ + static_cast<unsigned>(offset)) % out.size());
+        if (index != idle && out(index) == max_value) {
+            tie_cursor_ = static_cast<unsigned>(index + 1) % static_cast<unsigned>(out.size());
+            return index;
+        }
+    }
+    return idle;
 }
 
 void Brain::resize(unsigned size_s, unsigned size_n, unsigned size_y, unsigned num_hidden) {
     size_s_ = size_s;
     size_n_ = size_n;
     size_y_ = size_y;
+    tie_cursor_ %= std::max(1u, size_y_);
     num_hidden_ = num_hidden;
     num_layers_ = num_hidden_ + 2;
     allocate();
@@ -241,6 +261,7 @@ nlohmann::json Brain::snapshot() const {
     doc["connections"] = std::move(connections);
 
     doc["schema_version"] = 1;
+    doc["tie_cursor"] = tie_cursor_;
     doc["activations"] = json::array();
     for (const auto& layer : activations_) {
         std::vector<float> values(layer.data(), layer.data() + layer.size());
@@ -380,8 +401,25 @@ float Brain::sigmoid(float x) const {
 }
 
 void Brain::record_action(int action) {
-    if (activations_.size() != num_layers_)
+    if (activations_.size() != num_layers_ || action < 0 || static_cast<unsigned>(action) >= size_y_)
         return;
+    const auto& outputs = activations_.back();
+    if (!outputs.allFinite() || (outputs.array() == 0.5f).all() || (outputs.array() == 0.0f).all())
+        return;
+    // Exact derivative of the selected output with respect to every active
+    // synapse. Skip connections are included in the reverse accumulation.
+    std::vector<Eigen::VectorXf> adjoint(num_layers_);
+    adjoint.back() = Eigen::VectorXf::Zero(static_cast<int>(size_y_));
+    adjoint.back()(action) = outputs(action) * (1.0f - outputs(action));
+    for (int layer = static_cast<int>(num_layers_) - 2; layer >= 1; --layer) {
+        Eigen::VectorXf downstream = Eigen::VectorXf::Zero(static_cast<int>(layer_size(layer)));
+        for (unsigned dst = static_cast<unsigned>(layer) + 1; dst < num_layers_; ++dst) {
+            const auto& matrix = M_[static_cast<unsigned>(layer) * num_layers_ + dst];
+            if (matrix.nonZeros() > 0) downstream.noalias() += matrix.transpose() * adjoint[dst];
+        }
+        const auto& activity = activations_[layer];
+        adjoint[layer] = (downstream.array() * activity.array() * (1.0f - activity.array())).matrix();
+    }
     // One action every three phases: normalized accumulating trace, bounded for sustained activity.
     const float decay = static_cast<float>(config_->get_learning_trace_decay());
     const float injection = 1.0f - decay * decay * decay;
@@ -392,16 +430,9 @@ void Brain::record_action(int action) {
             std::size_t index = 0;
             for (int k = 0; k < matrix.outerSize(); ++k) {
                 for (Eigen::SparseMatrix<float>::InnerIterator it(matrix, k); it; ++it, ++index) {
-                    // Only the chosen actuator receives new output credit. Hidden activity is a local approximation.
-                    if (dst == num_layers_ - 1 && it.row() != action)
-                        continue;
-                    const float pre = activations_[src](it.col());
-                    const float post = activations_[dst](it.row());
-                    // Chosen-output local gradient remains responsive around sigmoid 0.5.
-                    // Hidden credit remains a local centered approximation, not backpropagation.
-                    const float activity =
-                        dst == num_layers_ - 1 ? pre * post * (1.0f - post) : (pre - 0.5f) * (post - 0.5f);
-                    trace[index] = std::clamp(trace[index] + injection * activity, -0.25f, 0.25f);
+                    const float gradient = activations_[src](it.col()) * adjoint[dst](it.row());
+                    if (std::isfinite(gradient))
+                        trace[index] = std::clamp(trace[index] + injection * gradient, -0.25f, 0.25f);
                 }
             }
         }
@@ -511,4 +542,19 @@ void Brain::rebuild_genome_from_weights() {
 
     learned_genome_ = std::make_shared<Genome>(std::move(genes), Genome::encoding_from_config(*config_));
     learned_genome_dirty_ = false;
+}
+
+void Brain::edit_weight(unsigned src, unsigned dst, unsigned col, unsigned row, float value) {
+    if (src >= num_layers_ || dst >= num_layers_ || src >= dst || !std::isfinite(value) || std::abs(value) > 4)
+        throw std::invalid_argument("Invalid weight edit");
+    auto& matrix = M_[src * num_layers_ + dst];
+    for (int k = 0; k < matrix.outerSize(); ++k)
+        for (Eigen::SparseMatrix<float>::InnerIterator it(matrix, k); it; ++it)
+            if (it.col() == col && it.row() == row) {
+                it.valueRef() = value;
+                learned_genome_dirty_ = true;
+                clear_eligibility_traces();
+                return;
+            }
+    throw std::invalid_argument("Only existing connections can be edited");
 }

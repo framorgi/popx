@@ -29,7 +29,7 @@ struct BrainLearningStats {
 ///   h[0]   = sensor values
 ///   h[k]   = σ( Σ_{j<k} M[j,k] · h[j] )   for k = 1..H   (hidden layers)
 ///   h[H+1] = σ( Σ_{j<H+1} M[j,H+1] · h[j] ) (output layer)
-///   action = unique argmax( h[H+1] ); neutral/tied outputs produce DO_NOTHING.
+///   action = argmax( h[H+1] ); active ties rotate fairly, fully neutral outputs produce DO_NOTHING.
 ///
 /// Skip connections (src layer j → any deeper layer k > j) are supported.
 /// Gene type encoding: 0=SENSOR, 1..H=HIDDEN_1..H, 7=OUTPUT (always 7).
@@ -41,6 +41,7 @@ class IBrain {
     virtual ~IBrain() = default;
 
     /// @brief Populates weight matrices W, V, D from a genome.
+    virtual void edit_weight(unsigned, unsigned, unsigned, unsigned, float) { throw std::runtime_error("Editing unsupported"); }
     virtual void wire(const Genome& genome) = 0;
 
     /// @brief Runs a forward pass.
