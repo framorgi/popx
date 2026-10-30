@@ -2,6 +2,7 @@
 
 enum class ResourceOverlay {
     None = 0,
+    Terrain,
     Temperature,
     Glucose,
     Water,
@@ -9,7 +10,8 @@ enum class ResourceOverlay {
     CarbonDioxide,
     Lipids,
     Nitrogen,
-    CalciumCarbonate
+    CalciumCarbonate,
+    Population
 };
 
 ///--------------------------------------------------------------------------
@@ -19,12 +21,12 @@ enum class ResourceOverlay {
 struct RenderFlags {
     bool operator==(const RenderFlags&) const = default;
     bool show_entities = true;
-    bool show_glucose = true;
+    bool show_glucose = false;
     bool show_temperature = false;
-    bool show_feromone_food = true;
-    bool show_feromone_danger = true;
-    bool show_feromone_mate = true;
-    bool show_feromone_home = true;
+    bool show_feromone_food = false;
+    bool show_feromone_danger = false;
+    bool show_feromone_mate = false;
+    bool show_feromone_home = false;
 
     // Active map overlay selected from GUI combobox.
     ResourceOverlay active_overlay = ResourceOverlay::None;

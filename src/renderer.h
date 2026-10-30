@@ -96,7 +96,7 @@ class Renderer : public IRenderer {
     /// @param    temperature The temperature value
     /// @return   Color corresponding to the temperature
     ///--------------------------------------------------------------------------
-    static Color evaluate_temperature_color(double temperature);
+    Color evaluate_temperature_color(double temperature) const;
 
     ///--------------------------------------------------------------------------
     /// @brief    Evaluates color based on elevation
@@ -170,6 +170,10 @@ class Renderer : public IRenderer {
     std::vector<IGraphicEngine::EntityVertex> resource_layer_;
 
     RenderFlags flags_;
+    Color background_, muted_, accent_, cold_, warm_, hot_;
+    std::array<Color, 7> resource_colors_;
+    std::array<Color, 4> pheromone_colors_;
+    std::vector<unsigned> density_prefix_;
     uint64_t revision_ = 0;
     bool dirty_ = true;
 

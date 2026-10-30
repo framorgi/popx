@@ -1,9 +1,10 @@
 #include "renderer.h"
-#include <array>
 
 #include "common.h"
+#include "design_system.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace {
@@ -66,12 +67,24 @@ void Renderer::draw() {
 
     gfx_->draw_quads(map_layer_);
 
-    if (flags_.show_glucose || flags_.active_overlay != ResourceOverlay::None) {
+    if (flags_.show_glucose || (flags_.active_overlay >= ResourceOverlay::Glucose &&
+                                flags_.active_overlay <= ResourceOverlay::CalciumCarbonate)) {
         gfx_->draw_triangles(resource_layer_);
     }
 
     gfx_->draw_triangles(feromone_layer_);
     gfx_->draw_triangles(entity_layer_);
+    auto sfml = std::dynamic_pointer_cast<SfmlGraphicEngine>(gfx_);
+    if (DesignSystem::settings.value("grid", false) && sfml && sfml->zoom() >= 4) {
+        auto line = DesignSystem::color("line");
+        line.a = 90;
+        for (int x = 0; x <= world_width_; ++x)
+            gfx_->draw_line({float(x * cell_render_size), 0},
+                            {float(x * cell_render_size), float(world_height_ * cell_render_size)}, line, .3f);
+        for (int y = 0; y <= world_height_; ++y)
+            gfx_->draw_line({0, float(y * cell_render_size)},
+                            {float(world_width_ * cell_render_size), float(y * cell_render_size)}, line, .3f);
+    }
 }
 
 void Renderer::save_frame() {
@@ -79,6 +92,29 @@ void Renderer::save_frame() {
 }
 
 void Renderer::update_world() {
+    background_ = DesignSystem::color("bg");
+    muted_ = DesignSystem::color("muted");
+    accent_ = DesignSystem::color("accent");
+    cold_ = DesignSystem::color("cold");
+    warm_ = DesignSystem::color("warm");
+    hot_ = DesignSystem::color("hot");
+    const char* names[] = {"glucose", "water", "oxygen", "co2", "lipids", "nitrogen", "calcium"};
+    for (unsigned i = 0; i < 7; ++i)
+        resource_colors_[i] = DesignSystem::hex(DesignSystem::tokens.at("resources").at(names[i]));
+    pheromone_colors_ = {warm_, DesignSystem::color("red"), accent_, cold_};
+    if (flags_.active_overlay == ResourceOverlay::Population) {
+        const unsigned stride = world_width_ + 1;
+        density_prefix_.assign(stride * (world_height_ + 1), 0);
+        for (int y = 0; y < world_height_; ++y)
+            for (int x = 0; x < world_width_; ++x) {
+                auto occupant = world_->get_cell(y * world_width_ + x)->get_occupant().lock();
+                unsigned value =
+                    occupant && std::holds_alternative<PopVisualData>(occupant->get_render_state().payload);
+                density_prefix_[(y + 1) * stride + x + 1] = value + density_prefix_[y * stride + x + 1] +
+                                                            density_prefix_[(y + 1) * stride + x] -
+                                                            density_prefix_[y * stride + x];
+            }
+    }
     for (int x = 0; x < world_width_; ++x) {
         for (int y = 0; y < world_height_; ++y) {
             auto cell = world_->get_cell(y * world_width_ + x);
@@ -101,6 +137,20 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
 
     RenderState rs = entity->get_render_state();
     PositionT pos = {static_cast<int>(rs.position.x), static_cast<int>(rs.position.y)};
+    if (std::holds_alternative<ReaperVisualData>(rs.payload)) {
+        const float cx = cell_render_size * (pos.x + .5f), cy = cell_render_size * (pos.y + .5f);
+        auto octagon = [&](float radius, Color color) {
+            for (int i = 0; i < 8; ++i) {
+                const float a = (i + .5f) * PI / 4, b = (i + 1.5f) * PI / 4;
+                for (Vec2 p : {Vec2{cx, cy}, Vec2{cx + radius * std::cos(a), cy + radius * std::sin(a)},
+                               Vec2{cx + radius * std::cos(b), cy + radius * std::sin(b)}})
+                    entity_layer_.push_back({p, color});
+            }
+        };
+        octagon(cell_render_size * .67f, Color(252, 190, 168));
+        octagon(cell_render_size * .53f, Color(83, 17, 33));
+        return;
+    }
     if (std::holds_alternative<SourceVisualData>(rs.payload)) {
         // A bordered black diamond distinguishes Source from circular/triangular Pops.
         const float cx = cell_render_size * (pos.x + 0.5f);
@@ -108,22 +158,23 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
         auto diamond = [&](float radius, Color color) {
             const Vec2 top{cx, cy - radius}, right{cx + radius, cy};
             const Vec2 bottom{cx, cy + radius}, left{cx - radius, cy};
-            for (const auto& triangle : {std::array<Vec2, 3>{top, right, bottom},
-                                          std::array<Vec2, 3>{top, bottom, left}})
-                for (const auto& vertex : triangle) entity_layer_.push_back({vertex, color});
+            for (const auto& triangle :
+                 {std::array<Vec2, 3>{top, right, bottom}, std::array<Vec2, 3>{top, bottom, left}})
+                for (const auto& vertex : triangle)
+                    entity_layer_.push_back({vertex, color});
         };
         diamond(cell_render_size * 0.58f, Color(235, 235, 235));
         diamond(cell_render_size * 0.48f, Color(0, 0, 0));
         return;
     }
     if (auto pop = std::get_if<PopVisualData>(&rs.payload)) {
-        float cx = cell_render_size * pos.x + cell_render_size * rs.size / 2;
-        float cy = cell_render_size * pos.y + cell_render_size * rs.size / 2;
-        float radius = cell_render_size * rs.size / 2;
+        float cx = cell_render_size * (pos.x + .5f);
+        float cy = cell_render_size * (pos.y + .5f);
+        float radius = cell_render_size * rs.size / 2 * DesignSystem::settings.value("agent_scale", .85f);
 
         if (pop->is_photosynthetic) {
             // draw simple triangle for photosynthetic entities
-            for (int i = 0; i < 3; ++i) {
+            for (int i = 0; i < 1; ++i) {
                 float a0 = (i / static_cast<float>(3)) * 2.f * PI;
                 float a1 = ((i + 1) / static_cast<float>(3)) * 2.f * PI;
 
@@ -153,123 +204,100 @@ void Renderer::update_entity(const std::shared_ptr<IEntity>& entity) {
 }
 
 void Renderer::update_cell(const std::shared_ptr<ICell>& cell, int x, int y) {
-    constexpr float PI = 3.14159265359f;
-    int idx = y * world_width_ + x;
-
-    // get the render state from the cell
-    auto rs = cell->get_render_state();
-    // get payload data
-
-    if (auto cell_data = std::get_if<CellVisualData>(&rs.payload)) {
-        auto& q = map_layer_[idx];
-
-        Color temperature_color = evaluate_temperature_color(cell->get_temperature());
-        double elevation = cell_data->elevation;
-        Color ground_color = evaluate_ground_color(elevation);
-
-        q.color = flags_.show_temperature
-                      ? temperature_color
-                      : apply_highlighting(blend_colors(ground_color, temperature_color, 0.1), elevation);
-
-        auto add_resource_blob = [&](double intensity, const Color& color) {
-            if (intensity <= 0.0) {
-                return;
-            }
-            float cx = cell_render_size * static_cast<float>(x) + cell_render_size;
-            float cy = cell_render_size * static_cast<float>(y) + cell_render_size;
-            float radius = std::max(0.8f, static_cast<float>(cell_render_size * intensity * 0.24));
-
-            for (int i = 0; i < GLUCOSE_SEGMENTS; ++i) {
-                const auto& circle = unit_circle<GLUCOSE_SEGMENTS>();
-
-                Vec2 center{cx, cy};
-                Vec2 p0{cx + circle[i].x * radius, cy + circle[i].y * radius};
-                Vec2 p1{cx + circle[i + 1].x * radius, cy + circle[i + 1].y * radius};
-
-                resource_layer_.push_back({center, color});
-                resource_layer_.push_back({p0, color});
-                resource_layer_.push_back({p1, color});
-            }
-        };
-
-        const auto organics = cell->get_organics();
-        const auto overlay = flags_.active_overlay;
-        switch (overlay) {
-            case ResourceOverlay::Temperature:
-                if (flags_.filter_temperature)
-                    add_resource_blob(std::clamp(cell->get_temperature() / 100.0, 0.0, 1.0), Color(255, 80, 30, 140));
-                break;
-            case ResourceOverlay::Glucose:
-                if (flags_.filter_glucose)
-                    add_resource_blob(static_cast<double>(organics.c6h12o6) / MaxC6h12o6, Color(20, 20, 20, 140));
-                break;
-            case ResourceOverlay::Water:
-                if (flags_.filter_water)
-                    add_resource_blob(static_cast<double>(organics.h2o) / MaxH2o, Color(40, 120, 255, 140));
-                break;
-            case ResourceOverlay::Oxygen:
-                if (flags_.filter_oxygen)
-                    add_resource_blob(static_cast<double>(organics.o2) / MaxO2, Color(120, 235, 255, 140));
-                break;
-            case ResourceOverlay::CarbonDioxide:
-                if (flags_.filter_co2)
-                    add_resource_blob(static_cast<double>(organics.co2) / MaxCo2, Color(180, 120, 120, 140));
-                break;
-            case ResourceOverlay::Lipids:
-                if (flags_.filter_lipids)
-                    add_resource_blob(static_cast<double>(organics.lipids) / MaxLipids, Color(255, 200, 30, 140));
-                break;
-            case ResourceOverlay::Nitrogen:
-                if (flags_.filter_nitrogen)
-                    add_resource_blob(static_cast<double>(organics.n2) / MaxN2, Color(180, 255, 180, 140));
-                break;
-            case ResourceOverlay::CalciumCarbonate:
-                if (flags_.filter_caco3)
-                    add_resource_blob(static_cast<double>(organics.caco3) / MaxCaco3, Color(220, 220, 220, 140));
-                break;
-            case ResourceOverlay::None:
-                if (flags_.show_glucose && flags_.filter_glucose) {
-                    add_resource_blob(static_cast<double>(organics.c6h12o6) / MaxC6h12o6, Color(20, 20, 20, 140));
-                }
-                break;
-            default:
-                break;
+    auto& quad = map_layer_[y * world_width_ + x];
+    const auto organics = cell->get_organics();
+    const auto elevation = std::clamp(cell->get_elevation() / 100., 0., 1.);
+    const auto base = blend_colors(background_, muted_, .08 + .75 * elevation);
+    quad.color = base;
+    auto overlay = flags_.active_overlay;
+    if (overlay == ResourceOverlay::None && flags_.show_temperature)
+        overlay = ResourceOverlay::Temperature;
+    if (overlay == ResourceOverlay::None && flags_.show_glucose)
+        overlay = ResourceOverlay::Glucose;
+    double intensity = 0;
+    int resource = -1;
+    switch (overlay) {
+        case ResourceOverlay::Terrain:
+            quad.color = evaluate_ground_color(cell->get_elevation());
+            break;
+        case ResourceOverlay::Temperature:
+            quad.color = evaluate_temperature_color(cell->get_temperature());
+            break;
+        case ResourceOverlay::Glucose:
+            intensity = double(organics.c6h12o6) / MaxC6h12o6;
+            resource = 0;
+            break;
+        case ResourceOverlay::Water:
+            intensity = double(organics.h2o) / MaxH2o;
+            resource = 1;
+            break;
+        case ResourceOverlay::Oxygen:
+            intensity = double(organics.o2) / MaxO2;
+            resource = 2;
+            break;
+        case ResourceOverlay::CarbonDioxide:
+            intensity = double(organics.co2) / MaxCo2;
+            resource = 3;
+            break;
+        case ResourceOverlay::Lipids:
+            intensity = double(organics.lipids) / MaxLipids;
+            resource = 4;
+            break;
+        case ResourceOverlay::Nitrogen:
+            intensity = double(organics.n2) / MaxN2;
+            resource = 5;
+            break;
+        case ResourceOverlay::CalciumCarbonate:
+            intensity = double(organics.caco3) / MaxCaco3;
+            resource = 6;
+            break;
+        case ResourceOverlay::Population: {
+            const unsigned stride = world_width_ + 1;
+            const int x0 = std::max(0, x - 2), y0 = std::max(0, y - 2), x1 = std::min(world_width_, x + 3),
+                      y1 = std::min(world_height_, y + 3);
+            const auto occupied = density_prefix_[y1 * stride + x1] + density_prefix_[y0 * stride + x0] -
+                                  density_prefix_[y1 * stride + x0] - density_prefix_[y0 * stride + x1];
+            quad.color = blend_colors(base, accent_, double(occupied) / ((x1 - x0) * (y1 - y0)));
+            break;
         }
-
-        auto add_feromone_layer = [&](double intensity, const Color& feromone_color) {
-            if (intensity == 0.0) {
-                return;
-            }
-            float cx = cell_render_size * static_cast<float>(x) + cell_render_size;
-            float cy = cell_render_size * static_cast<float>(y) + cell_render_size;
-            float radius = cell_render_size * static_cast<float>(intensity) / 1.7f;
-
-            for (int i = 0; i < FEROMONE_SEGMENTS; ++i) {
-                const auto& circle = unit_circle<FEROMONE_SEGMENTS>();
-
-                Vec2 center{cx, cy};
-                Vec2 p0{cx + circle[i].x * radius, cy + circle[i].y * radius};
-                Vec2 p1{cx + circle[i + 1].x * radius, cy + circle[i + 1].y * radius};
-
-                feromone_layer_.push_back({center, feromone_color});
-                feromone_layer_.push_back({p0, feromone_color});
-                feromone_layer_.push_back({p1, feromone_color});
-            }
-        };
-
-        // CellVisualData keeps the legacy order: A=DANGER, B=FOOD.
-        if (flags_.show_feromone_food)
-            add_feromone_layer(cell_data->feromones_b,
-                               Color(255, 0, 100, static_cast<uint8_t>(cell_data->feromones_b * 200)));
-        if (flags_.show_feromone_danger)
-            add_feromone_layer(cell_data->feromones_a,
-                               Color(55, 240, 200, static_cast<uint8_t>(cell_data->feromones_a * 200)));
-        if (flags_.show_feromone_mate)
-            add_feromone_layer(cell_data->feromones_c,
-                               Color(55, 220, 0, static_cast<uint8_t>(cell_data->feromones_c * 200)));
-        if (flags_.show_feromone_home)
-            add_feromone_layer(cell_data->feromones_d,
-                               Color(0, 10, 100, static_cast<uint8_t>(cell_data->feromones_d * 200)));
+        default:
+            break;
+    }
+    auto add_quad = [&](std::vector<IGraphicEngine::EntityVertex>& vertices, float x0, float y0, float x1,
+                        float y1, Color color) {
+        const Vec2 a{x0, y0}, b{x1, y0}, c{x1, y1}, d{x0, y1};
+        for (const Vec2 point : {a, b, c, a, c, d}) vertices.push_back({point, color});
+    };
+    if (resource >= 0 && intensity > 0) {
+        const float side = cell_render_size * .5f;
+        const float x0 = cell_render_size * (x + .5f) - side / 2;
+        const float y0 = cell_render_size * (y + .5f) - side / 2;
+        auto color = resource_colors_[resource];
+        color.a = clamp_u8(40 + int(215 * std::clamp(intensity, 0., 1.)));
+        add_quad(resource_layer_, x0, y0, x0 + side, y0 + side, color);
+    }
+    if (!flags_.show_feromone_food && !flags_.show_feromone_danger && !flags_.show_feromone_mate &&
+        !flags_.show_feromone_home)
+        return;
+    const auto pheromones = cell->get_feromone_map();
+    const bool enabled[] = {flags_.show_feromone_food, flags_.show_feromone_danger, flags_.show_feromone_mate,
+                            flags_.show_feromone_home};
+    for (unsigned i = 0; i < 4; ++i) {
+        if (!enabled[i]) continue;
+        const double strength = std::clamp(double(pheromones.at(static_cast<FeromoneT>(i))) / MaxFeromones, 0., 1.);
+        if (strength <= .001) continue;
+        // Eight vertices give each pheromone marker softly clipped, rounded corners.
+        const float cx = cell_render_size * (x + (i % 2 ? .73f : .27f));
+        const float cy = cell_render_size * (y + (i / 2 ? .73f : .27f));
+        const float r = cell_render_size * .20f, cut = r * .38f;
+        const std::array<Vec2, 8> ring{{{cx-r+cut,cy-r},{cx+r-cut,cy-r},{cx+r,cy-r+cut},
+                                        {cx+r,cy+r-cut},{cx+r-cut,cy+r},{cx-r+cut,cy+r},
+                                        {cx-r,cy+r-cut},{cx-r,cy-r+cut}}};
+        auto color = pheromone_colors_[i];
+        color.a = clamp_u8(50 + int(205 * strength));
+        for (unsigned k = 0; k < ring.size(); ++k)
+            for (Vec2 point : {Vec2{cx,cy}, ring[k], ring[(k+1)%ring.size()]})
+                feromone_layer_.push_back({point, color});
     }
 }
 
@@ -295,33 +323,10 @@ void Renderer::present() {
     gfx_->display();
 }
 
-Color Renderer::evaluate_temperature_color(double temperature) {
-    // Define key intervals
-    if (temperature <= 0) {
-        return {0, 0, 255}; // Dark blue for low temperatures
-    }
-    if (temperature <= 10) {
-        float factor = temperature / 10.0f;
-        return {0, static_cast<int>(255 * factor), 255}; // From blue to cyan
-    }
-    if (temperature <= 20) {
-        float factor = (temperature - 10) / 10.0f;
-        return {0, 255, static_cast<int>(255 * (1 - factor))}; // From cyan to green
-    }
-    if (temperature <= 30) {
-        float factor = (temperature - 20) / 10.0f;
-        return {0, 255, static_cast<int>(255 * factor)}; // From green to yellow
-    }
-    if (temperature <= 40) {
-        float factor = (temperature - 30) / 10.0f;
-        return {255, static_cast<int>(255 * (1 - factor)), 0}; // From yellow to red
-    } else {
-        return {255, 0, 0}; // Dark red for high temperatures
-    }
-}
-
-uint8_t Renderer::clamp_u8(int value) {
-    return static_cast<uint8_t>(std::clamp(value, 0, 255));
+Color Renderer::evaluate_temperature_color(double temperature) const {
+    if (temperature <= 30)
+        return color_interpolate(cold_, warm_, std::clamp(temperature / 30., 0., 1.));
+    return color_interpolate(warm_, hot_, std::clamp((temperature - 30) / 30., 0., 1.));
 }
 
 Color Renderer::color_interpolate(const Color& a, const Color& b, double t) {
@@ -330,23 +335,15 @@ Color Renderer::color_interpolate(const Color& a, const Color& b, double t) {
 }
 
 Color Renderer::evaluate_ground_color(double elevation) {
-    Color base;
-    // RandomUtility rand_util;
-
-    for (int i = 0; i < ground_color_levels.size() - 1; ++i) {
-        if (elevation >= ground_color_levels[i].height && elevation <= ground_color_levels[i + 1].height) {
-            // float t = (elevation - ground_color_levels[i].height) /
-            //(ground_color_levels[i + 1].height - ground_color_levels[i].height);
-            // base = color_interpolate(ground_color_levels[i].color, ground_color_levels[i + 1].color, t);
-            base = ground_color_levels[i].color;
-            break;
-        } else {
-            base = ground_color_levels[9].color;
+    const double clamped = std::clamp(elevation, ground_color_levels.front().height,
+                                      ground_color_levels.back().height);
+    for (size_t i = 1; i < ground_color_levels.size(); ++i)
+        if (clamped <= ground_color_levels[i].height) {
+            const auto& low = ground_color_levels[i - 1];
+            const auto& high = ground_color_levels[i];
+            return color_interpolate(low.color, high.color, (clamped - low.height) / (high.height - low.height));
         }
-    }
-
-    const int noise = 5; // intensità controllata
-    return base;
+    return ground_color_levels.back().color;
 }
 
 Color Renderer::blend_colors(const Color& base_color, const Color& blend_color, double factor) {
@@ -372,4 +369,7 @@ Color Renderer::apply_highlighting(const Color& color, double height) {
     return Color(static_cast<uint8_t>(std::clamp(color.r * lighting, 0.0, 255.0)),
                  static_cast<uint8_t>(std::clamp(color.g * lighting, 0.0, 255.0)),
                  static_cast<uint8_t>(std::clamp(color.b * lighting, 0.0, 255.0)));
+}
+uint8_t Renderer::clamp_u8(int value) {
+    return static_cast<uint8_t>(std::clamp(value, 0, 255));
 }
