@@ -74,3 +74,7 @@ desktop.ini
 .venv/
 dashboard/static/vendor/
 __pycache__/
+
+# Local shared frontend preferences
+/config/appearance.json
+/config/appearance.json.tmp

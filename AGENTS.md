@@ -60,7 +60,12 @@ superate dagli interventi autorizzati descritti sotto.
   Dimensioni extra non implementano nuovi sensori/azioni. Rewire viventi non automatico.
 - Eredità dei pesi appresi **true**, esplicitamente richiesta dall'utente: preservarla.
   Mutazione INI0,01, applicata anche ai tratti PHY. Distinguere dai default Config.
-- Scorer individuale: reward ecologico, baseline mobile e segnale relativo; parametri learning in INI.
+- GUI/web condividono token ed etichette in `dashboard/static/design.json`. Preferenze
+  `appearance.json` accanto all’INI; comandi runtime whitelistati in `Config::runtime_schema`,
+  atomici sul thread simulatore. Override inclusi nei checkpoint, audit in SQLite.
+  Sandbox spawn/cella/peso solo in pausa; stepping 1–10000 tick in batch <=8.
+- Scorer individuale: cinque pesi reward configurabili e normalizzati (default invariati),
+  baseline mobile e segnale relativo; parametri learning in INI.
   Tracce registrate in act, uscita scelta e attività hidden; decadono ogni tick. Baseline/tracce
   non ereditarie; pesi appresi ereditati. Stats conserva cumulativi dei morti e medie istantanee dei vivi.
 - Cap configurabile, 360 vivi nell'INI distribuito; telemetria separa idoneità agente×tick al cap, tentativi senza spazio e nascite.
@@ -77,7 +82,9 @@ superate dagli interventi autorizzati descritti sotto.
   Non introdurre scritture condivise nelle fasi parallele; snapshot non autorizzano
   accesso concorrente alla simulazione senza sincronizzazione.
 - `grid_world/cell`: occupanti weak_ptr, capacità finite, risorse/campi RBF,
-  ossigeno rigenerato localmente e due Source fisiche mobili per il glucosio;
+  ossigeno rigenerato localmente e due Source fisiche mobili per il glucosio.
+  Un Reaper fisico predefinito cerca saltuariamente Pop maturi, segnala su
+  DANGER e può uccidere nella cella davanti dopo un intervallo configurabile;
   feromoni additivi0…100, decadimento0,9995/tick, nessuna diffusione.
   Per cancellare un campo usare delta negativo del valore presente.
   Canali FOOD/DANGER/MATE/HOME non impongono significati o cooperazione.
@@ -91,7 +98,8 @@ superate dagli interventi autorizzati descritti sotto.
 - Statistiche GUI dei vivi non descrivono vite completate. Registrare eventi dei morti.
 - sexual_reproduction, inserzione/delezione, choose_parents_by_fitness,
   max_generations e reload @N non controllano i rispettivi comportamenti applicativi.
-  steps_per_generation scala età/oscillatore; non scandisce le nascite.
+  steps_per_generation scala l'oscillatore; il sensore età usa
+  log1p(age)/log1p(MaxAge). Non scandisce le nascite.
 - `old/popw/` è archivio locale estraneo: non modificarlo né usarlo come prova o
   includerlo nei commit. Conservare modifiche utente estranee come il layout imgui.ini.
 

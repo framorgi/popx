@@ -7,6 +7,432 @@ limiti originali; non descrivono automaticamente il modello attuale.
 The [README](../README.md) covers the project, features, mathematical model, architecture,
 and setup. Validation status and audit records remain in this document.
 
+## Stato corrente — credito neurale e parità attive, 30 ottobre 2026
+
+Tre modifiche applicate al metodo esistente, senza actor-critic o nuovo reward:
+
+1. `learning_trace_decay` passa da `0,97` a `0,99` nell'INI distribuito,
+   nel default C++ e nello schema runtime. La semivita è ora circa 69 tick
+   (23 decisioni), contro 22,8 tick prima. Un singolo credito conserva
+   `0,99^300≈4,9%` dopo 300 tick, contro `0,97^300≈0,011%` prima.
+   L'iniezione per azione resta `1-λ³`, quindi il valore stazionario di una
+   traccia ripetuta resta normalizzato; l'effetto immediato di una singola
+   azione è circa un terzo del precedente. È un'estensione intermedia del
+   credito, non un obiettivo di lungo termine.
+2. `Brain::record_action` propaga all'indietro la derivata dell'uscita scelta
+   attraverso tutti i livelli e le connessioni che saltano livelli. Ogni
+   arco esistente riceve `q=h_src·∂h_scelta/∂z_dst` nella sua traccia; i rami
+   senza percorso verso quell'uscita ricevono zero nuovo credito. Il segnale
+   del `Scorer` continua a modulare la traccia e il decadimento dei pesi resta
+   separato. La derivata è quella dell'attivazione selezionata, non un
+   policy gradient o un valore futuro. Con reward positivo e decadimento
+   disabilitato, la sola componente plastica aumenta localmente l'uscita
+   scelta; con decadimento attivo il cambiamento netto può ancora essere
+   negativo quando la regolarizzazione prevale.
+3. Un massimo condiviso **sopra 0,5** viene risolto ruotando fra gli attuatori
+   a pari punteggio. Se `DO_NOTHING` è in parità con un'altra azione attiva,
+   viene scelta quest'ultima. Un massimo condiviso a `0,5` o meno e una rete
+   completamente neutra restano in attesa: non c'è un segnale positivo per
+   scegliere un'azione arbitraria. Il cursore di rotazione è per Brain,
+   inizializzato in modo distribuito e salvato nei checkpoint; i checkpoint
+   vecchi senza il campo sono compatibili. `record_action` non inietta nuovo
+   credito dopo un output completamente neutro.
+
+**Verifica matematica.** Nuova regressione `credit_gradient`: differenze
+finite su sensori→hidden, hidden→hidden, hidden→output, skip sensori→output e
+ramo scollegato coincidono con il gradiente usato per il credito; un reward
+positivo aumenta e uno negativo diminuisce l'uscita scelta nelle fixture
+senza decadimento. Riproduce anche il precedente controesempio con uscita
+vicina al limite: ora il reward positivo aumenta l'uscita. Le regressioni
+`neural_policy`, `learning_evolution` e checkpoint passano, così come l'intera
+`scripts/run_regressions.sh` (21 test standalone); il roundtrip conserva il
+cursore di parità. Nessuna suite CTest è stata usata.
+
+**Pilot di impatto.** Tre prosecuzioni headless di circa 4.100 tick dalla
+stessa snapshot completa `403dbdf0a1374bd7af058b690d996097`, 954 Pop,
+con storici separati in `/tmp/popx-credit-fix-pilot/` e protocollo in
+`data_out/audit/learning_credit_fix_20261030/`. Le RNG non sono globalmente
+deterministiche: una replica per versione rileva anomalie grandi, non
+piccole differenze di fitness.
+
+| Versione | Vivi finali | Attesa | Movimenti riusciti | Nascite | Morti termiche |
+|---|---:|---:|---:|---:|---:|
+| Precedente, `λ=0,97` | 965 | 39,74% | 357 | 238 | 9 |
+| Parità anche a `0,5`, `λ=0,99` | 975 | 13,27% | 7.276 | 508 | 150 |
+| Finale, parità solo sopra `0,5`, `λ=0,99` | 959 | 39,02% | 399 | 249 | 6 |
+
+La seconda variante è stata scartata: sceglieva attuatori privi di drive
+positivo e provocava forte mortalità termica. La versione finale non mostra
+quell'anomalia; le differenze rispetto al controllo sono troppo piccole per
+dedurre un vantaggio ecologico in 4.100 tick. Nel pilot il tempo medio di tick
+era 7.687 µs nel controllo e 7.703 µs nella versione finale; la misura è
+indicativa perché le traiettorie e il carico della run principale variavano.
+
+La run produttiva `1793312533715657104-3949809628` è stata messa in pausa
+al tick 9.404.377, con 907 Pop; l'override runtime a `0,99` ha azzerato le
+tracce e la baseline come previsto, preservando i pesi appresi. Checkpoint
+manuale completo e verificato `97c12c1a69f543a78be310aff7a83de7`.
+Il vecchio launcher è stato chiuso; il nuovo binario ha ripristinato i 907
+Pop, ambiente e pesi in una nuova run `1793357788241855483-2943288720`,
+tick 0 con età e tempo ambientale conservati. Nuova run `running`, GUI e
+dashboard connesse, storico precedente conservato. I pilot sono terminati.
+Monitorare su intervalli lunghi discendenza, sopravvivenza, plasticità,
+movimenti riusciti e morti termiche; la validazione matematica non prova da
+sola un miglioramento evolutivo.
+
+## Audit precedente — review formale dell'apprendimento, 30 ottobre 2026
+
+Questa review descrive il metodo **prima** delle tre modifiche riportate
+sopra; è conservata come diagnosi e protocollo del problema originale.
+
+**Classificazione.** La rete individuale è feedforward sparsa e sceglie il
+massimo unico delle uscite sigmoidali; parità e uscita neutra producono
+`DO_NOTHING`. L'adattamento dei pesi è una **plasticità hebbiana locale a tre
+fattori**, modulata da un segnale di ricompensa relativo a una media mobile e
+da tracce di eleggibilità. Non è backpropagation, policy gradient, Q-learning
+o TD learning. I pesi appresi sono ricostruiti nel genoma e trasmessi ai figli
+(`hebbian_inheritance=true`): la simulazione combina plasticità individuale e
+selezione evolutiva con eredità lamarckiana dei pesi. La ricompensa del `Scorer`
+non seleziona direttamente i riproduttori: la riproduzione ordinaria richiede
+età, energia, glucosio e spazio. `Scorer::selection` opera solo nel NewGen,
+attualmente disabilitato nella run osservata.
+
+Per input sensoriale `s_t`, ogni livello attivo calcola
+`h_l=σ(Σ_{k<l} W_{kl}h_k)` e l'azione `a_t` è l'indice del massimo unico
+in `h_output`. Il punteggio corrente `r_t∈[-1,1]` è la somma dei cinque
+componenti pesati e normalizzati: età cumulativa, livello di energia, sua
+variazione dall'ultimo tick, numero cumulativo di figli e vicinanza termica
+all'ottimo. Se `b_t` è la baseline precedente, il segnale è
+`δ_t=clip(r_t-b_t,-1,1)`, poi `b_{t+1}=b_t+α(r_t-b_t)`; la prima osservazione
+inizializza `b` e produce `δ=0`. Nella run osservata `α=0,01`, quindi la
+baseline ha semivita di circa 69 tick.
+
+Quando un'azione viene eseguita, una connessione verso l'uscita scelta riceve
+`q=pre·post·(1-post)`; una connessione verso un neurone nascosto riceve
+`q=(pre-0,5)(post-0,5)` indipendentemente dal percorso verso l'uscita scelta.
+Le altre uscite non ricevono nuovo credito. La traccia diventa
+`e←clip(e+(1-λ³)q,-0,25,0,25)` una volta per azione; ogni tick viene eseguito
+`W←clip(W+ηδe-D(W),-4,4)` e poi `e←λe`, con decadimento `D` solo sopra il
+modulo minimo `1/8192`. Nella run `η=0,06`, `λ=0,97` e il coefficiente di
+decadimento è `0,00003`. L'azione avviene circa ogni tre tick per Pop, mentre
+fisiologia, baseline e aggiornamento dei pesi avvengono ogni tick. La traccia
+ha semivita di 22,8 tick, circa 7,6 decisioni o 0,23 secondi simulati; dopo
+300 tick conserva `0,97^300≈0,0001075` della sua ampiezza, dopo 1.000 tick
+circa `5,9·10⁻¹⁴`.
+
+**Verifiche.** Le regressioni standalone `learning_evolution` e
+`neural_policy` passano: baseline, segno del segnale, credito ritardato,
+uscita non scelta, reset delle tracce, decadimento, fallback ed eredità.
+Fixture diagnostica deterministica in
+`data_out/audit/learning_review_20261030/learning_probe.cpp`: ha riprodotto
+le due attenuazioni `0,97^300` e `0,97^1000`; un arco verso un neurone nascosto
+senza percorso verso l'uscita scelta ha guadagnato `0,000162899` con
+`δ=+1`; in una seconda rete l'uscita dell'azione premiata è scesa da
+`0,852109` a `0,852096`, perché la regola nascosta non segue la derivata della
+decisione. Una parità fra due uscite motorie ha eseguito il fallback e ha
+rafforzato il collegamento dell'uscita `DO_NOTHING` di `0,00128964`.
+Un incremento cumulativo di un figlio ha prodotto un segnale iniziale
+`0,002` con i pesi standard della fixture, sceso sotto `10⁻⁶` dopo 1.000
+osservazioni costanti. Una morte per energia zero non ha chiamato né
+`Scorer::observe` né `Brain::hebbian_update`. Una perdita di energia fra due
+chiamate a `Pop::update()` ha dato componente `Δenergia=0` al tick seguente:
+`previous_energy_` viene infatti sovrascritta all'inizio di
+`update_physiology()`. Questo riguarda il costo fisso e l'energia donata
+durante la riproduzione, processata dopo l'update del genitore; il livello di
+energia resta invece inferiore e quindi è osservato. I valori delle fixture provano
+il comportamento del codice, non l'efficacia ecologica delle politiche.
+
+**Debolezze rilevanti.** (1) Il credito è troppo breve per catene di
+esplorazione, acquisizione, migrazione e riproduzione che richiedono centinaia
+o migliaia di tick. (2) Il termine di discendenza usa un conteggio cumulativo:
+ogni nascita aggiunge una componente positiva al punteggio che può accreditare
+anche le azioni successive; il costo riproduttivo può compensarla. La nascita
+è processata dopo l'aggiornamento del genitore e viene osservata dal `Scorer`
+al tick seguente. Una morte non crea un aggiornamento terminale. (3) La
+baseline è individuale ma non condizionata allo stato: una zona favorevole può
+rinforzare l'azione eseguita lì senza attribuirle causalità. (4) Il credito
+dei neuroni nascosti è una correlazione locale, non la derivata dell'effetto
+sull'uscita scelta; può aggiornare rami scollegati o ridurre l'uscita
+premiata. (5) La policy è un argmax deterministico; parità e neuroni senza
+influenza utile limitano l'esplorazione. Il fallback può rinforzare l'uscita
+di attesa anche quando l'attesa deriva dalla parità di altre uscite.
+(6) Il peso appreso viene ereditato, ma le baseline e le tracce sono azzerate:
+questo è intenzionale; l'efficacia transgenerazionale deve essere valutata
+separatamente. (7) Il termine `Δenergia` perde le variazioni avvenute fuori
+da `update_physiology()`, in particolare i trasferimenti e i costi della
+procreazione; correggere la misura su intervalli consecutivi prima di tarare
+i pesi del reward. La run reale al tick 9.203.400 aveva segnale medio `-0,00056`,
+deviazione standard `0,00854`, media del modulo `0,00290` e plasticità media
+per connessione `4,94·10⁻⁷` contro decadimento medio `3,73·10⁻⁷`.
+La media vicina a zero è in parte conseguenza della baseline e non dimostra
+assenza di aggiornamenti o miglioramento della fitness.
+
+**Alternative ordinate per rischio.** Prima: pilot isolato con doppia traccia
+breve/lunga ed eventi ecologici differiti, mantenendo la rete esistente; il
+credito lungo da solo rischia di associare la nascita a molte azioni estranee.
+Seconda, preferita per apprendimento strutturato: un piccolo **actor-critic**
+con valore `V(s)`, errore TD `δ=r+γV(s')-V(s)` (valore successivo zero alla
+morte), policy stocastica controllata e tracce del gradiente
+`∇log π(a|s)`. Usare esiti ecologici verificabili, senza ricompensa arbitraria
+del movimento, e confrontare figli sopravvissuti, durata di vita, energia,
+estinzioni e discendenza per agente×tick. Un orizzonte di 1.000 tick richiede
+`γ` vicino a `0,999`; scegliere tramite pilot, monitorando varianza e costo
+CPU. Terza: memoria neurale esplicita per compiti parzialmente osservabili,
+solo se il valore degli stati e la policy feedforward non bastano. La
+backpropagation avrebbe senso per addestrare actor e critic attraverso i
+livelli nascosti, in modo che il credito segua i percorsi che influenzano
+azione e valore. Con l'argmax attuale non esiste una derivata utile della
+scelta; aggiungere backprop senza una policy differenziabile, un obiettivo
+temporale e una gestione dell'esplorazione non risolverebbe il credito lungo.
+La backpropagation attraverso il tempo non è necessaria per iniziare con un
+critic feedforward; servirà solo se si introduce una memoria ricorrente.
+
+## Stato corrente — pilot fallback neurale e movimenti bloccati, 30 ottobre 2026
+
+Run produttiva `1793312533715657104-3949809628` lasciata in esecuzione.
+Checkpoint completo e verificato `71b7c37f5cd440a087b14ae08138507c`
+al tick 8.921.051, con 859 Pop. Il protocollo locale e gli strumenti sono in
+`data_out/audit/neural_movement_20261030/`; gli storici delle prove isolate sono
+in `/tmp/popx-neural-movement-pilot/`. Nessun parametro produttivo, reward o
+meccanismo di movimento è stato cambiato. L'ultima verifica della run reale
+mostrava `running` al tick 8.993.427, 848 vivi e zero messaggi persi.
+
+Nel checkpoint 288/859 Pop avevano come ultima azione `DO_NOTHING`: 126 erano
+uscite in parità e quindi fallback, 162 avevano un massimo unico sull'uscita
+di attesa. Di quei 126 fallback, 78 non avevano alcuna destinazione aperta e
+48 ne avevano almeno una. In totale 567/859 Pop non avevano nessuna delle otto
+destinazioni percorribile; per tutti esisteva almeno una destinazione con
+pendenza ammissibile, ma era occupata. Sulle 6.872 destinazioni campionate,
+4.239 erano occupate dopo il controllo di pendenza, 1.756 avevano salita
+eccessiva e nessuna era bloccata dal calcio. Su 353 Pop con ultimo movimento
+fallito, 97 avevano almeno una direzione alternativa aperta. Tutti i 272
+tentativi cardinali falliti indicavano `MOVE_OPEN=0` per la direzione chiesta:
+il sensore non appare invertito o stale in questo campione. 639/859 reti
+avevano almeno una connessione diretta non nulla da un ingresso `MOVE_OPEN` a
+un'uscita motoria; presenza della connessione non implica che sia dominante o
+usata correttamente. Nella finestra reale più recente di 20.000 tick,
+2.129.521 tentativi motori hanno prodotto 8.428 spostamenti (0,40%): la run
+è molto più bloccata di quanto suggerisca il solo 31,8% di azioni di attesa.
+
+Pilot headless dalla **stessa snapshot**, circa 6.100 tick per prova. Il
+confronto `fallback` aggiunge nei soli 48 Pop in parità con almeno una via
+aperta quattro piccoli collegamenti `MOVE_OPEN`→azione cardinale, con ordine
+ruotato per identità; le nuove connessioni possono poi essere ereditate.
+`open_hint` applica lo stesso suggerimento a tutti gli 859 Pop: è una prova di
+stress, non una proposta di policy. `sidestep` usa una build diagnostica
+temporanea: se la rete chiede un movimento bloccato, tenta una sola cella
+percorribile entro 90° dalla direzione voluta; entrambe le prove fisiche sono
+contate. I sorgenti e il binario produttivi sono stati ripristinati e ricompilati.
+
+| Prova | Vivi finali | Attesa | Spostamenti riusciti | Nascite naturali | Morti termiche |
+|---|---:|---:|---:|---:|---:|
+| Base 1 / 2 | 840 / 842 | 32,64% / 33,01% | 3.787 / 3.597 | 543 / 567 | 49 / 35 |
+| Fallback 1 / 2 | 840 / 831 | 31,76% / 31,39% | 13.356 / 9.328 | 577 / 581 | 81 / 80 |
+| Suggerimento a tutte le reti | 504 | 2,32% | 378.729 | 2.242 | 1.605 |
+| Ritentativo laterale | 807 | 36,02% | 17.238 | 871 | 408 |
+
+Sbloccare il fallback produce più passi, ma in due repliche non migliora la
+popolazione finale; le morti termiche aumentano. Favorire il movimento di tutti
+causa una forte contrazione dei vivi nonostante l'aumento delle nascite.
+Anche il ritentativo solo dopo una richiesta motoria fallita aumenta nascite e
+passi insieme a mortalità termica e ricambio. Il risultato suggerisce che la
+stasi è in larga parte una risposta alla scarsità di destinazioni fisicamente
+e termicamente convenienti, mentre una quota minore è dovuta a fallback o a
+scelte direzionali inefficaci. Non prova che la sedentarietà sia sempre ottima:
+queste prove non distinguono ancora le occasioni in cui una direzione aperta
+offre più sopravvivenza o discendenza della permanenza. Le RNG non sono
+globalmente deterministiche; due repliche per la variante mirata e una per
+ciascuna prova forte mostrano effetti grandi, non stime precise di effetti
+piccoli. Non applicare queste tre varianti alla run produttiva sulla base del
+solo numero di passi. Un prossimo pilot dovrebbe valutare la **convenienza
+ecologica** delle direzioni aperte rispetto alla cella corrente, separando
+età, temperatura, risorse e discendenza; il sensore di percorribilità da solo
+non contiene questa informazione.
+
+## Stato corrente — pilot cloroplasti e isolamento freddo, 30 ottobre 2026
+
+Run produttiva `1793312533715657104-3949809628` lasciata in esecuzione.
+Checkpoint manuale completo e verificato `cd8f2db3c88f479b948fecbd7ea771b2`
+al tick 8.625.145 (340 Pop). Cinque run diagnostiche isolate sono partite
+dallo stesso ambiente, genomi, pesi appresi e stato fisiologico. Ogni run è
+stata eseguita headless turbo per 13.800 tick e misurata con differenze dei
+contatori cumulativi rispetto al campione tick 0. Le RNG produttive non sono
+globalmente deterministiche; una replica per variante identifica effetti
+grandi e segnali iniziali, non stima effetti piccoli con precisione.
+
+| Variante rispetto alla snapshot | Vivi finali | `DO_NOTHING` | Successo dei tentativi di movimento | Nascite naturali | Morti termiche |
+|---|---:|---:|---:|---:|---:|
+| Base, `phy_max_chloroplasts_ref=14`, `phy_max_lipids_ref=80`, `phy_alpha_max=0,5` | 339 | 49,75% | 1,97% | 295 | 16 |
+| Cloroplasti: saturazione a 20 | 315 | 49,38% | 2,84% | 184 | 11 |
+| Lipidi: riferimento 60 | 338 | 49,67% | 2,80% | 349 | 51 |
+| Lipidi: riferimento 40 | 498 | 39,91% | 38,80% | 4.598 | 3.442 |
+| Scambio termico massimo 0,35 | 354 | 50,04% | 1,96% | 350 | 11 |
+
+Portare la saturazione fotosintetica a 20 ha ridotto le reazioni da circa
+155,8 a 135,0 per tick (−13%) e le nascite, lasciando quasi invariata
+l'inattività. Ridurre moderatamente il riferimento lipidico a 60 non ha
+cambiato l'inattività né la popolazione finale; le morti termiche sono salite.
+Il riferimento 40 ha prodotto un ricambio patologico: 3.431 morti termiche
+erano da freddo; 3.426 si collegano a nascite naturali della stessa run
+entro il tick 13.800.
+Questi neonati partivano in mediana con 7 unità di lipidi, temperatura
+corporea 28 °C, e morivano a età mediana 4 tick. Il genitore isolato può
+riprodursi in celle dove il figlio, che riceve solo 1/8 delle riserve, non
+riesce a sopravvivere. Le celle liberate continuamente spiegano almeno una
+parte plausibile del forte aumento dei movimenti riusciti; non è prova di
+mobilità evoluta. Ridurre `phy_alpha_max` per tutti ha lasciato sia
+inattività sia movimento sostanzialmente invariati.
+
+**Decisione:** nessuna variante applicata; la run principale non è stata
+fermata né riportata alla snapshot. Il test lipidico riguarda il parametro
+esistente di isolamento, non implementa ancora una riserva termica consumabile.
+Alla chiusura dei pilot la run produttiva era ancora running al tick
+8.865.035 con 925 Pop e zero messaggi telemetrici persi.
+Prima di provarla in produzione servono una reazione conservativa con costo
+energetico, disponibilità locale di lipidi e un controllo della vitalità
+termica della cella di nascita basato sulle riserve realmente trasferite.
+Misurare sopravvivenza dei figli, discendenza per agente×tick, spostamenti
+riusciti e bilanci; evitare di interpretare il solo aumento delle nascite
+come adattamento.
+
+## Stato corrente — Reaper, gamma neurale e monitor leggibile, 29 ottobre 2026
+
+La run precedente `1793278384855385844-2668340138` è stata messa in pausa
+e salvata al tick 5.349.712 in una snapshot completa verificata:
+`c5e216fa8a384380870234ea9f38bb5e` (703 Pop). Il Reaper usa il canale
+DANGER esistente: nessun ingresso o feromone aggiuntivo e nessuna ricompensa
+artificiale al movimento. È un occupante fisico con curva lenta, cambio di
+direzione se bloccato, ricerca saltuaria del Pop maturo più vicino, avviso a
+ventaglio davanti a sé e un attacco sulla
+cella immediatamente davanti ogni 240 tick al massimo. I Pop con età sotto
+250 tick sono protetti. Il default è un Reaper, movimento ogni 100 tick,
+segnale ogni 20 tick e raggio di avviso 6. Numero, intervalli e protezione
+sono configurabili in INI; gli stati individuali e i contatori entrano nei
+checkpoint. L'annuncio porta DANGER al massimo locale previsto quando supera
+quello presente: non cancella gli annunci degli altri agenti. La ricerca
+globale avviene in media ogni 400 tick per Reaper; la sterzata massima di
+0,5 radianti conserva il percorso curvo.
+
+La telemetria distingue uccisioni, esposizione entro il raggio, tentativi di
+allontanamento e movimenti riusciti in quella direzione. Le tre somme dei vivi
+possono diminuire quando muore un Pop; gli eventi di morte conservano la causa.
+Il monitor del brain C++ e web ora dispone tutti i 57 sensori e gli attuatori
+con nomi compatti, canvas ad alta risoluzione e scorrimento, nodi e linee più
+leggibili e ultima azione **eseguita** distinta dall'uscita scelta. Il monitor
+C++ evita il dump numerico grezzo del brain nell'inspector.
+
+Audit matematico sulla snapshot: i 703 Pop occupavano celle fra 12,25 e
+71,73 °C. Gli ingressi sono nominalmente in [0,1]; i gradienti termici
+osservati sugli ingressi cablati occupavano intervalli come 0,31–0,60
+(sud) e 0,34–0,69 (ovest). La densità FOOD era al massimo 0,045 e
+DANGER 0,188: sono scale ambientali effettivamente piccole, non un errore
+di clipping della sigmoid. Il sensore età invece diventava 1 dopo i primi
+300 tick (`steps_per_generation`), mentre `MaxAge=200000`: l'audit lo
+trovava con media 0,997 fra i Pop che lo usavano. Ora usa
+`log1p(age)/log1p(MaxAge)`; valori indicativi: 300 tick ≈ 0,47,
+3000 ≈ 0,66, 200000 = 1. In questo modo mantiene variazione per tutta
+la vita. Le uscite osservate erano fra 0,020 e 0,965, nessuna sotto 0,01
+o sopra 0,99 nei 15.466 valori campionati; il margine medio tra le prime
+due uscite era 0,033. La sigmoid e la sua dinamica sono quindi lasciate
+intatte. Una singola snapshot resta un campione trasversale e non misura
+la causalità delle scelte nel tempo.
+
+La revisione delle decisioni ha individuato un limite semantico separato:
+17/703 ultimi atti osservati erano azioni non neutre selezionate da
+un'uscita senza sinapsi entranti. Matematicamente tale uscita vale 0,5
+perché `sigmoid(0)=0,5`; può vincere se le altre sono inibite. Altri
+12 atti avevano uscita vincente esattamente 0,5 pur con sinapsi entranti.
+È un possibile meccanismo di fallback evoluto, non una saturazione numerica.
+Cambiare ora l'eleggibilità delle uscite altererebbe le politiche dei ceppi
+ereditati; il rilievo resta disponibile per un confronto controllato futuro.
+
+Il ripristino isolato dal checkpoint storico è riuscito con 703 Pop; dopo
+300 tick di prova erano 706. Un nuovo checkpoint contenente il Reaper è
+stato salvato e verificato (`51ca6ec430934153b1143af25a474ffb`, test
+isolato). La fixture Reaper verifica occupazione, collisione, avviso, morte,
+cooldown, protezione dei neonati e ricerca di un Pop lontano. La suite
+standalone C++ completa è passata anche sul codice definitivo. I test
+JS delle etichette e della sandbox, la validazione INI, `git diff --check`
+e il test visuale X11 del Brain Monitor sono passati.
+
+Dopo la verifica sono stati eliminati il database storico principale e le
+sei snapshot precedenti, liberando circa 1,71 GB. Il catalogo ora contiene
+solo la snapshot scelta; gli artefatti diagnostici separati in `data_out/audit`
+restano come evidenza delle indagini documentate. La prima ripartenza
+`1793312207370301836-2009891258` non mostrava esposizioni dopo oltre
+11.000 tick: il richiamo locale del Reaper non raggiungeva le popolazioni
+lontane. È stata fermata e la ricerca è stata corretta come sopra. Nel
+pilot isolato con la stessa snapshot, al tick 4.912 il Reaper aveva causato
+una morte e i Pop vivi registravano 1.173 tentativi di allontanamento,
+2 riusciti; sono misure descrittive, non una prova di adattamento evolutivo.
+Il database provvisorio è stato nuovamente svuotato. Run definitiva
+`1793312533715657104-3949809628`, ripristinata dalla stessa snapshot,
+con GUI e dashboard avviate e simulazione ripresa; all'avvio 703 Pop e
+configurazione del checkpoint bloccata. Verifica successiva: running al
+tick 45.696, 657 Pop, 17 uccisioni del Reaper, 12.181 tentativi di fuga e
+2 movimenti riusciti in allontanamento fra i Pop ancora vivi. Lo storico nuovo
+contiene una sola run (SQLite circa 20,6 MB) e nessun messaggio telemetrico
+perso. I contatori di fuga sono cumulativi dei soli vivi, quindi non
+descrivono da soli la sopravvivenza o la selezione dei loro ceppi.
+
+## Stato corrente — pennello sandbox e clima runtime, 29 ottobre 2026
+
+La run attiva è stata messa in pausa al tick 1.473.768 con 776 Pop e salvata nel
+checkpoint completo verificato `1f7de4b262fd4859b002ea0d200ec5b8`. Il nuovo
+binario ha ripristinato lo stato nella run `1793232472174563962-383011297`,
+poi ripresa: verificata running al tick 6.448, 903 Pop, circa 145 tick/s e
+5,7 FPS recenti, nessun messaggio telemetrico perso. Dashboard HTTP 200; gli
+storici SQLite precedenti restano conservati.
+
+In pausa la combobox della GUI C++ seleziona glucosio, acqua, ossigeno, CO2,
+lipidi, azoto, calcio, quattro feromoni, temperatura, Pop o Source. Il pulsante
+applica l'intervento alla cella X/Y; il mouse sinistro dipinge sulla mappa con
+segmenti continui, il destro rimuove il tipo scelto. Per la temperatura il destro
+annulla l'ultima modifica della singola cella fatta nella sessione. Il pan usa il
+centrale in modalità pennello; fuori dalla sandbox il destro resta pan. Il
+formulario web espone la stessa scelta e i pulsanti per la cella X/Y.
+
+Source aggiunti o rimossi sono fisici, con cap 32, e il checkpoint ripristina il
+loro numero effettivo e stato individuale. I sei materiali del bilancio
+registrano gli apporti/rimozioni manuali in `sandbox_input`; N2 è modificabile e
+salvato nel checkpoint ma non appartiene al precedente bilancio a sei voci.
+`climate_rotation_speed` è un parametro runtime in [0,20], default 1: moltiplica
+il passo orbitale dei centri RBF; 0 ferma la rotazione senza modificare ampiezza
+e larghezza delle campane. Elevazione mostra una scala neutra, Terreno interpola
+i colori classici per quota; le risorse sono quadrati centrali di lato metà cella
+e i feromoni hanno marcatori quadrati con angoli smussati.
+
+Build `popx`, `scripts/run_regressions.sh`, `tests.sandbox_integration`,
+`tests.gui_navigation_smoke`, regressione JS sandbox, sintassi Python e
+`git diff --check`: PASS. La fixture termica della suite ora imposta
+esplicitamente 25 °C e non dipende più dall'INI utente (28 °C).
+
+## Stato corrente — sandbox coordinata, 28 ottobre 2026
+
+Audit e implementazione richiesti nel documento utente: [baseline](BASELINE_ANALYSIS.md)
+e [resoconto con formule, prove e limiti](EVOLUTION_REPORT.md). La GUI ora ha camera,
+selezione/follow, pannelli compatti, heatmap leggibili, inspector, genoma cliccabile,
+monitor neurale live/EMA e Learning Mixer. La dashboard espone gli stessi comandi
+in `/static/sandbox.html`; palette ed etichette provengono da `design.json`.
+
+Le patch runtime sono whitelistate, validate atomicamente e applicate fra tick.
+Spawn e pennello ambientale/peso neurale richiedono pausa e sono auditati; spawn
+forzati rispettano cap/occupazione e bilanci. Le modifiche runtime entrano nei
+checkpoint, mentre l'editor INI delle run ripristinate resta bloccato. I pesi reward
+normalizzati hanno default equivalenti al modello precedente; nessun premio al
+movimento aggiunto. Configurazione eredità appresa preservata.
+
+Stepping esatto 1–10.000 tick con batch limitati; budget rendering adattivo al costo
+dei tick, FPS recenti separati dalle medie cumulative. Build, regressioni C++/JS,
+checkpoint/API e navigazione X11 verificati. Screenshot C++ acquisiti; collaudo
+visuale browser ancora non eseguito per assenza di un browser nell'ambiente.
+
+Run finale `1793211087031240027-2962789958`, dal checkpoint completo
+`0103f14ee9e04cc8b722a44e76b5ce6e`, verificata running a tick 13.475 con 460 Pop,
+circa 200 tick/s e 12 FPS recenti. Storico conservato; limite DB attivo 5 GB,
+occupazione circa 2,835 GB. Il report distingue misure indicative e confronto
+seriale del tentativo texture, scartato perché privo di beneficio misurato.
+
 ## Stato corrente — NewGen con respawn sparso, 28 ottobre 2026
 
 La run `1793173346510806977-3356239896` è stata salvata in un checkpoint

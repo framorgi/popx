@@ -196,8 +196,11 @@ $$
 a=\operatorname*{arg\,max}_{j}h_j^{(H+1)}.
 $$
 
-An output with no contributions has value $\sigma(0)=0.5$. A network with no decisive
-output, including an exact tie, selects the explicit `DO_NOTHING` action (index 21).
+An output with no contributions has value $\sigma(0)=0.5$. A fully neutral
+network selects `DO_NOTHING` (index 21). An equal maximum at or below 0.5
+also waits because no output has positive drive. When active outputs above 0.5 share the maximum,
+the brain rotates fairly among them; an equally ranked non-idle action takes
+precedence over a tied `DO_NOTHING`. A unique idle maximum still waits.
 
 Mutation replaces **the entire gene**, with probability `point_mutation_rate=0.01` per gene.
 If a gene is not replaced, a separate 5% chance adjusts its weight by at most 256 quantization
@@ -529,11 +532,13 @@ w_{ij}+\eta (r-b)e_{ij}-\delta\,\operatorname{sign}(w_{ij})\max(0,|w_{ij}|-1/819
 $$
 
 The signal is clipped to [−1, 1]; the baseline follows reward at rate 0.01.
-Traces decay by 0.97 per tick. Each executed action injects a factor of
-$1-0.97^3$ times $a_i a_j(1-a_j)$ for its chosen output; hidden connections
-retain the centered local product $(a_i-0.5)(a_j-0.5)$. Traces are bounded
-by ±0.25. This is local credit, not policy-gradient training or backpropagation.
-Only the selected output receives new credit. The rule does not add connections.
+Traces decay by 0.99 per tick (about 69 ticks per half-life). Each executed
+action injects $1-0.99^3$ times the gradient of its selected output with
+respect to each existing weight. Reverse differentiation includes hidden
+layers and skip connections; disconnected branches receive no new credit.
+Traces are bounded by ±0.25. This is backpropagation of one output's local
+gradient, modulated by reward, rather than policy-gradient or TD training.
+It does not add connections or optimize a long-term value estimate.
 Learned weights are inherited; traces and reward baselines are reset at birth.
 
 The reward combines five signals: age, energy reserve, energy change during physiology,
@@ -991,3 +996,25 @@ for the simulator, and [FastAPI](https://fastapi.tiangolo.com/),
 Thanks to the authors and maintainers of these tools, and to contributors providing code,
 reports, checks, and discussions of the model. Third-party components retain their respective
 licenses; web asset licenses are preserved during setup.
+
+
+### Interactive sandbox
+
+The C++ world now supports wheel zoom, middle-button pan, click selection,
+Home to fit, F to follow, F1–F3 for panels and F4 for the Brain Monitor. Space
+pauses/resumes; period steps one tick. Both frontends expose exact N-tick stepping
+and the same ecological Learning Mixer. Open `/static/sandbox.html` for runtime
+parameters, visual preferences, sampled neural activity and paused interventions.
+In the paused Sandbox panel, choose a resource, pheromone, temperature, Pop or
+Source, then apply it with the button or paint on the world with the left mouse
+button. Right click/drag removes the selected element; for temperature it undoes
+the last edit on that cell. Outside this mode, right drag pans the camera.
+The climate rotation multiplier can be changed at runtime; zero freezes its
+rotation. Map layers include neutral Elevation and terrain colored by altitude.
+
+Shared tokens and neural labels live in `dashboard/static/design.json`. Appearance
+preferences persist beside the INI in `appearance.json`. Runtime simulation edits
+are audited and included in subsequent checkpoints; structural parameters still
+require a new run. The default reward and inherited learning remain unchanged.
+See the [implementation and validation report](docs/EVOLUTION_REPORT.md) for the
+formula, supported operations, measured performance and remaining limitations.
