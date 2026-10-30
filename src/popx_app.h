@@ -40,7 +40,10 @@ class PopXApp {
     std::unique_ptr<Renderer> renderer_;
     std::unique_ptr<ImGuiLayer> gui_;
     SimControl control_;
+    uint64_t step_remaining_ = 0;
+    double effective_tps_ = 0, render_fps_ = 0;
     RenderFlags flags_;
     bool quit_ = false, finished_recorded_ = false, reset_clock_ = false;
     std::map<std::string, nlohmann::json> replies_;
+    std::map<int, std::vector<float>> sandbox_temperature_undo_;
 };

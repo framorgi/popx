@@ -21,7 +21,18 @@ class ImGuiLayer final : public IGui {
     void add_widget(std::string title, std::function<void()> draw);
 
   private:
+    void draw_world();
+    void draw_inspector();
+    void draw_sandbox();
+    void draw_brain();
     IGraphicEngine& gfx_;
+    nlohmann::json draft_, last_runtime_, edge_, appearance_draft_, last_appearance_;
+    std::string observed_id_, theme_;
+    std::vector<std::vector<float>> average_, peaks_;
+    uint64_t observed_tick_ = 0;
+    bool monitor_open_ = false, aggregate_ = false;
+    float min_weight_ = .01f;
+    int selected_gene_ = -1;
     Stats& stats_;
     IAgentsManager& agents_;
     SimControl& controls_;
